@@ -1,0 +1,164 @@
+'use client';
+
+import * as React from 'react';
+
+import type { TComboboxInputElement, TMentionElement } from 'platejs';
+import type { PlateElementProps } from 'platejs/react';
+
+import { getMentionOnSelectItem } from '@platejs/mention';
+import { IS_APPLE, KEYS } from 'platejs';
+import {
+  PlateElement,
+  useEditorSelector,
+  useFocused,
+  useReadOnly,
+  useSelected,
+} from 'platejs/react';
+
+import { cn } from '@/lib/utils';
+import { useMounted } from '@/hooks/use-mounted';
+import { inlineSuggestionVariants } from '@/lib/suggestion';
+import {
+  getNodeReferenceCandidates,
+  navigateToNode,
+} from '@/lib/tana';
+
+import {
+  InlineCombobox,
+  InlineComboboxContent,
+  InlineComboboxEmpty,
+  InlineComboboxGroup,
+  InlineComboboxInput,
+  InlineComboboxItem,
+} from './inline-combobox';
+
+export function MentionElement(
+  props: PlateElementProps<TMentionElement> & {
+    prefix?: string;
+  }
+) {
+  const { element } = props;
+  const selected = useSelected();
+  const focused = useFocused();
+  const mounted = useMounted();
+  const readOnly = useReadOnly();
+
+  const navigateToTarget = React.useCallback(
+    (event: React.MouseEvent | React.KeyboardEvent) => {
+      if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
+
+      const targetNodeId = element.key;
+
+      if (typeof targetNodeId !== 'string') {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      navigateToNode(props.editor, targetNodeId);
+    },
+    [element.key, props.editor]
+  );
+
+  return (
+    <PlateElement
+      {...props}
+      className={cn(
+        'inline-block rounded-md bg-muted px-1.5 py-0.5 align-baseline font-medium text-sm',
+        inlineSuggestionVariants(),
+        !readOnly && 'cursor-pointer',
+        selected && focused && 'ring-2 ring-ring',
+        element.children[0][KEYS.bold] === true && 'font-bold',
+        element.children[0][KEYS.italic] === true && 'italic',
+        element.children[0][KEYS.underline] === true && 'underline'
+      )}
+      attributes={{
+        ...props.attributes,
+        contentEditable: false,
+        'data-slate-value': element.value,
+        draggable: true,
+        onClick: navigateToTarget,
+        onKeyDown: navigateToTarget,
+        role: 'link',
+        tabIndex: 0,
+      }}
+    >
+      {mounted && IS_APPLE ? (
+        // Mac OS IME https://github.com/ianstormtaylor/slate/issues/3490
+        <>
+          {props.children}
+          {props.prefix}
+          {element.value}
+        </>
+      ) : (
+        // Others like Android https://github.com/ianstormtaylor/slate/pull/5360
+        <>
+          {props.prefix}
+          {element.value}
+          {props.children}
+        </>
+      )}
+    </PlateElement>
+  );
+}
+
+const onSelectItem = getMentionOnSelectItem();
+
+export function MentionInputElement(
+  props: PlateElementProps<TComboboxInputElement>
+) {
+  const { editor, element } = props;
+  const [search, setSearch] = React.useState('');
+  const candidates = useEditorSelector(
+    (currentEditor) => getNodeReferenceCandidates(currentEditor.children),
+    [],
+    {
+      equalityFn: (previous, next) =>
+        previous.length === next.length &&
+        previous.every(
+          (candidate, index) =>
+            candidate.id === next[index]?.id &&
+            candidate.text === next[index]?.text
+        ),
+    }
+  );
+
+  return (
+    <PlateElement {...props} as="span">
+      <InlineCombobox
+        value={search}
+        element={element}
+        setValue={setSearch}
+        showTrigger={false}
+        trigger="@"
+      >
+        <span className="inline-block rounded-md bg-muted px-1.5 py-0.5 align-baseline text-sm ring-ring focus-within:ring-2">
+          <InlineComboboxInput />
+        </span>
+
+        <InlineComboboxContent className="my-1.5">
+          <InlineComboboxEmpty>No results</InlineComboboxEmpty>
+
+          <InlineComboboxGroup>
+            {candidates.map((candidate) => {
+              const item = { key: candidate.id, text: candidate.text };
+
+              return (
+                <InlineComboboxItem
+                  key={item.key}
+                  value={item.text}
+                  onClick={() => onSelectItem(editor, item, search)}
+                >
+                  {item.text}
+                </InlineComboboxItem>
+              );
+            })}
+          </InlineComboboxGroup>
+        </InlineComboboxContent>
+      </InlineCombobox>
+
+      {props.children}
+    </PlateElement>
+  );
+}

@@ -20,6 +20,11 @@
 # production
 /build
 
+# Tauri / nested Next.js build output
+/src-tauri/target/
+/src-tauri/web/.next/
+/src-tauri/web/out/
+
 # misc
 .DS_Store
 *.pem
