@@ -5,12 +5,10 @@ import * as React from 'react';
 import type { NodeId } from '@/lib/tana';
 
 /**
- * UI dependency injection for the Workspace-owned Zoom state. This provider
- * stores no document, hierarchy, or selection state; descendants only receive
- * the single NodeId and the three Workspace navigation actions.
+ * UI dependency injection for Workspace navigation actions. Zoom state itself
+ * stays exclusively in the Plate TanaZoomPlugin option store.
  */
 export type TanaNavigation = {
-  focusedNodeId: NodeId | null;
   navigateToNode: (nodeId: NodeId) => void;
   zoomOut: () => void;
   zoomToNode: (nodeId: NodeId) => void;

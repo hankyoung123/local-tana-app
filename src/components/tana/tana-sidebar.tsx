@@ -4,24 +4,26 @@ import * as React from 'react';
 
 import { HashIcon, HomeIcon, ListFilterIcon, SearchIcon } from 'lucide-react';
 
-import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana';
+import type { NodeId, TanaIndex } from '@/lib/tana';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 type TanaSidebarProps = {
   activeNodeId: NodeId | null;
-  homeNode?: TanaNode;
   index: TanaIndex;
   onNavigate: (nodeId: NodeId) => void;
   onOpenView: (nodeId: NodeId) => void;
+  onWorkspaceRoot: () => void;
+  workspaceRootActive: boolean;
 };
 
 export function TanaSidebar({
   activeNodeId,
-  homeNode,
   index,
   onNavigate,
   onOpenView,
+  onWorkspaceRoot,
+  workspaceRootActive,
 }: TanaSidebarProps) {
   const [search, setSearch] = React.useState('');
   const normalizedSearch = search.trim().toLocaleLowerCase();
@@ -76,19 +78,13 @@ export function TanaSidebar({
         ) : (
           <>
             <SidebarSection title="工作区">
-              {homeNode ? (
-                <SidebarButton
-                  active={activeNodeId === homeNode.id}
-                  onClick={() => onNavigate(homeNode.id)}
-                >
-                  <HomeIcon />
-                  <span className="truncate">{homeNode.text || '工作区'}</span>
-                </SidebarButton>
-              ) : (
-                <p className="px-2 py-2 text-muted-foreground text-xs">
-                  还没有节点
-                </p>
-              )}
+              <SidebarButton
+                active={workspaceRootActive}
+                onClick={onWorkspaceRoot}
+              >
+                <HomeIcon />
+                <span className="truncate">工作区</span>
+              </SidebarButton>
             </SidebarSection>
 
             <SidebarSection title="超级标签">

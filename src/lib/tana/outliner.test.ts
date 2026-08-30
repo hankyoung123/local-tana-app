@@ -26,6 +26,11 @@ import {
   isTanaNodeHidden,
   isTanaNodeInteractable,
 } from './outliner';
+import {
+  resetInvalidTanaZoom,
+  TanaZoomPlugin,
+  zoomToTanaNode,
+} from './zoom';
 
 const outliner: Value = [
   { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
@@ -87,7 +92,7 @@ describe('Tana outliner behavior', () => {
     );
 
     const editor = createPlateEditor({
-      plugins: [TogglePlugin, ...BlockSelectionKit],
+      plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
       value: [
         outliner[0],
         {
@@ -128,7 +133,7 @@ describe('Tana outliner behavior', () => {
       { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
     ];
     const editor = createPlateEditor({
-      plugins: [TogglePlugin, ...BlockSelectionKit],
+      plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
       value: structuredClone(nestedOutliner),
     });
     const originalDocument = structuredClone(editor.children);
@@ -142,11 +147,26 @@ describe('Tana outliner behavior', () => {
       editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
 
     assert.equal(isTanaNodeHidden(editor.children, [1], collapsedOpenIds), true);
-    assert.equal(isTanaNodeInteractable(editor.children, [0], collapsedOpenIds), true);
-    assert.equal(isTanaNodeInteractable(editor.children, [1], collapsedOpenIds), false);
-    assert.equal(isTanaNodeInteractable(editor.children, [2], collapsedOpenIds), false);
-    assert.equal(isTanaNodeInteractable(editor.children, [3], collapsedOpenIds), false);
-    assert.equal(isTanaNodeInteractable(editor.children, [4], collapsedOpenIds), true);
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [0], collapsedOpenIds, null),
+      true
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [1], collapsedOpenIds, null),
+      false
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [2], collapsedOpenIds, null),
+      false
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [3], collapsedOpenIds, null),
+      false
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [4], collapsedOpenIds, null),
+      true
+    );
     assert.deepEqual(editor.selection?.anchor.path, [0, 0]);
     assert.deepEqual(editor.selection?.focus.path, [0, 0]);
 
@@ -191,9 +211,18 @@ describe('Tana outliner behavior', () => {
     assert.equal(expandedOpenIds.has('a'), true);
     assert.equal(expandedOpenIds.has('b'), true);
     assert.deepEqual(editor.selection?.anchor.path, [1, 0]);
-    assert.equal(isTanaNodeInteractable(editor.children, [1], expandedOpenIds), true);
-    assert.equal(isTanaNodeInteractable(editor.children, [2], expandedOpenIds), true);
-    assert.equal(isTanaNodeInteractable(editor.children, [3], expandedOpenIds), true);
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [1], expandedOpenIds, null),
+      true
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [2], expandedOpenIds, null),
+      true
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [3], expandedOpenIds, null),
+      true
+    );
     assert.deepEqual(editor.children, originalDocument);
     assert.equal(editor.children[1].id, 'b');
     assert.deepEqual(editor.children[1].tanaFieldValues, {
@@ -350,6 +379,7 @@ describe('Tana outliner behavior', () => {
       'd',
       'e',
     ]);
+    assert.deepEqual(getTanaZoomRange(zoomOutliner, 'missing-node'), []);
     assert.deepEqual(zoomOutliner, originalDocument);
     assert.equal(zoomOutliner[1].id, 'b');
     assert.equal(zoomOutliner[1].indent, 1);
@@ -360,7 +390,7 @@ describe('Tana outliner behavior', () => {
 
   test('navigation reveals a collapsed reference target without changing it', () => {
     const editor = createPlateEditor({
-      plugins: [TogglePlugin],
+      plugins: [TanaZoomPlugin, TogglePlugin],
       value: [
         { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
         { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
@@ -388,6 +418,67 @@ describe('Tana outliner behavior', () => {
     assert.deepEqual(editor.children[2].tanaFieldValues, {
       effort: { type: 'number', value: 3 },
     });
+  });
+
+  test('uses the Zoom plugin state for block selection and DnD eligibility', () => {
+    const editor = createPlateEditor({
+      plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
+      value: [
+        { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+        { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
+        { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
+        { children: [{ text: 'D' }], id: 'd', indent: 1, type: KEYS.p },
+        { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
+      ],
+    });
+    const blockSelection = editor.getApi(BlockSelectionPlugin).blockSelection;
+
+    editor.getApi(TogglePlugin).toggle.toggleIds(['a', 'b'], true);
+    blockSelection.set(['a', 'e']);
+
+    assert.equal(zoomToTanaNode(editor, 'a'), true);
+    assert.deepEqual(
+      blockSelection.getNodes({ sort: true }).map(([node]) => node.id),
+      ['a']
+    );
+
+    assert.equal(zoomToTanaNode(editor, 'b'), true);
+    blockSelection.selectAll();
+    assert.deepEqual(
+      blockSelection.getNodes({ sort: true }).map(([node]) => node.id),
+      ['b', 'c']
+    );
+
+    const bEntry = editor.api.node({ at: [], id: 'b' }) as NodeEntry<TElement>;
+    const eEntry = editor.api.node({ at: [], id: 'e' }) as NodeEntry<TElement>;
+
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: eEntry,
+        dragItem: { editorId: editor.id, element: eEntry[0], id: 'e' },
+        dropEntry: bEntry,
+        editor,
+      }),
+      false
+    );
+  });
+
+  test('returns the Plate Zoom option to workspace root after deletion', () => {
+    const editor = createPlateEditor({
+      plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
+      value: [
+        { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+        { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
+      ],
+    });
+
+    assert.equal(zoomToTanaNode(editor, 'b'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'b');
+
+    editor.tf.removeNodes({ at: [1] });
+
+    assert.equal(resetInvalidTanaZoom(editor), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
   });
 
   test('keeps a NodeId and Tana semantics through presentation changes', () => {

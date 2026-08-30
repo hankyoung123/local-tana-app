@@ -5,6 +5,7 @@ import { TogglePlugin } from '@platejs/toggle/react';
 
 import { BlockSelection } from '@/components/ui/block-selection';
 import { isTanaNodeInteractable } from '@/lib/tana';
+import { TanaZoomPlugin } from '@/lib/tana/zoom';
 
 const EMPTY_OPEN_IDS = new Set<string>();
 
@@ -28,7 +29,8 @@ export const BlockSelectionKit = [
         isTanaNodeInteractable(
           editor.children,
           path,
-          editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS
+          editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS,
+          editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null
         ),
     },
     render: {

@@ -3,7 +3,7 @@
 import * as React from 'react';
 
 import { ChevronRightIcon } from 'lucide-react';
-import { useEditorRef, useEditorSelector, useHotkeys } from 'platejs/react';
+import { useEditorRef, useEditorSelector, usePluginOption } from 'platejs/react';
 
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import {
@@ -11,9 +11,13 @@ import {
   getTanaAncestorPaths,
   getTanaNodePath,
   isTanaNodeElement,
-  navigateToNode as focusTanaNode,
+  resetInvalidTanaZoom,
   type NodeId,
+  zoomOutTanaNode,
+  zoomToTanaNode,
+  zoomToTanaWorkspaceRoot,
 } from '@/lib/tana';
+import { TanaZoomPlugin } from '@/lib/tana/zoom';
 
 import { TanaInspector } from './tana-inspector';
 import { TanaNavigationProvider } from './tana-navigation-context';
@@ -34,9 +38,8 @@ export function TanaWorkspace({
 }) {
   const editor = useEditorRef();
   const [activeViewId, setActiveViewId] = React.useState<NodeId | null>(null);
-  const [focusedNodeId, setFocusedNodeId] = React.useState<NodeId | null>(
-    null
-  );
+  const focusedNodeId =
+    usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
   const derived = useEditorSelector(
     (currentEditor) => {
       const selectedTopLevel = currentEditor.selection
@@ -62,33 +65,21 @@ export function TanaWorkspace({
 
   const zoomToNode = React.useCallback(
     (nodeId: NodeId) => {
-      if (!editor.api.node({ at: [], id: nodeId })) return;
-
       setActiveViewId(null);
-      setFocusedNodeId(nodeId);
-
-      requestAnimationFrame(() => focusTanaNode(editor, nodeId));
+      zoomToTanaNode(editor, nodeId);
     },
     [editor]
   );
 
   const zoomOut = React.useCallback(() => {
-    if (!focusedNodeId) return;
+    setActiveViewId(null);
+    zoomOutTanaNode(editor);
+  }, [editor]);
 
-    const focusedPath = getTanaNodePath(editor.children, focusedNodeId);
-    const parentPath = focusedPath
-      ? getTanaAncestorPaths(editor.children, focusedPath).at(-1)
-      : undefined;
-    const parent = parentPath ? editor.api.node(parentPath)?.[0] : null;
-    const parentId = parent && 'id' in parent ? parent.id : null;
-
-    if (typeof parentId === 'string') {
-      zoomToNode(parentId);
-    } else {
-      setActiveViewId(null);
-      setFocusedNodeId(null);
-    }
-  }, [editor, focusedNodeId, zoomToNode]);
+  const zoomToWorkspaceRoot = React.useCallback(() => {
+    setActiveViewId(null);
+    zoomToTanaWorkspaceRoot(editor);
+  }, [editor]);
 
   const handleNavigate = React.useCallback(
     (nodeId: NodeId) => {
@@ -98,38 +89,28 @@ export function TanaWorkspace({
   );
 
   const handleOpenView = React.useCallback((nodeId: NodeId) => {
-    if (!editor.api.node({ at: [], id: nodeId })) return;
+    if (!zoomToTanaNode(editor, nodeId)) return;
 
-    setFocusedNodeId(nodeId);
-    focusTanaNode(editor, nodeId);
     setActiveViewId(nodeId);
   }, [editor]);
 
-  useHotkeys(
-    'escape',
-    (event) => {
-      if (!focusedNodeId) return;
-
-      event.preventDefault();
-      zoomOut();
-    },
-    {
-      enableOnContentEditable: true,
-      enabled: !!focusedNodeId,
-      ignoreEventWhenPrevented: false,
-      preventDefault: true,
-    },
-    [focusedNodeId, zoomOut]
+  const focusedNodeExists = useEditorSelector(
+    (currentEditor) =>
+      !focusedNodeId || !!currentEditor.api.node({ at: [], id: focusedNodeId }),
+    [focusedNodeId]
   );
+
+  React.useEffect(() => {
+    if (!focusedNodeExists) resetInvalidTanaZoom(editor);
+  }, [editor, focusedNodeExists]);
 
   const navigation = React.useMemo(
     () => ({
-      focusedNodeId,
       navigateToNode: handleNavigate,
       zoomOut,
       zoomToNode,
     }),
-    [focusedNodeId, handleNavigate, zoomOut, zoomToNode]
+    [handleNavigate, zoomOut, zoomToNode]
   );
 
   const breadcrumbNodeIds = React.useMemo(() => {
@@ -157,8 +138,7 @@ export function TanaWorkspace({
   const activeView = activeViewId
     ? derived.index.nodesById.get(activeViewId)
     : undefined;
-  const homeNode = derived.index.nodesById.values().next().value;
-  const activeNodeId = activeViewId ?? focusedNodeId ?? derived.selectedNodeId ?? homeNode?.id ?? null;
+  const activeNodeId = activeViewId ?? focusedNodeId ?? derived.selectedNodeId;
   const activeNode = activeNodeId
     ? derived.index.nodesById.get(activeNodeId)
     : undefined;
@@ -184,7 +164,7 @@ export function TanaWorkspace({
               <button
                 className="truncate hover:text-[#343a36] disabled:text-[#343a36]"
                 disabled={!focusedNodeId}
-                onClick={() => setFocusedNodeId(null)}
+                onClick={zoomToWorkspaceRoot}
                 type="button"
               >
                 工作区
@@ -225,10 +205,11 @@ export function TanaWorkspace({
         <main className="flex min-h-0 flex-1">
           <TanaSidebar
             activeNodeId={activeNodeId}
-            homeNode={homeNode}
             index={derived.index}
             onNavigate={handleNavigate}
             onOpenView={handleOpenView}
+            onWorkspaceRoot={zoomToWorkspaceRoot}
+            workspaceRootActive={!focusedNodeId && !activeViewId}
           />
 
           {activeView?.viewDefinition ? (

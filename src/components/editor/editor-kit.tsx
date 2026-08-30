@@ -18,9 +18,13 @@ import { ListKit } from '@/components/editor/plugins/list-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
+import { TanaZoomPlugin } from '@/lib/tana/zoom';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 
 export const EditorKit = [
+  // Local Tana semantics: its focusedNodeId lives in the Plate plugin store.
+  TanaZoomPlugin,
+
   // Elements
   ...BasicBlocksKit,
   ...ToggleKit,

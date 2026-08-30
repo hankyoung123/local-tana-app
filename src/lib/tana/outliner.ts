@@ -113,7 +113,7 @@ export function getTanaZoomRange(
 
   return focusedPath
     ? [focusedPath, ...getTanaNodeDescendantPaths(document, focusedPath)]
-    : allNodePaths;
+    : [];
 }
 
 /** Whether a Node remains in the current, purely derived Zoom range. */
@@ -195,7 +195,7 @@ export function isTanaNodeInteractable(
   document: Value,
   path: Path,
   openIds: ReadonlySet<string>,
-  focusedNodeId: NodeId | null = null
+  focusedNodeId: NodeId | null
 ): boolean {
   return (
     !!getTanaNodeAt(document, path) &&

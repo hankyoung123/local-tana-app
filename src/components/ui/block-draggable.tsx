@@ -26,6 +26,7 @@ import {
 import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
+import { TanaZoomPlugin } from '@/lib/tana/zoom';
 import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   Tooltip,
@@ -62,7 +63,8 @@ function TanaDraggableNode({
 }: PlateElementProps & { tanaPath: Path }) {
   const openIds = usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
   const tanaNavigation = useTanaNavigation();
-  const focusedNodeId = tanaNavigation?.focusedNodeId ?? null;
+  const focusedNodeId =
+    usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
   const { hasChildren, isInteractable } = useEditorSelector(
     (editor) => ({
       hasChildren: hasTanaNodeDescendants(editor.children, tanaPath),
@@ -110,8 +112,15 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   editor,
 }) => {
   const openIds = editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+  const focusedNodeId =
+    editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
   const isInteractable = (path: Path) =>
-    isTanaNodeInteractable(editor.children, path, openIds);
+    isTanaNodeInteractable(
+      editor.children,
+      path,
+      openIds,
+      focusedNodeId
+    );
 
   if (!isInteractable(dropEntry[1])) return false;
   if (dragEntry && !isInteractable(dragEntry[1])) return false;
@@ -348,6 +357,8 @@ export function toggleTanaNodeCollapse(
   tanaPath: Path
 ) {
   const openIds = editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+  const focusedNodeId =
+    editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
 
   if (openIds.has(nodeId)) {
     const collapsedOpenIds = new Set(openIds);
@@ -369,7 +380,12 @@ export function toggleTanaNodeCollapse(
       .getApi(BlockSelectionPlugin)
       .blockSelection.getNodes({ sort: true })
       .flatMap(([node, path]) =>
-        isTanaNodeInteractable(editor.children, path, collapsedOpenIds) &&
+        isTanaNodeInteractable(
+          editor.children,
+          path,
+          collapsedOpenIds,
+          focusedNodeId
+        ) &&
         typeof node.id === 'string'
           ? [node.id]
           : []
@@ -451,8 +467,15 @@ const DragHandle = React.memo(function DragHandle({
 
             const openIds =
               editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+            const focusedNodeId =
+              editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
             const onlyInteractable = ([, path]: [TElement, Path]) =>
-              isTanaNodeInteractable(editor.children, path, openIds);
+              isTanaNodeInteractable(
+                editor.children,
+                path,
+                openIds,
+                focusedNodeId
+              );
 
             const blockSelection = editor
               .getApi(BlockSelectionPlugin)
@@ -494,8 +517,15 @@ const DragHandle = React.memo(function DragHandle({
 
             const openIds =
               editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+            const focusedNodeId =
+              editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
             const onlyInteractable = ([, path]: [TElement, Path]) =>
-              isTanaNodeInteractable(editor.children, path, openIds);
+              isTanaNodeInteractable(
+                editor.children,
+                path,
+                openIds,
+                focusedNodeId
+              );
 
             const blockSelection = editor
               .getApi(BlockSelectionPlugin)

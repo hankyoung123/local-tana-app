@@ -201,7 +201,18 @@ const InlineCombobox = ({
   }, [items, store]);
 
   return (
-    <span contentEditable={false}>
+    <span
+      contentEditable={false}
+      onKeyDown={(event) => {
+        // Let Plate's combobox input cancel itself first, then keep that
+        // Escape inside the active Plate UI instead of falling through to the
+        // editor-level Zoom escape transform.
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+    >
       <ComboboxProvider
         open={
           (items.length > 0 || hasEmpty) &&

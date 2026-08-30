@@ -5,3 +5,4 @@ export * from './tana/outliner';
 export * from './tana/persistence';
 export * from './tana/query';
 export * from './tana/types';
+export * from './tana/zoom';
