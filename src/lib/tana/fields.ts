@@ -178,6 +178,17 @@ export function isFieldDefined(
   if (!node) return false;
   if (hasDirectFieldValue(node.fieldValues, fieldId)) return true;
 
+  return isFieldDefinedBySupertag(index, nodeId, fieldId);
+}
+
+/** True only when an applied Supertag binds this Field for the current Node. */
+export function isFieldDefinedBySupertag(
+  index: TanaIndex,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  if (!index.nodesById.has(nodeId)) return false;
+
   return Array.from(index.nodesBySupertag.entries()).some(
     ([supertagId, nodeIds]) =>
       nodeIds.includes(nodeId) &&
@@ -186,6 +197,25 @@ export function isFieldDefined(
         ?.supertagDefinition?.fields.some(
           (binding) => binding.fieldId === fieldId
         )
+  );
+}
+
+/**
+ * A direct Field key is ad-hoc only when no applied Supertag also supplies the
+ * same binding. Values remain stored directly for template Fields, but those
+ * keys do not make the Field ad-hoc.
+ */
+export function isAdHocField(
+  index: TanaIndex,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  const node = index.nodesById.get(nodeId);
+
+  return (
+    !!node &&
+    hasDirectFieldValue(node.fieldValues, fieldId) &&
+    !isFieldDefinedBySupertag(index, nodeId, fieldId)
   );
 }
 
@@ -463,6 +493,102 @@ export function createFieldDefinition(
     typeof entry[0].id === 'string'
     ? entry[0].id
     : undefined;
+}
+
+/**
+ * Creates a normal child Node for an Options Field and records only its
+ * Plate-assigned NodeId in the Field Definition. Hierarchy stays flat-indent
+ * derived; no option ownership metadata is introduced.
+ */
+export function createFieldOption(
+  editor: PlateEditor,
+  fieldId: NodeId,
+  name: string
+): NodeId | undefined {
+  const normalizedName = name.trim();
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  const definition = fieldEntry?.[0].tanaFieldDefinition;
+
+  if (!normalizedName || !fieldEntry || definition?.type !== 'options') return;
+
+  const [field, fieldPath] = fieldEntry;
+  const descendants = getTanaNodeDescendantPaths(editor.children, fieldPath);
+  const path = [(descendants.at(-1)?.[0] ?? fieldPath[0]) + 1];
+  const parentIndent = typeof field.indent === 'number' ? field.indent : 0;
+
+  editor.tf.insertNodes(
+    editor.api.create.block({
+      children: [{ text: normalizedName }],
+      indent: parentIndent + 1,
+    }),
+    { at: path }
+  );
+
+  const optionEntry = editor.api.node(path);
+  const optionId =
+    optionEntry &&
+    isTanaNodeElement(optionEntry) &&
+    typeof optionEntry[0].id === 'string'
+      ? optionEntry[0].id
+      : undefined;
+
+  if (!optionId) return;
+
+  editor.tf.setNodes(
+    {
+      tanaFieldDefinition: {
+        options: [...definition.options, optionId],
+        type: 'options',
+      },
+    },
+    { at: fieldPath }
+  );
+
+  return optionId;
+}
+
+/** Removes an Options child Node together with its binding and subtree. */
+export function removeFieldOption(
+  editor: PlateEditor,
+  fieldId: NodeId,
+  optionId: NodeId
+): boolean {
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  const definition = fieldEntry?.[0].tanaFieldDefinition;
+
+  if (
+    !fieldEntry ||
+    definition?.type !== 'options' ||
+    !definition.options.includes(optionId)
+  ) {
+    return false;
+  }
+
+  const optionPath = getTanaNodePath(editor.children, optionId);
+  const [, fieldPath] = fieldEntry;
+
+  if (
+    !optionPath ||
+    getTanaParentPath(editor.children, optionPath)?.[0] !== fieldPath[0]
+  ) {
+    return false;
+  }
+
+  editor.tf.setNodes(
+    {
+      tanaFieldDefinition: {
+        options: definition.options.filter((id) => id !== optionId),
+        type: 'options',
+      },
+    },
+    { at: fieldPath }
+  );
+
+  [...getTanaNodeDescendantPaths(editor.children, optionPath), optionPath]
+    .reverse()
+    .forEach((path) => editor.tf.removeNodes({ at: path }));
+
+  return true;
 }
 
 /** Binds an existing Field Definition node to a Supertag definition once. */

@@ -5,6 +5,7 @@ import type {
   TanaNode,
   TanaQueryClause,
 } from './types';
+import { isFieldDefined } from './fields';
 
 export function getFieldDefinition(
   index: TanaIndex,
@@ -24,6 +25,8 @@ export function describeTanaQueryClause(
   switch (clause.kind) {
     case 'field-equals':
       return `${getFieldDisplayName(index, clause.fieldId)} 等于 ${String(clause.value.value)}`;
+    case 'field-defined':
+      return `${getFieldDisplayName(index, clause.fieldId)} 已定义`;
     case 'field-exists':
       return `${getFieldDisplayName(index, clause.fieldId)} 已设置`;
     case 'has-supertag':
@@ -51,6 +54,8 @@ export function matchesTanaQueryClause(
   switch (clause.kind) {
     case 'field-equals':
       return fieldValuesEqual(clause, node, index);
+    case 'field-defined':
+      return isFieldDefined(index, node.id, clause.fieldId);
     case 'field-exists':
       return index.fieldValues.get(node.id)?.get(clause.fieldId) != null;
     case 'has-supertag':

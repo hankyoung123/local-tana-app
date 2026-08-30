@@ -105,6 +105,21 @@ describe('runTanaQuery', () => {
     );
   });
 
+  test('treats both a Supertag binding and an ad-hoc key as field-defined', () => {
+    assert.deepEqual(
+      runTanaQuery(index, [{ fieldId: 'estimate', kind: 'field-defined' }]).map(
+        ({ id }) => id
+      ),
+      ['alpha', 'gamma']
+    );
+    assert.deepEqual(
+      runTanaQuery(index, [{ fieldId: 'status', kind: 'field-defined' }]).map(
+        ({ id }) => id
+      ),
+      ['alpha', 'beta']
+    );
+  });
+
   test('supports case-insensitive text contains', () => {
     assert.deepEqual(
       runTanaQuery(index, [

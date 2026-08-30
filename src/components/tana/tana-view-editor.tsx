@@ -84,7 +84,7 @@ export function TanaViewDefinitionEditor({
 
     if (kind === 'has-supertag' && supertagId) {
       clause = { kind, supertagId };
-    } else if (kind === 'field-exists' && fieldId) {
+    } else if ((kind === 'field-defined' || kind === 'field-exists') && fieldId) {
       clause = { fieldId, kind };
     } else if (kind === 'text-contains' && text.trim()) {
       clause = { kind, text: text.trim() };
@@ -151,6 +151,7 @@ export function TanaViewDefinitionEditor({
           <SelectContent>
             <SelectItem value="has-supertag">包含超级标签</SelectItem>
             <SelectItem value="field-equals">字段等于</SelectItem>
+            <SelectItem value="field-defined">字段已定义</SelectItem>
             <SelectItem value="field-exists">字段已设置</SelectItem>
             <SelectItem value="text-contains">文本包含</SelectItem>
           </SelectContent>
@@ -171,7 +172,11 @@ export function TanaViewDefinitionEditor({
           </Select>
         )}
 
-        {(kind === 'field-equals' || kind === 'field-exists') && (
+        {(
+          kind === 'field-defined' ||
+          kind === 'field-equals' ||
+          kind === 'field-exists'
+        ) && (
           <Select value={fieldId} onValueChange={setFieldId}>
             <SelectTrigger className="h-8 w-full text-xs">
               <SelectValue placeholder="选择字段" />

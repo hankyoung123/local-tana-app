@@ -31,6 +31,7 @@ export type FieldBinding = {
 
 export type TanaQueryClause =
   | { kind: 'field-equals'; fieldId: FieldId; value: FieldValue }
+  | { kind: 'field-defined'; fieldId: FieldId }
   | { kind: 'field-exists'; fieldId: FieldId }
   | { kind: 'has-supertag'; supertagId: NodeId }
   | { kind: 'text-contains'; text: string };

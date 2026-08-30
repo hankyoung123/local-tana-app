@@ -26,12 +26,15 @@ import {
   bindFieldToSupertag,
   clearFieldValue,
   createFieldDefinition,
+  createFieldOption,
   deleteAdHocField,
   getFieldValueCandidates,
   getNodeSupertagIds,
   getSupertagFieldBindings,
   isFieldDefined,
+  isAdHocField,
   isFieldValueCompatible,
+  removeFieldOption,
   removeSupertag,
   setFieldValue,
 } from '@/lib/tana';
@@ -45,6 +48,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 import { TanaViewDefinitionEditor } from './tana-view-editor';
 
@@ -96,6 +105,11 @@ export function TanaInspector({
   }
 
   const supertagIds = getNodeSupertagIds(index, selectedNode.id);
+  const appliedSupertags = supertagIds.flatMap((supertagId) => {
+    const supertag = index.nodesById.get(supertagId);
+
+    return supertag?.supertagDefinition ? [supertag] : [];
+  });
   const fieldBindings = supertagIds.flatMap((supertagId) =>
     getSupertagFieldBindings(index, supertagId)
   );
@@ -163,30 +177,42 @@ export function TanaInspector({
         ) : (
           <div className="space-y-3">
             {definedFields.map((field) => {
-              const isDirectField = Object.prototype.hasOwnProperty.call(
-                selectedNode.fieldValues ?? {},
+              const isDirectField = isAdHocField(
+                index,
+                selectedNode.id,
                 field.id
               );
 
               return (
-              <FieldControl
-                key={field.id}
-                definition={field.fieldDefinition!}
-                index={index}
-                label={field.text || field.id}
-                value={selectedNode.fieldValues?.[field.id]}
-                onChange={(value) =>
-                  setFieldValue(editor, selectedNode.id, field.id, value)
-                }
-                onClear={() =>
-                  clearFieldValue(editor, selectedNode.id, field.id)
-                }
-                onRemove={
-                  isDirectField
-                    ? () => deleteAdHocField(editor, selectedNode.id, field.id)
-                    : undefined
-                }
-              />
+                <FieldControl
+                  key={field.id}
+                  addToTemplate={
+                    isDirectField ? (
+                      <AddFieldToTemplateAction
+                        editor={editor}
+                        fieldId={field.id}
+                        nodeId={selectedNode.id}
+                        supertags={appliedSupertags}
+                        value={selectedNode.fieldValues?.[field.id]}
+                      />
+                    ) : undefined
+                  }
+                  definition={field.fieldDefinition!}
+                  index={index}
+                  label={field.text || field.id}
+                  value={selectedNode.fieldValues?.[field.id]}
+                  onChange={(value) =>
+                    setFieldValue(editor, selectedNode.id, field.id, value)
+                  }
+                  onClear={() =>
+                    clearFieldValue(editor, selectedNode.id, field.id)
+                  }
+                  onRemove={
+                    isDirectField
+                      ? () => deleteAdHocField(editor, selectedNode.id, field.id)
+                      : undefined
+                  }
+                />
               );
             })}
           </div>
@@ -242,6 +268,64 @@ export function TanaInspector({
   );
 }
 
+function AddFieldToTemplateAction({
+  editor,
+  fieldId,
+  nodeId,
+  supertags,
+  value,
+}: {
+  editor: PlateEditor;
+  fieldId: NodeId;
+  nodeId: NodeId;
+  supertags: readonly TanaNode[];
+  value?: FieldValueState;
+}) {
+  const addToTemplate = (supertagId: NodeId) => {
+    if (!bindFieldToSupertag(editor, supertagId, fieldId)) return;
+
+    // A binding already expresses Defined + Not Set. Keep real FieldValues.
+    if (value === null) deleteAdHocField(editor, nodeId, fieldId);
+  };
+
+  if (supertags.length === 0) return null;
+
+  if (supertags.length === 1) {
+    return (
+      <button
+        className="text-[10px] text-muted-foreground hover:text-foreground"
+        type="button"
+        onClick={() => addToTemplate(supertags[0].id)}
+      >
+        添加到模板
+      </button>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="text-[10px] text-muted-foreground hover:text-foreground"
+          type="button"
+        >
+          添加到模板
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {supertags.map((supertag) => (
+          <DropdownMenuItem
+            key={supertag.id}
+            onSelect={() => addToTemplate(supertag.id)}
+          >
+            #{supertag.text || supertag.id}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function InspectorSection({
   children,
   icon,
@@ -263,6 +347,7 @@ function InspectorSection({
 }
 
 function FieldControl({
+  addToTemplate,
   definition,
   index,
   label,
@@ -271,6 +356,7 @@ function FieldControl({
   onRemove,
   value,
 }: {
+  addToTemplate?: React.ReactNode;
   definition: FieldDefinition;
   index: TanaIndex;
   label: string;
@@ -300,6 +386,13 @@ function FieldControl({
       <Trash2Icon className="size-3" />
     </button>
   ) : null;
+  const actions = (
+    <span className="flex items-center gap-2">
+      {addToTemplate}
+      {clearButton}
+      {removeButton}
+    </span>
+  );
   const labelElement = (
     <span className="mb-1.5 block font-medium text-[11px] text-muted-foreground">
       {label}
@@ -311,8 +404,7 @@ function FieldControl({
       <div className="flex items-center justify-between gap-3 text-xs">
         <span>{label}</span>
         <div className="flex items-center gap-2">
-          {clearButton}
-          {removeButton}
+          {actions}
           <Checkbox
             checked={compatibleValue?.type === 'checkbox' ? compatibleValue.value : false}
             onCheckedChange={(checked) =>
@@ -341,10 +433,7 @@ function FieldControl({
       <label className="block">
         <span className="flex items-center justify-between">
           {labelElement}
-          <span className="flex items-center gap-2">
-            {clearButton}
-            {removeButton}
-          </span>
+          {actions}
         </span>
         <Select
           value={currentValue}
@@ -376,11 +465,8 @@ function FieldControl({
   return (
     <label className="block">
       <span className="flex items-center justify-between">
-        {labelElement}
-        <span className="flex items-center gap-2">
-          {clearButton}
-          {removeButton}
-        </span>
+          {labelElement}
+          {actions}
       </span>
       <Input
         className="h-8 text-xs"
@@ -425,9 +511,15 @@ function FieldDefinitionEditor({
   const supertags = Array.from(index.nodesById.values()).filter(
     (candidate) => !!candidate.supertagDefinition
   );
-  const optionNodes = Array.from(index.nodesById.values()).filter(
-    (candidate) => candidate.id !== node.id
-  );
+  const [optionName, setOptionName] = React.useState('');
+  const optionNodes =
+    definition.type === 'options'
+      ? definition.options.flatMap((optionId) => {
+          const option = index.nodesById.get(optionId);
+
+          return option ? [option] : [];
+        })
+      : [];
 
   const updateDefinition = (nextDefinition: FieldDefinition) => {
     editor.tf.setNodes(
@@ -482,31 +574,46 @@ function FieldDefinitionEditor({
 
       {definition.type === 'options' && (
         <div className="mt-3 space-y-2">
-          <p className="text-[11px] text-muted-foreground">可选节点</p>
+          <p className="text-[11px] text-muted-foreground">选项节点</p>
           {optionNodes.map((option) => {
-            const selected = definition.options.includes(option.id);
-
             return (
-              <label
+              <div
                 key={option.id}
                 className="flex items-center justify-between gap-3 text-xs"
               >
                 <span className="min-w-0 truncate">{option.text || option.id}</span>
-                <Checkbox
-                  checked={selected}
-                  onCheckedChange={(checked) =>
-                    updateDefinition({
-                      options:
-                        checked === true
-                          ? [...definition.options, option.id]
-                          : definition.options.filter((id) => id !== option.id),
-                      type: 'options',
-                    })
-                  }
-                />
-              </label>
+                <button
+                  className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                  type="button"
+                  aria-label={`删除选项 ${option.text || option.id}`}
+                  onClick={() => removeFieldOption(editor, node.id, option.id)}
+                >
+                  <Trash2Icon className="size-3" />
+                </button>
+              </div>
             );
           })}
+          <div className="flex gap-2">
+            <Input
+              className="h-8 text-xs"
+              value={optionName}
+              placeholder="新选项"
+              onChange={(event) => setOptionName(event.target.value)}
+            />
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              disabled={!optionName.trim()}
+              onClick={() => {
+                if (createFieldOption(editor, node.id, optionName)) {
+                  setOptionName('');
+                }
+              }}
+            >
+              添加
+            </Button>
+          </div>
         </div>
       )}
 
@@ -544,14 +651,10 @@ function SupertagDefinitionEditor({
 }) {
   const [fieldName, setFieldName] = React.useState('');
   const [fieldType, setFieldType] = React.useState<FieldType>('plain');
-  const [optionIds, setOptionIds] = React.useState<readonly NodeId[]>([]);
   const [sourceSupertagId, setSourceSupertagId] = React.useState('');
   const definition = node.supertagDefinition;
   const supertags = Array.from(index.nodesById.values()).filter(
     (candidate) => !!candidate.supertagDefinition && candidate.id !== node.id
-  );
-  const optionNodes = Array.from(index.nodesById.values()).filter(
-    (candidate) => candidate.id !== node.id
   );
 
   if (!definition) {
@@ -589,7 +692,6 @@ function SupertagDefinitionEditor({
     const name = fieldName.trim();
     const fieldDefinition = createDefinition(
       fieldType,
-      optionIds,
       sourceSupertagId || supertags[0]?.id
     );
 
@@ -605,7 +707,6 @@ function SupertagDefinitionEditor({
     if (fieldId) bindFieldToSupertag(editor, node.id, fieldId);
 
     setFieldName('');
-    setOptionIds([]);
   };
 
   const updateDefault = (fieldId: NodeId, defaultValue?: FieldValue) => {
@@ -690,29 +791,6 @@ function SupertagDefinitionEditor({
             ))}
           </SelectContent>
         </Select>
-        {fieldType === 'options' && (
-          <div className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">可选节点</p>
-            {optionNodes.map((option) => (
-              <label
-                key={option.id}
-                className="flex items-center justify-between gap-3 text-xs"
-              >
-                <span className="min-w-0 truncate">{option.text || option.id}</span>
-                <Checkbox
-                  checked={optionIds.includes(option.id)}
-                  onCheckedChange={(checked) =>
-                    setOptionIds((current) =>
-                      checked === true
-                        ? [...current, option.id]
-                        : current.filter((id) => id !== option.id)
-                    )
-                  }
-                />
-              </label>
-            ))}
-          </div>
-        )}
         {fieldType === 'from-supertag' && (
           <Select value={sourceSupertagId} onValueChange={setSourceSupertagId}>
             <SelectTrigger className="h-8 w-full text-xs">
@@ -744,10 +822,9 @@ function SupertagDefinitionEditor({
 
 function createDefinition(
   type: FieldType,
-  optionIds: readonly NodeId[],
   sourceSupertagId: string | undefined
 ): FieldDefinition | undefined {
-  if (type === 'options') return { options: optionIds, type };
+  if (type === 'options') return { options: [], type };
   if (type === 'from-supertag') {
     return sourceSupertagId ? { sourceSupertagId, type } : undefined;
   }
