@@ -3,6 +3,7 @@ import type { NodeEntry } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
+import { isFieldValueCompatible } from './fields';
 import { buildTanaIndex } from './index';
 import type { NodeId, TanaBlockElement } from './types';
 
@@ -98,7 +99,14 @@ export function applySupertag(
   let hasNewDefault = false;
 
   bindings.forEach(({ defaultValue, fieldId }) => {
-    if (defaultValue !== undefined && nextFieldValues[fieldId] === undefined) {
+    const fieldDefinition = index.nodesById.get(fieldId)?.fieldDefinition;
+
+    if (
+      defaultValue !== undefined &&
+      fieldDefinition &&
+      isFieldValueCompatible(fieldDefinition, defaultValue) &&
+      nextFieldValues[fieldId] === undefined
+    ) {
       nextFieldValues[fieldId] = structuredClone(defaultValue);
       hasNewDefault = true;
     }

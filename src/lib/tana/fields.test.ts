@@ -11,6 +11,7 @@ import {
   createFieldDefinition,
   getFieldValueCandidates,
   getSupertagFieldBindings,
+  isFieldValueCompatible,
 } from './fields';
 import { buildTanaIndex } from './index';
 import { applySupertag } from './supertag';
@@ -102,6 +103,116 @@ describe('Tana field nodes', () => {
 
     assert.equal(applySupertag(editor, 'task', 'project'), true);
     assert.equal(editor.children[2].tanaFieldValues, undefined);
+  });
+
+  test('does not instantiate a default whose type conflicts with its Field Definition', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: {
+          fields: [
+            {
+              defaultValue: { type: 'plain', value: 'not a number' },
+              fieldId: 'estimate',
+            },
+          ],
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.equal(
+      isFieldValueCompatible(
+        { type: 'number' },
+        { type: 'plain', value: 'not a number' }
+      ),
+      false
+    );
+    assert.equal(applySupertag(editor, 'task', 'project'), true);
+    assert.equal(editor.children[2].tanaFieldValues, undefined);
+  });
+
+  test('preserves an existing instance value when a Field Definition type changes', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaFieldValues: {
+          priority: { type: 'plain', value: 'High' },
+        },
+        type: KEYS.p,
+      },
+    ]);
+
+    editor.tf.setNodes(
+      { tanaFieldDefinition: { type: 'number' } },
+      { at: [0] }
+    );
+
+    assert.deepEqual(editor.children[1].tanaFieldValues, {
+      priority: { type: 'plain', value: 'High' },
+    });
+    assert.equal(
+      isFieldValueCompatible(
+        { type: 'number' },
+        { type: 'plain', value: 'High' }
+      ),
+      false
+    );
+  });
+
+  test('creates a bound Field Definition at the end of its parent subtree', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Summary' }],
+        id: 'summary',
+        indent: 1,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Outside Project' }],
+        id: 'outside',
+        type: KEYS.p,
+      },
+    ]);
+
+    const fieldId = createFieldDefinition(
+      editor,
+      'Priority',
+      { type: 'number' },
+      'project'
+    );
+
+    assert.equal(fieldId, 'node-1');
+    assert.equal(editor.children[2].id, fieldId);
+    assert.equal(editor.children[2].indent, 1);
+    assert.deepEqual(editor.children[2].tanaFieldDefinition, { type: 'number' });
+    assert.equal(editor.children[3].id, 'outside');
+    assert.equal(bindFieldToSupertag(editor, 'project', fieldId!), true);
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
+      fields: [{ fieldId }],
+    });
   });
 
   test('derives From Supertag candidates only from the source tag instances', () => {

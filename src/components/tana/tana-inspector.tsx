@@ -27,6 +27,7 @@ import {
   getFieldValueCandidates,
   getNodeSupertagIds,
   getSupertagFieldBindings,
+  isFieldValueCompatible,
   removeSupertag,
 } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
@@ -262,7 +263,9 @@ function FieldControl({
   onChange: (value?: FieldValue) => void;
   value?: FieldValue;
 }) {
-  const clearButton = value ? (
+  const compatibleValue =
+    value && isFieldValueCompatible(definition, value) ? value : undefined;
+  const clearButton = compatibleValue ? (
     <button
       className="text-[10px] text-muted-foreground hover:text-foreground"
       type="button"
@@ -284,7 +287,7 @@ function FieldControl({
         <div className="flex items-center gap-2">
           {clearButton}
           <Checkbox
-            checked={value?.type === 'checkbox' ? value.value : false}
+            checked={compatibleValue?.type === 'checkbox' ? compatibleValue.value : false}
             onCheckedChange={(checked) =>
               onChange({ type: 'checkbox', value: checked === true })
             }
@@ -299,7 +302,9 @@ function FieldControl({
     definition.type === 'from-supertag'
   ) {
     const currentValue =
-      value?.type === definition.type ? value.value : EMPTY_VALUE;
+      compatibleValue?.type === definition.type
+        ? compatibleValue.value
+        : EMPTY_VALUE;
     const options = getFieldValueCandidates(index, definition).map((node) => ({
       label: node.text || node.id,
       value: node.id,
@@ -335,7 +340,8 @@ function FieldControl({
     );
   }
 
-  const currentValue = value?.type === definition.type ? value.value : '';
+  const currentValue =
+    compatibleValue?.type === definition.type ? compatibleValue.value : '';
 
   return (
     <label className="block">
@@ -556,7 +562,12 @@ function SupertagDefinitionEditor({
 
     if (!name || !fieldDefinition) return;
 
-    const fieldId = createFieldDefinition(editor, name, fieldDefinition);
+    const fieldId = createFieldDefinition(
+      editor,
+      name,
+      fieldDefinition,
+      node.id
+    );
 
     if (fieldId) bindFieldToSupertag(editor, node.id, fieldId);
 

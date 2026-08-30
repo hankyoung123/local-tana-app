@@ -3,9 +3,11 @@ import type { NodeEntry } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from './constants';
+import { getTanaNodeDescendantPaths } from './outliner';
 import type {
   FieldBinding,
   FieldDefinition,
+  FieldValue,
   NodeId,
   TanaBlockElement,
   TanaIndex,
@@ -17,6 +19,14 @@ export type ResolvedFieldBinding = {
   definition: FieldDefinition;
   field: TanaNode;
 };
+
+/** Field values are never coerced across Field Definition type changes. */
+export function isFieldValueCompatible(
+  definition: FieldDefinition,
+  value: FieldValue
+): boolean {
+  return definition.type === value.type;
+}
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -72,16 +82,36 @@ export function getFieldValueCandidates(
 export function createFieldDefinition(
   editor: PlateEditor,
   name: string,
-  definition: FieldDefinition
+  definition: FieldDefinition,
+  parentNodeId?: NodeId
 ): NodeId | undefined {
   const normalizedName = name.trim();
 
   if (!normalizedName) return;
 
-  const path = [editor.children.length];
+  const parentEntry = parentNodeId
+    ? getTanaNodeEntry(editor, parentNodeId)
+    : undefined;
+
+  if (parentNodeId && !parentEntry) return;
+
+  const parentPath = parentEntry?.[1];
+  const parentIndent = parentEntry?.[0].indent;
+  const descendants = parentPath
+    ? getTanaNodeDescendantPaths(editor.children, parentPath)
+    : [];
+  const path = parentPath
+    ? [(descendants.at(-1)?.[0] ?? parentPath[0]) + 1]
+    : [editor.children.length];
+  const indent =
+    parentPath
+      ? (typeof parentIndent === 'number' ? parentIndent : 0) + 1
+      : undefined;
+
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
+      ...(indent === undefined ? {} : { indent }),
       tanaFieldDefinition: definition,
     }),
     { at: path }
