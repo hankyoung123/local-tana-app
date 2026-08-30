@@ -16,6 +16,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - TanaIndex is derived and read-only.
 - Do not introduce a second editor or state path.
 - Prefer Plate official APIs before custom code.
+
+## Frozen outliner base
+
+- Node identity is `NodeId` plus the top-level `isTanaNodeElement` boundary; Plate type is presentation only.
+- Flat `indent` derives hierarchy, and Plate Toggle `openIds` is the only collapse state.
+- `isTanaNodeInteractable` is the single interaction boundary. Selection, DnD, navigation, and future product features must consume it rather than create a parallel visible-node model.
+- Do not add projection documents, collapse/visibility stores, or new low-level outliner abstractions without an explicit change to these constraints.
 - Every top-level Plate outliner block (`path.length === 1`) is a Tana Node,
   regardless of its Plate type. NodeId is identity; the Plate type controls
   presentation and editing behavior only.

@@ -122,3 +122,18 @@ export function isTanaNodeHidden(
 
   return false;
 }
+
+/**
+ * The one interaction boundary for the outliner: a top-level Tana node that
+ * is not concealed by a collapsed ancestor.
+ */
+export function isTanaNodeInteractable(
+  document: Value,
+  path: Path,
+  openIds: ReadonlySet<string>
+): boolean {
+  return (
+    !!getTanaNodeAt(document, path) &&
+    !isTanaNodeHidden(document, path, openIds)
+  );
+}

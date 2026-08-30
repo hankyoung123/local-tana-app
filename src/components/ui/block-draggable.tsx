@@ -2,7 +2,12 @@
 
 import * as React from 'react';
 
-import { DndPlugin, useDraggable, useDropLine } from '@platejs/dnd';
+import {
+  type CanDropCallback,
+  DndPlugin,
+  useDraggable,
+  useDropLine,
+} from '@platejs/dnd';
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
@@ -31,6 +36,7 @@ import {
   hasTanaNodeDescendants,
   isTanaNodeElement,
   isTanaNodeHidden,
+  isTanaNodeInteractable,
 } from '@/lib/tana';
 
 const EMPTY_OPEN_IDS = new Set<string>();
@@ -46,19 +52,19 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
 
   if (!enabled) return;
 
-  return (nodeProps) => <Draggable {...nodeProps} tanaPath={path} />;
+  return (nodeProps) => <TanaDraggableNode {...nodeProps} tanaPath={path} />;
 };
 
-function Draggable({ tanaPath, ...props }: PlateElementProps & { tanaPath: Path }) {
-  const { children, editor, element } = props;
-  const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
-  const openIds =
-    usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
-  const { hasChildren, isHidden } = useEditorSelector(
-    (currentEditor) => ({
-      hasChildren: hasTanaNodeDescendants(currentEditor.children, tanaPath),
-      isHidden: isTanaNodeHidden(
-        currentEditor.children,
+function TanaDraggableNode({
+  tanaPath,
+  ...props
+}: PlateElementProps & { tanaPath: Path }) {
+  const openIds = usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
+  const { hasChildren, isInteractable } = useEditorSelector(
+    (editor) => ({
+      hasChildren: hasTanaNodeDescendants(editor.children, tanaPath),
+      isInteractable: isTanaNodeInteractable(
+        editor.children,
         tanaPath,
         openIds
       ),
@@ -66,8 +72,72 @@ function Draggable({ tanaPath, ...props }: PlateElementProps & { tanaPath: Path 
     [openIds, tanaPath]
   );
 
+  if (!isInteractable) {
+    return <HiddenTanaNode>{props.children}</HiddenTanaNode>;
+  }
+
+  return (
+    <Draggable
+      {...props}
+      hasChildren={hasChildren}
+      openIds={openIds}
+      tanaPath={tanaPath}
+    />
+  );
+}
+
+function HiddenTanaNode({ children }: Pick<PlateElementProps, 'children'>) {
+  return (
+    <div
+      aria-hidden="true"
+      className="invisible m-0 h-0 overflow-hidden"
+      contentEditable={false}
+    >
+      <MemoizedChildren>{children}</MemoizedChildren>
+    </div>
+  );
+}
+
+export const canDropOnInteractableTanaNode: CanDropCallback = ({
+  dragEntry,
+  dragItem,
+  dropEntry,
+  editor,
+}) => {
+  const openIds = editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+  const isInteractable = (path: Path) =>
+    isTanaNodeInteractable(editor.children, path, openIds);
+
+  if (!isInteractable(dropEntry[1])) return false;
+  if (dragEntry && !isInteractable(dragEntry[1])) return false;
+
+  if (!('id' in dragItem)) return true;
+
+  const dragIds = Array.isArray(dragItem.id) ? dragItem.id : [dragItem.id];
+
+  return dragIds.every((id) => {
+    const dragNode = editor.api.node({ at: [], id });
+
+    return !!dragNode && isInteractable(dragNode[1]);
+  });
+};
+
+function Draggable({
+  hasChildren,
+  openIds,
+  tanaPath,
+  ...props
+}: PlateElementProps & {
+  hasChildren: boolean;
+  openIds: ReadonlySet<string>;
+  tanaPath: Path;
+}) {
+  const { children, editor, element } = props;
+  const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
+
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
+      canDropNode: canDropOnInteractableTanaNode,
       element,
       onDropHandler: (_, { dragItem }) => {
         const id = (dragItem as { id: string[] | string }).id;
@@ -109,7 +179,6 @@ function Draggable({ tanaPath, ...props }: PlateElementProps & { tanaPath: Path 
     <div
       className={cn(
         'relative',
-        isHidden && 'invisible m-0 h-0 overflow-hidden',
         isDragging && 'opacity-50',
         getPluginByType(editor, element.type)?.node.isContainer
           ? 'group/container'
@@ -138,6 +207,7 @@ function Draggable({ tanaPath, ...props }: PlateElementProps & { tanaPath: Path 
                 nodeId={element.id}
                 open={typeof element.id === 'string' && openIds.has(element.id)}
                 style={{ top: `${dragButtonTop + 3}px` }}
+                tanaPath={tanaPath}
               />
               <Button
                 ref={handleRef}
@@ -185,11 +255,13 @@ function TanaCollapseButton({
   nodeId,
   open,
   style,
+  tanaPath,
 }: {
   hasChildren: boolean;
   nodeId: unknown;
   open: boolean;
   style: React.CSSProperties;
+  tanaPath: Path;
 }) {
   const editor = useEditorRef();
 
@@ -207,7 +279,7 @@ function TanaCollapseButton({
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        editor.getApi(TogglePlugin).toggle.toggleIds([nodeId]);
+        toggleTanaNodeCollapse(editor, nodeId, tanaPath);
       }}
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -219,6 +291,57 @@ function TanaCollapseButton({
       />
     </Button>
   );
+}
+
+/**
+ * Uses Plate's existing openIds and selection APIs; it stores no Local Tana
+ * state. Collapsing first removes hidden blocks from Plate block selection and
+ * moves a text selection out of the descendant subtree.
+ */
+export function toggleTanaNodeCollapse(
+  editor: PlateEditor,
+  nodeId: string,
+  tanaPath: Path
+) {
+  const openIds = editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+
+  if (openIds.has(nodeId)) {
+    const collapsedOpenIds = new Set(openIds);
+    collapsedOpenIds.delete(nodeId);
+    const selection = editor.selection;
+    const selectionWillBeHidden = selection
+      ? [selection.anchor.path, selection.focus.path].some(
+          (path) =>
+            path.length > 0 &&
+            isTanaNodeHidden(
+              editor.children,
+              [path[0]],
+              collapsedOpenIds
+            )
+        )
+      : false;
+
+    const visibleSelectedIds = editor
+      .getApi(BlockSelectionPlugin)
+      .blockSelection.getNodes({ sort: true })
+      .flatMap(([node, path]) =>
+        isTanaNodeInteractable(editor.children, path, collapsedOpenIds) &&
+        typeof node.id === 'string'
+          ? [node.id]
+          : []
+      );
+
+    editor
+      .getApi(BlockSelectionPlugin)
+      .blockSelection.set(visibleSelectedIds);
+
+    if (selectionWillBeHidden) {
+      editor.tf.select(tanaPath, { edge: 'start' });
+      editor.tf.focus();
+    }
+  }
+
+  editor.getApi(TogglePlugin).toggle.toggleIds([nodeId]);
 }
 
 function Gutter({
@@ -282,14 +405,19 @@ const DragHandle = React.memo(function DragHandle({
 
             if ((e.button !== 0 && e.button !== 2) || e.shiftKey) return;
 
+            const openIds =
+              editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+            const onlyInteractable = ([, path]: [TElement, Path]) =>
+              isTanaNodeInteractable(editor.children, path, openIds);
+
             const blockSelection = editor
               .getApi(BlockSelectionPlugin)
               .blockSelection.getNodes({ sort: true });
 
             let selectionNodes =
               blockSelection.length > 0
-                ? blockSelection
-                : editor.api.blocks({ mode: 'highest' });
+                ? blockSelection.filter(onlyInteractable)
+                : editor.api.blocks({ mode: 'highest' }).filter(onlyInteractable);
 
             // If current block is not in selection, use it as the starting point
             if (!selectionNodes.some(([node]) => node.id === element.id)) {
@@ -320,14 +448,19 @@ const DragHandle = React.memo(function DragHandle({
           onMouseEnter={() => {
             if (isDragging) return;
 
+            const openIds =
+              editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
+            const onlyInteractable = ([, path]: [TElement, Path]) =>
+              isTanaNodeInteractable(editor.children, path, openIds);
+
             const blockSelection = editor
               .getApi(BlockSelectionPlugin)
               .blockSelection.getNodes({ sort: true });
 
             let selectedBlocks =
               blockSelection.length > 0
-                ? blockSelection
-                : editor.api.blocks({ mode: 'highest' });
+                ? blockSelection.filter(onlyInteractable)
+                : editor.api.blocks({ mode: 'highest' }).filter(onlyInteractable);
 
             // If current block is not in selection, use it as the starting point
             if (!selectedBlocks.some(([node]) => node.id === element.id)) {

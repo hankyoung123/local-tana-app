@@ -2,13 +2,19 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { BlockSelectionPlugin } from '@platejs/selection/react';
-import { KEYS, normalizeNodeId, type Value } from 'platejs';
+import { KEYS, normalizeNodeId, type NodeEntry, type TElement, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 import { TogglePlugin } from '@platejs/toggle/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
+import { BlockSelectionKit } from '@/components/editor/plugins/block-selection-kit';
+import {
+  canDropOnInteractableTanaNode,
+  toggleTanaNodeCollapse,
+} from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex, getNodeReferenceCandidates } from './index';
+import { navigateToNode } from './navigation';
 import {
   getTanaNodeDescendantPaths,
   getTanaParentPath,
@@ -16,6 +22,7 @@ import {
   hasTanaNodeDescendants,
   isTanaNodeCollapsed,
   isTanaNodeHidden,
+  isTanaNodeInteractable,
 } from './outliner';
 
 const outliner: Value = [
@@ -78,11 +85,7 @@ describe('Tana outliner behavior', () => {
     );
 
     const editor = createPlateEditor({
-      plugins: [
-        BlockSelectionPlugin.configure({
-          options: { isSelectable: isTanaNodeElement },
-        }),
-      ],
+      plugins: [TogglePlugin, ...BlockSelectionKit],
       value: [
         outliner[0],
         {
@@ -106,6 +109,94 @@ describe('Tana outliner behavior', () => {
       selection.getNodes().map(([node]) => node.id),
       ['parent', 'heading', 'quote', 'sibling']
     );
+  });
+
+  test('removes collapsed descendants from interaction while preserving the document', () => {
+    const nestedOutliner: Value = [
+      { children: [{ text: 'A' }], id: 'a', type: KEYS.h1 },
+      {
+        children: [{ text: 'B' }],
+        id: 'b',
+        indent: 1,
+        tanaFieldValues: { priority: { type: 'number', value: 1 } },
+        type: KEYS.blockquote,
+      },
+      { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
+      { children: [{ text: 'D' }], id: 'd', indent: 1, type: KEYS.p },
+      { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
+    ];
+    const editor = createPlateEditor({
+      plugins: [TogglePlugin, ...BlockSelectionKit],
+      value: structuredClone(nestedOutliner),
+    });
+    const originalDocument = structuredClone(editor.children);
+    const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+
+    editor.getApi(TogglePlugin).toggle.toggleIds(['a', 'b'], true);
+    editor.tf.select([2], { edge: 'start' });
+    toggleTanaNodeCollapse(editor, 'a', [0]);
+
+    const collapsedOpenIds =
+      editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(isTanaNodeHidden(editor.children, [1], collapsedOpenIds), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [0], collapsedOpenIds), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [1], collapsedOpenIds), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [2], collapsedOpenIds), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [3], collapsedOpenIds), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [4], collapsedOpenIds), true);
+    assert.deepEqual(editor.selection?.anchor.path, [0, 0]);
+    assert.deepEqual(editor.selection?.focus.path, [0, 0]);
+
+    selection.selectAll();
+    assert.deepEqual(
+      selection.getNodes({ sort: true }).map(([node]) => node.id),
+      ['a', 'e']
+    );
+
+    const bEntry = editor.api.node({ at: [], id: 'b' }) as
+      | NodeEntry<TElement>
+      | undefined;
+    const eEntry = editor.api.node({ at: [], id: 'e' }) as
+      | NodeEntry<TElement>
+      | undefined;
+
+    assert.ok(bEntry);
+    assert.ok(eEntry);
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: eEntry,
+        dragItem: { editorId: editor.id, element: eEntry[0], id: 'e' },
+        dropEntry: bEntry,
+        editor,
+      }),
+      false
+    );
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: bEntry,
+        dragItem: { editorId: editor.id, element: bEntry[0], id: 'b' },
+        dropEntry: eEntry,
+        editor,
+      }),
+      false
+    );
+    assert.equal(navigateToNode(editor, 'b'), false);
+
+    toggleTanaNodeCollapse(editor, 'a', [0]);
+
+    const expandedOpenIds =
+      editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(expandedOpenIds.has('b'), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [1], expandedOpenIds), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [2], expandedOpenIds), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [3], expandedOpenIds), true);
+    assert.deepEqual(editor.children, originalDocument);
+    assert.equal(editor.children[1].id, 'b');
+    assert.deepEqual(editor.children[1].tanaFieldValues, {
+      priority: { type: 'number', value: 1 },
+    });
   });
 
   test('derives hierarchy for every presentation without changing node types', () => {

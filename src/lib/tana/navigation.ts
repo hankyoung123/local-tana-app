@@ -1,7 +1,10 @@
 import type { PlateEditor } from 'platejs/react';
+import { TogglePlugin } from '@platejs/toggle/react';
 
-import { isTanaNodeElement } from './constants';
+import { isTanaNodeInteractable } from './outliner';
 import type { NodeId } from './types';
+
+const EMPTY_OPEN_IDS = new Set<string>();
 
 export function navigateToNode(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = editor.api.node({ at: [], id: targetNodeId });
@@ -10,7 +13,15 @@ export function navigateToNode(editor: PlateEditor, targetNodeId: NodeId) {
 
   const [targetNode, targetPath] = targetEntry;
 
-  if (!isTanaNodeElement(targetEntry)) return false;
+  if (
+    !isTanaNodeInteractable(
+      editor.children,
+      targetPath,
+      editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS
+    )
+  ) {
+    return false;
+  }
 
   editor.tf.select(targetPath);
   editor.tf.focus();

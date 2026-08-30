@@ -1,9 +1,12 @@
 'use client';
 
 import { BlockSelectionPlugin } from '@platejs/selection/react';
+import { TogglePlugin } from '@platejs/toggle/react';
 
 import { BlockSelection } from '@/components/ui/block-selection';
-import { isTanaNodeElement } from '@/lib/tana';
+import { isTanaNodeInteractable } from '@/lib/tana';
+
+const EMPTY_OPEN_IDS = new Set<string>();
 
 export const hasSelectableClass = ({
   attributes,
@@ -18,10 +21,15 @@ export const hasSelectableClass = ({
     .includes('slate-selectable');
 
 export const BlockSelectionKit = [
-  BlockSelectionPlugin.configure(() => ({
+  BlockSelectionPlugin.configure(({ editor }) => ({
     options: {
       enableContextMenu: true,
-      isSelectable: isTanaNodeElement,
+      isSelectable: (_, path) =>
+        isTanaNodeInteractable(
+          editor.children,
+          path,
+          editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS
+        ),
     },
     render: {
       belowRootNodes: (props) => {
