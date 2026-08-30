@@ -1,10 +1,9 @@
 'use client';
 
-import { AIChatPlugin } from '@platejs/ai/react';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
-import { getPluginTypes, isHotkey, KEYS } from 'platejs';
 
 import { BlockSelection } from '@/components/ui/block-selection';
+import { isTanaNodeElement } from '@/lib/tana';
 
 export const hasSelectableClass = ({
   attributes,
@@ -19,18 +18,10 @@ export const hasSelectableClass = ({
     .includes('slate-selectable');
 
 export const BlockSelectionKit = [
-  BlockSelectionPlugin.configure(({ editor }) => ({
+  BlockSelectionPlugin.configure(() => ({
     options: {
       enableContextMenu: true,
-      isSelectable: (element) =>
-        !getPluginTypes(editor, [KEYS.column, KEYS.codeLine, KEYS.td]).includes(
-          element.type
-        ),
-      onKeyDownSelecting: (editor, e) => {
-        if (isHotkey('mod+j')(e)) {
-          editor.getApi(AIChatPlugin).aiChat.show();
-        }
-      },
+      isSelectable: isTanaNodeElement,
     },
     render: {
       belowRootNodes: (props) => {

@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Local Tana
 
-## Getting Started
+Local Tana is a desktop-first outliner built on the official Plate editor stack.
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Plate Playground core
++ thin Tana semantics
++ local SQLite persistence
+= Local Tana
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Plate owns editing behavior: node IDs, selection, drag and drop, list/indent,
+toggle state, mention, combobox, slash commands, history, clipboard, and IME.
+Local Tana only adds node references, supertags, fields, derived indexes, views,
+and local persistence.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data model
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- The Plate document is the only writable source of truth.
+- A Plate top-level outliner block ID is the Local Tana `NodeId`.
+- `TanaIndex` is rebuilt from the current Plate document and is read-only.
+- Reference and supertag elements persist only `key: targetNodeId`; their labels
+  are dynamically derived from the target node.
+- The Tauri app serializes debounced SQLite writes and flushes before page hide
+  or desktop-window close.
 
-## Learn More
+## Run
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+bun install
+bun run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open `http://localhost:3000/editor` for the browser preview. SQLite persistence
+is enabled in the Tauri desktop app:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+bun run tauri:dev
+```
 
-## Deploy on Vercel
+## Verification
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+bun test
+bun run typecheck
+bun run build
+bun run build:tauri
+bun run tauri:check
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The CI workflow runs the tests, TypeScript check, web build, and a Tauri debug
+build without a bundled installer.
+
+## Supported semantics
+
+- Inline references (`@Node`) with backlinks and NodeId navigation
+- Supertags (`#Tag`) with field definitions and values
+- Text, number, boolean, date, select, and node-reference fields
+- Full-rebuild TanaIndex and compact query views
+- Plate Toggle/openIds-backed outliner collapse
+
+Block references, FTS, incremental indexing, placements, and shared roots are
+intentionally out of scope.

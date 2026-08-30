@@ -6,7 +6,7 @@ import { DndPlugin, useDraggable, useDropLine } from '@platejs/dnd';
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { GripVertical } from 'lucide-react';
-import { type TElement, getPluginByType, isType, KEYS } from 'platejs';
+import { type TElement, getPluginByType } from 'platejs';
 import {
   type PlateEditor,
   type PlateElementProps,
@@ -25,8 +25,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-
-const UNDRAGGABLE_KEYS = [KEYS.column, KEYS.tr, KEYS.td];
+import { isTanaNodeElement } from '@/lib/tana';
 
 export const BlockDraggable: RenderNodeWrapper = (props) => {
   const { editor, element, path } = props;
@@ -34,35 +33,7 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
   const enabled = React.useMemo(() => {
     if (editor.dom.readOnly) return false;
 
-    if (path.length === 1 && !isType(editor, element, UNDRAGGABLE_KEYS)) {
-      return true;
-    }
-    if (path.length === 3 && !isType(editor, element, UNDRAGGABLE_KEYS)) {
-      const block = editor.api.some({
-        at: path,
-        match: {
-          type: editor.getType(KEYS.column),
-        },
-      });
-
-      if (block) {
-        return true;
-      }
-    }
-    if (path.length === 4 && !isType(editor, element, UNDRAGGABLE_KEYS)) {
-      const block = editor.api.some({
-        at: path,
-        match: {
-          type: editor.getType(KEYS.table),
-        },
-      });
-
-      if (block) {
-        return true;
-      }
-    }
-
-    return false;
+    return isTanaNodeElement(element, path);
   }, [editor, element, path]);
 
   if (!enabled) return;
@@ -71,7 +42,7 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
 };
 
 function Draggable(props: PlateElementProps) {
-  const { children, editor, element, path } = props;
+  const { children, editor, element } = props;
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
@@ -86,9 +57,6 @@ function Draggable(props: PlateElementProps) {
         resetPreview();
       },
     });
-
-  const isInColumn = path.length === 3;
-  const isInTable = path.length === 4;
 
   const [previewTop, setPreviewTop] = React.useState(0);
 
@@ -130,20 +98,17 @@ function Draggable(props: PlateElementProps) {
         setDragButtonTop(calcDragButtonTop(editor, element));
       }}
     >
-      {!isInTable && (
-        <Gutter>
+      <Gutter>
           <div
             className={cn(
               'slate-blockToolbarWrapper',
               'flex h-[1.5em]',
-              isInColumn && 'h-4'
             )}
           >
             <div
               className={cn(
                 'slate-blockToolbar relative w-4.5',
                 'pointer-events-auto mr-1 flex items-center',
-                isInColumn && 'mr-1.5'
               )}
             >
               <Button
@@ -162,8 +127,7 @@ function Draggable(props: PlateElementProps) {
               </Button>
             </div>
           </div>
-        </Gutter>
-      )}
+      </Gutter>
 
       <div
         ref={previewRef}

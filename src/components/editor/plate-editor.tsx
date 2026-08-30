@@ -12,11 +12,13 @@ import {
   TanaWorkspace,
 } from '@/components/tana/tana-workspace';
 import {
+  createDocumentSaveController,
   loadPlateDocument,
   savePlateDocument,
   usesSQLitePersistence,
 } from '@/lib/tana';
 import { initialDocument } from '@/lib/tana/initial-document';
+import { TANA_NODE_TYPES } from '@/lib/tana/constants';
 
 export function PlateEditor() {
   const [loadedDocument, setLoadedDocument] = React.useState<Value>();
@@ -65,7 +67,11 @@ function LoadedPlateEditor({
   initialValue: Value;
 }) {
   const editor = usePlateEditor({
-    nodeId: true,
+    nodeId: {
+      allow: [...TANA_NODE_TYPES],
+      initialValueIds: 'always',
+      level: 1,
+    },
     plugins: EditorKit,
     value: initialValue,
   });
@@ -78,31 +84,58 @@ function LoadedPlateEditor({
           ? 'saved'
           : 'browser-preview'
     );
-  const saveTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const saveController = React.useMemo(
+    () =>
+      createDocumentSaveController({
+        onStatus: setPersistenceStatus,
+        write: savePlateDocument,
+      }),
+    []
+  );
 
   const scheduleSave = React.useCallback(
     (value: Value) => {
       if (!sqliteEnabled) return;
 
-      setPersistenceStatus('saving');
-      clearTimeout(saveTimer.current);
-      const snapshot = structuredClone(value);
-
-      saveTimer.current = setTimeout(() => {
-        savePlateDocument(snapshot)
-          .then(() => setPersistenceStatus('saved'))
-          .catch(() => setPersistenceStatus('error'));
-      }, 300);
+      saveController.schedule(value);
     },
-    [sqliteEnabled]
+    [saveController, sqliteEnabled]
   );
 
-  React.useEffect(
-    () => () => {
-      clearTimeout(saveTimer.current);
-    },
-    []
-  );
+  React.useEffect(() => {
+    if (!sqliteEnabled) return;
+
+    const flush = () => {
+      void saveController.flush().catch(() => setPersistenceStatus('error'));
+    };
+
+    window.addEventListener('pagehide', flush);
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
+      const appWindow = getCurrentWindow();
+      const stopListening = await appWindow.onCloseRequested(async (event) => {
+        try {
+          await saveController.flush();
+        } catch {
+          event.preventDefault();
+          setPersistenceStatus('error');
+        }
+      });
+
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    });
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('pagehide', flush);
+      unlisten?.();
+      flush();
+    };
+  }, [saveController, sqliteEnabled]);
 
   return (
     <Plate editor={editor} onValueChange={({ value }) => scheduleSave(value)}>

@@ -2,15 +2,12 @@
 
 import * as React from 'react';
 
-import { AIChatPlugin } from '@platejs/ai/react';
 import {
   type CursorData,
   type CursorOverlayState,
   useCursorOverlay,
 } from '@platejs/selection/react';
-import { getTableGridAbove } from '@platejs/table';
 import { RangeApi } from 'platejs';
-import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
 
@@ -33,24 +30,8 @@ function Cursor({
   selection,
   selectionRects,
 }: CursorOverlayState<CursorData>) {
-  const editor = useEditorRef();
-  const streaming = usePluginOption(AIChatPlugin, 'streaming');
   const { style, selectionStyle = style } = data ?? ({} as CursorData);
   const isCursor = RangeApi.isCollapsed(selection);
-
-  if (streaming) return null;
-
-  // Skip overlay for multi-cell table selection (table has its own selection UI)
-  if (id === 'selection' && selection) {
-    const cellEntries = getTableGridAbove(editor, {
-      at: selection,
-      format: 'cell',
-    });
-
-    if (cellEntries.length > 1) {
-      return null;
-    }
-  }
 
   return (
     <>

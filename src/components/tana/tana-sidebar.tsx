@@ -4,17 +4,21 @@ import * as React from 'react';
 
 import { HashIcon, HomeIcon, ListFilterIcon, SearchIcon } from 'lucide-react';
 
-import type { NodeId, TanaIndex } from '@/lib/tana';
+import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 type TanaSidebarProps = {
+  activeNodeId: NodeId | null;
+  homeNode?: TanaNode;
   index: TanaIndex;
   onNavigate: (nodeId: NodeId) => void;
   onOpenView: (nodeId: NodeId) => void;
 };
 
 export function TanaSidebar({
+  activeNodeId,
+  homeNode,
   index,
   onNavigate,
   onOpenView,
@@ -72,10 +76,19 @@ export function TanaSidebar({
         ) : (
           <>
             <SidebarSection title="Workspace">
-              <SidebarButton active onClick={() => onNavigate('node-local-tana')}>
-                <HomeIcon />
-                Home
-              </SidebarButton>
+              {homeNode ? (
+                <SidebarButton
+                  active={activeNodeId === homeNode.id}
+                  onClick={() => onNavigate(homeNode.id)}
+                >
+                  <HomeIcon />
+                  <span className="truncate">{homeNode.text || 'Workspace'}</span>
+                </SidebarButton>
+              ) : (
+                <p className="px-2 py-2 text-muted-foreground text-xs">
+                  No nodes yet
+                </p>
+              )}
             </SidebarSection>
 
             <SidebarSection title="Supertags">
@@ -87,6 +100,7 @@ export function TanaSidebar({
                 supertags.map((node) => (
                   <SidebarButton
                     key={node.id}
+                    active={activeNodeId === node.id}
                     onClick={() => onNavigate(node.id)}
                   >
                     <HashIcon />
@@ -108,6 +122,7 @@ export function TanaSidebar({
                 views.map((view) => (
                   <SidebarButton
                     key={view.id}
+                    active={activeNodeId === view.id}
                     onClick={() => onOpenView(view.id)}
                   >
                     <ListFilterIcon />

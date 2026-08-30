@@ -5,7 +5,6 @@ import * as React from 'react';
 import { ChevronRightIcon } from 'lucide-react';
 import { useEditorRef, useEditorSelector } from 'platejs/react';
 
-import { SettingsDialog } from '@/components/editor/settings-dialog';
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import {
   buildTanaIndex,
@@ -14,6 +13,7 @@ import {
 } from '@/lib/tana';
 
 import { TanaInspector } from './tana-inspector';
+import { TanaOutlinerBehavior } from './tana-outliner-behavior';
 import { TanaSidebar } from './tana-sidebar';
 import { TanaView } from './tana-view';
 
@@ -32,13 +32,15 @@ export function TanaWorkspace({
   const [activeViewId, setActiveViewId] = React.useState<NodeId | null>(null);
   const derived = useEditorSelector(
     (currentEditor) => {
-      const selectedBlock = currentEditor.api.block()?.[0];
+      const selectedTopLevel = currentEditor.selection
+        ? currentEditor.children[currentEditor.selection.anchor.path[0]]
+        : undefined;
 
       return {
         index: buildTanaIndex(currentEditor.children),
         selectedNodeId:
-          selectedBlock && typeof selectedBlock.id === 'string'
-            ? selectedBlock.id
+          selectedTopLevel && typeof selectedTopLevel.id === 'string'
+            ? selectedTopLevel.id
             : null,
       };
     },
@@ -64,9 +66,16 @@ export function TanaWorkspace({
   const activeView = activeViewId
     ? derived.index.nodesById.get(activeViewId)
     : undefined;
+  const homeNode = derived.index.nodesById.values().next().value;
+  const activeNodeId = activeViewId ?? derived.selectedNodeId ?? homeNode?.id ?? null;
+  const activeNode = activeNodeId
+    ? derived.index.nodesById.get(activeNodeId)
+    : undefined;
+  const pageTitle = activeNode?.text || 'Workspace';
 
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-[#f4f6f5] text-[#202421]">
+      <TanaOutlinerBehavior />
       <header className="flex h-12 shrink-0 items-center border-b border-[#dfe4e1] bg-white px-4">
         <div className="flex min-w-0 flex-1 items-center gap-5">
           <div className="flex shrink-0 items-center gap-2">
@@ -82,7 +91,9 @@ export function TanaWorkspace({
           >
             <span className="truncate">Workspace</span>
             <ChevronRightIcon className="size-3.5 shrink-0" />
-            <span className="truncate font-medium text-[#343a36]">Home</span>
+            <span className="truncate font-medium text-[#343a36]">
+              {pageTitle}
+            </span>
           </nav>
         </div>
 
@@ -96,6 +107,8 @@ export function TanaWorkspace({
 
       <main className="flex min-h-0 flex-1">
         <TanaSidebar
+          activeNodeId={activeNodeId}
+          homeNode={homeNode}
           index={derived.index}
           onNavigate={handleNavigate}
           onOpenView={handleOpenView}
@@ -113,7 +126,7 @@ export function TanaWorkspace({
           <div className="shrink-0 border-b border-[#e7ebe8] px-6 py-5 sm:px-[max(48px,calc(50%-390px))]">
             <p className="mb-1 text-[#7b827d] text-xs">Workspace</p>
             <h1 className="font-semibold text-2xl text-[#202421] tracking-normal">
-              Home
+              {pageTitle}
             </h1>
           </div>
 
@@ -135,7 +148,6 @@ export function TanaWorkspace({
         />
       </main>
 
-      <SettingsDialog />
     </div>
   );
 }

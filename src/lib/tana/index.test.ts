@@ -20,14 +20,12 @@ const document: Value = [
         children: [{ text: '' }],
         key: 'project',
         type: 'mention',
-        value: 'Project',
       },
       { text: ' ' },
       {
         children: [{ text: '' }],
         key: 'project',
         type: 'tana_supertag',
-        value: 'Project',
       },
     ],
     tanaFieldValues: {
@@ -71,5 +69,50 @@ describe('buildTanaIndex', () => {
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
     ]);
+  });
+
+  test('derives reference and supertag names from the current target node', () => {
+    const renamed = structuredClone(document);
+    renamed[0].children = [{ text: 'Renamed Project' }];
+
+    assert.equal(
+      buildTanaIndex(renamed).nodesById.get('task')?.text,
+      'Ship @Renamed Project #Renamed Project'
+    );
+    assert.equal('value' in (renamed[1].children[1] as object), false);
+    assert.equal('value' in (renamed[1].children[3] as object), false);
+  });
+
+  test('excludes table, media, and nested internal blocks from TanaIndex', () => {
+    const withInternalBlocks = [
+      ...document,
+      {
+        id: 'table',
+        type: 'table',
+        children: [
+          {
+            id: 'row',
+            type: 'tr',
+            children: [
+              {
+                id: 'cell',
+                type: 'td',
+                children: [
+                  { id: 'nested', type: 'p', children: [{ text: 'Nested' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { id: 'image', type: 'img', url: 'x', children: [{ text: '' }] },
+    ] as Value;
+    const index = buildTanaIndex(withInternalBlocks);
+
+    assert.equal(index.nodesById.has('table'), false);
+    assert.equal(index.nodesById.has('row'), false);
+    assert.equal(index.nodesById.has('cell'), false);
+    assert.equal(index.nodesById.has('nested'), false);
+    assert.equal(index.nodesById.has('image'), false);
   });
 });

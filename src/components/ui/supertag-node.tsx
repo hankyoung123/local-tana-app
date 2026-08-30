@@ -9,6 +9,7 @@ import { HashIcon } from 'lucide-react';
 import { PlateElement, useEditorSelector } from 'platejs/react';
 
 import {
+  getNodeDisplayName,
   getSupertagCandidates,
   navigateToNode,
   TANA_SUPERTAG_KEY,
@@ -26,13 +27,16 @@ import {
 
 type SupertagElementType = TElement & {
   key: string;
-  value: string;
 };
 
 export function SupertagElement(
   props: PlateElementProps<SupertagElementType>
 ) {
   const { element, editor } = props;
+  const displayName = useEditorSelector(
+    (currentEditor) => getNodeDisplayName(currentEditor.children, element.key),
+    [element.key]
+  );
 
   const navigateToDefinition = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -58,7 +62,7 @@ export function SupertagElement(
         tabIndex: 0,
       }}
     >
-      #{element.value}
+      #{displayName}
       {props.children}
     </PlateElement>
   );
@@ -89,7 +93,6 @@ export function SupertagInputElement(
         children: [{ text: '' }],
         key: item.id,
         type: TANA_SUPERTAG_KEY,
-        value: item.text,
       });
       editor.tf.move({ unit: 'offset' });
 

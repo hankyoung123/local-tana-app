@@ -2,7 +2,10 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 
 import { KEYS, TextApi } from 'platejs';
 
-import { TANA_SUPERTAG_KEY } from './constants';
+import {
+  isTanaNodeElement,
+  TANA_SUPERTAG_KEY,
+} from './constants';
 import type {
   FieldId,
   FieldValue,
@@ -16,7 +19,6 @@ import type {
 
 type MentionElement = TElement & {
   key?: unknown;
-  value?: unknown;
 };
 
 export type NodeReferenceCandidate = Pick<TanaNode, 'id' | 'text'>;
@@ -26,29 +28,6 @@ export type SupertagCandidate = NodeReferenceCandidate & {
 
 function isElement(node: Descendant): node is TElement {
   return 'children' in node && Array.isArray(node.children);
-}
-
-function getElementText(element: TElement): string {
-  return element.children
-    .map((child) => {
-      if (TextApi.isText(child)) return child.text;
-
-      if (child.type === KEYS.mention) {
-        const value = (child as MentionElement).value;
-
-        return typeof value === 'string' ? `@${value}` : '';
-      }
-
-      if (child.type === TANA_SUPERTAG_KEY) {
-        const value = (child as MentionElement).value;
-
-        return typeof value === 'string' ? `#${value}` : '';
-      }
-
-      return getElementText(child);
-    })
-    .join('')
-    .trim();
 }
 
 function getReferenceTarget(element: TElement): NodeId | undefined {
@@ -68,10 +47,82 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const nodesBySupertag = new Map<NodeId, NodeId[]>();
   const fieldValues = new Map<NodeId, ReadonlyMap<FieldId, FieldValue>>();
 
-  function visit(
+  document.forEach((descendant, index) => {
+    const path = [index];
+
+    if (!isElement(descendant) || !isTanaNodeElement(descendant, path)) return;
+    if (typeof descendant.id !== 'string' || descendant.id.length === 0) return;
+
+    const tanaNode = descendant as TanaBlockElement;
+
+    nodesById.set(descendant.id, {
+      fieldValues: tanaNode.tanaFieldValues,
+      id: descendant.id,
+      node: descendant,
+      path,
+      supertagDefinition: tanaNode.tanaSupertagDefinition,
+      text: '',
+      viewDefinition: tanaNode.tanaViewDefinition,
+    });
+
+    if (tanaNode.tanaFieldValues) {
+      fieldValues.set(
+        descendant.id,
+        new Map(Object.entries(tanaNode.tanaFieldValues))
+      );
+    }
+  });
+
+  const resolvedNames = new Map<NodeId, string>();
+
+  function resolveNodeName(nodeId: NodeId, resolving: Set<NodeId>): string {
+    const cached = resolvedNames.get(nodeId);
+
+    if (cached !== undefined) return cached;
+    if (resolving.has(nodeId)) return '';
+
+    const tanaNode = nodesById.get(nodeId);
+
+    if (!tanaNode) return '';
+
+    const nextResolving = new Set(resolving).add(nodeId);
+    const text = getElementText(tanaNode.node, nextResolving).trim();
+
+    resolvedNames.set(nodeId, text);
+
+    return text;
+  }
+
+  function getElementText(element: TElement, resolving: Set<NodeId>): string {
+    return element.children
+      .map((child) => {
+        if (TextApi.isText(child)) return child.text;
+
+        if (child.type === KEYS.mention || child.type === TANA_SUPERTAG_KEY) {
+          const targetNodeId = getReferenceTargetByKey(child);
+          const targetName = targetNodeId
+            ? resolveNodeName(targetNodeId, resolving)
+            : '';
+
+          return `${child.type === KEYS.mention ? '@' : '#'}${targetName}`;
+        }
+
+        return getElementText(child, resolving);
+      })
+      .join('');
+  }
+
+  nodesById.forEach((node, nodeId) => {
+    nodesById.set(nodeId, {
+      ...node,
+      text: resolveNodeName(nodeId, new Set()),
+    });
+  });
+
+  function visitSemanticChild(
     descendant: Descendant,
     path: Path,
-    sourceNodeId?: NodeId
+    sourceNodeId: NodeId
   ): void {
     if (!isElement(descendant)) return;
 
@@ -98,34 +149,16 @@ export function buildTanaIndex(document: Value): TanaIndex {
       backlinks.set(targetNodeId, relations);
     }
 
-    const nodeId =
-      typeof descendant.id === 'string' ? descendant.id : undefined;
-    const nextSourceNodeId = targetNodeId ? sourceNodeId : nodeId ?? sourceNodeId;
-
-    if (nodeId && !targetNodeId) {
-      const tanaNode = descendant as TanaBlockElement;
-
-      nodesById.set(nodeId, {
-        fieldValues: tanaNode.tanaFieldValues,
-        id: nodeId,
-        node: descendant,
-        path,
-        supertagDefinition: tanaNode.tanaSupertagDefinition,
-        text: getElementText(descendant),
-        viewDefinition: tanaNode.tanaViewDefinition,
-      });
-
-      if (tanaNode.tanaFieldValues) {
-        fieldValues.set(nodeId, new Map(Object.entries(tanaNode.tanaFieldValues)));
-      }
-    }
-
     descendant.children.forEach((child, index) => {
-      visit(child, [...path, index], nextSourceNodeId);
+      visitSemanticChild(child, [...path, index], sourceNodeId);
     });
   }
 
-  document.forEach((node, index) => visit(node, [index]));
+  nodesById.forEach((node) => {
+    node.node.children.forEach((child, index) => {
+      visitSemanticChild(child, [...node.path, index], node.id);
+    });
+  });
 
   return {
     backlinks,
@@ -133,6 +166,16 @@ export function buildTanaIndex(document: Value): TanaIndex {
     nodesById,
     nodesBySupertag,
   };
+}
+
+function getReferenceTargetByKey(element: TElement): NodeId | undefined {
+  const key = (element as MentionElement).key;
+
+  return typeof key === 'string' ? key : undefined;
+}
+
+export function getNodeDisplayName(document: Value, nodeId: NodeId): string {
+  return buildTanaIndex(document).nodesById.get(nodeId)?.text ?? 'Unknown node';
 }
 
 export function getSupertagCandidates(document: Value): SupertagCandidate[] {

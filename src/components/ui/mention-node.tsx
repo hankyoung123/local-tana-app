@@ -5,7 +5,6 @@ import * as React from 'react';
 import type { TComboboxInputElement, TMentionElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
-import { getMentionOnSelectItem } from '@platejs/mention';
 import { IS_APPLE, KEYS } from 'platejs';
 import {
   PlateElement,
@@ -17,8 +16,8 @@ import {
 
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
-import { inlineSuggestionVariants } from '@/lib/suggestion';
 import {
+  getNodeDisplayName,
   getNodeReferenceCandidates,
   navigateToNode,
 } from '@/lib/tana';
@@ -42,6 +41,11 @@ export function MentionElement(
   const focused = useFocused();
   const mounted = useMounted();
   const readOnly = useReadOnly();
+  const targetNodeId = typeof element.key === 'string' ? element.key : '';
+  const displayName = useEditorSelector(
+    (editor) => getNodeDisplayName(editor.children, targetNodeId),
+    [targetNodeId]
+  );
 
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -66,7 +70,6 @@ export function MentionElement(
       {...props}
       className={cn(
         'inline-block rounded-md bg-muted px-1.5 py-0.5 align-baseline font-medium text-sm',
-        inlineSuggestionVariants(),
         !readOnly && 'cursor-pointer',
         selected && focused && 'ring-2 ring-ring',
         element.children[0][KEYS.bold] === true && 'font-bold',
@@ -76,7 +79,7 @@ export function MentionElement(
       attributes={{
         ...props.attributes,
         contentEditable: false,
-        'data-slate-value': element.value,
+        'data-target-node-id': targetNodeId,
         draggable: true,
         onClick: navigateToTarget,
         onKeyDown: navigateToTarget,
@@ -89,21 +92,19 @@ export function MentionElement(
         <>
           {props.children}
           {props.prefix}
-          {element.value}
+          {displayName}
         </>
       ) : (
         // Others like Android https://github.com/ianstormtaylor/slate/pull/5360
         <>
           {props.prefix}
-          {element.value}
+          {displayName}
           {props.children}
         </>
       )}
     </PlateElement>
   );
 }
-
-const onSelectItem = getMentionOnSelectItem();
 
 export function MentionInputElement(
   props: PlateElementProps<TComboboxInputElement>
@@ -148,7 +149,14 @@ export function MentionInputElement(
                 <InlineComboboxItem
                   key={item.key}
                   value={item.text}
-                  onClick={() => onSelectItem(editor, item, search)}
+                  onClick={() => {
+                    editor.getTransforms({ key: KEYS.mention }).insert.mention({
+                      key: item.key,
+                      search,
+                      value: undefined,
+                    });
+                    editor.tf.move({ unit: 'offset' });
+                  }}
                 >
                   {item.text}
                 </InlineComboboxItem>
