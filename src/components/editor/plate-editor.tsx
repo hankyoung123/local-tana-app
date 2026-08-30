@@ -69,8 +69,8 @@ function LoadedPlateEditor({
   const editor = usePlateEditor({
     nodeId: {
       allow: [...TANA_NODE_TYPES],
+      filter: ([, path]) => path.length === 1,
       initialValueIds: 'always',
-      level: 1,
     },
     plugins: EditorKit,
     value: initialValue,

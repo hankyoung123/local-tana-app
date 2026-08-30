@@ -5,13 +5,6 @@ import type { Path, TElement } from 'platejs';
 export const TANA_NODE_TYPES = [
   KEYS.p,
   KEYS.toggle,
-  KEYS.h1,
-  KEYS.h2,
-  KEYS.h3,
-  KEYS.h4,
-  KEYS.h5,
-  KEYS.h6,
-  KEYS.blockquote,
 ] as const;
 
 export const TANA_SUPERTAG_KEY = 'tana_supertag';
