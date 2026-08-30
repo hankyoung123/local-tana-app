@@ -5,6 +5,7 @@ import type { PlateEditor } from 'platejs/react';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex } from './index';
 import {
+  getTanaAncestorPaths,
   getTanaNodeDescendantPaths,
   getTanaNodePath,
   getTanaParentPath,
@@ -14,6 +15,7 @@ import type {
   FieldBinding,
   FieldDefinition,
   FieldValue,
+  FieldValueState,
   NodeId,
   TanaBlockElement,
   TanaIndex,
@@ -51,6 +53,17 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
     : undefined;
 }
 
+function getTanaBlockAt(
+  document: Value,
+  path: Path
+): TanaBlockElement | undefined {
+  const node = path.length === 1 ? document[path[0]] : undefined;
+
+  return node && ElementApi.isElement(node) && isTanaNodeElement(node, path)
+    ? (node as TanaBlockElement)
+    : undefined;
+}
+
 function getTanaElementText(element: TElement): string {
   return element.children
     .map((child) => {
@@ -66,19 +79,30 @@ function getDirectSupertagDefinitionParent(
   path: Path
 ): TanaBlockElement | undefined {
   const parentPath = getTanaParentPath(document, path);
-  const parent = parentPath ? document[parentPath[0]] : undefined;
+  const parent = parentPath
+    ? getTanaBlockAt(document, parentPath)
+    : undefined;
 
-  if (
-    !parent ||
-    !parentPath ||
-    !ElementApi.isElement(parent) ||
-    !isTanaNodeElement(parent, parentPath) ||
-    !(parent as TanaBlockElement).tanaSupertagDefinition
-  ) {
-    return;
-  }
+  return parent?.tanaSupertagDefinition ? parent : undefined;
+}
 
-  return parent as TanaBlockElement;
+function isFieldWorkflowSpecialNode(node: TanaBlockElement): boolean {
+  return (
+    node.tanaFieldDefinition !== undefined ||
+    node.tanaSupertagDefinition !== undefined ||
+    node.tanaViewDefinition !== undefined
+  );
+}
+
+function hasFieldWorkflowDefinitionAncestor(
+  document: Value,
+  path: Path
+): boolean {
+  return getTanaAncestorPaths(document, path).some((ancestorPath) => {
+    const ancestor = getTanaBlockAt(document, ancestorPath);
+
+    return !!ancestor && isFieldWorkflowSpecialNode(ancestor);
+  });
 }
 
 /**
@@ -90,13 +114,9 @@ export function isSupertagFieldInputNode(
   document: Value,
   path: Path
 ): boolean {
-  const node = path.length === 1 ? document[path[0]] : undefined;
+  const tanaNode = getTanaBlockAt(document, path);
 
-  if (!node || !ElementApi.isElement(node) || !isTanaNodeElement(node, path)) {
-    return false;
-  }
-
-  const tanaNode = node as TanaBlockElement;
+  if (!tanaNode) return false;
 
   return (
     getTanaElementText(tanaNode) === '' &&
@@ -105,6 +125,24 @@ export function isSupertagFieldInputNode(
     tanaNode.tanaFieldValues === undefined &&
     tanaNode.tanaViewDefinition === undefined &&
     !!getDirectSupertagDefinitionParent(document, path)
+  );
+}
+
+/**
+ * A normal empty Node can reuse the same Plate `>` Combobox to add a Field
+ * directly. Definition nodes and their subtrees stay outside this workflow.
+ */
+export function isAdHocFieldInputNode(
+  document: Value,
+  path: Path
+): boolean {
+  const tanaNode = getTanaBlockAt(document, path);
+
+  return (
+    !!tanaNode &&
+    getTanaElementText(tanaNode) === '' &&
+    !isFieldWorkflowSpecialNode(tanaNode) &&
+    !hasFieldWorkflowDefinitionAncestor(document, path)
   );
 }
 
@@ -118,6 +156,42 @@ export function getSupertagFieldInputParentId(
   const parent = getDirectSupertagDefinitionParent(document, path);
 
   return typeof parent?.id === 'string' ? parent.id : undefined;
+}
+
+function hasDirectFieldValue(
+  fieldValues: Readonly<Record<NodeId, FieldValueState>> | undefined,
+  fieldId: NodeId
+): boolean {
+  return (
+    !!fieldValues && Object.prototype.hasOwnProperty.call(fieldValues, fieldId)
+  );
+}
+
+/** A field is defined by either a Supertag binding or a direct value key. */
+export function isFieldDefined(
+  index: TanaIndex,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  const node = index.nodesById.get(nodeId);
+
+  if (!node) return false;
+  if (hasDirectFieldValue(node.fieldValues, fieldId)) return true;
+
+  return Array.from(index.nodesBySupertag.entries()).some(
+    ([supertagId, nodeIds]) =>
+      nodeIds.includes(nodeId) &&
+      index.nodesById
+        .get(supertagId)
+        ?.supertagDefinition?.fields.some(
+          (binding) => binding.fieldId === fieldId
+        )
+  );
+}
+
+/** A Field is set only when its direct document value is non-null. */
+export function isFieldSet(node: TanaNode, fieldId: NodeId): boolean {
+  return node.fieldValues?.[fieldId] != null;
 }
 
 /** Field candidates remain a direct read-only projection of the Plate document. */
@@ -231,6 +305,111 @@ export function getFieldValueCandidates(
   });
 }
 
+/** Adds a direct, explicitly unset Field relation without a second store. */
+export function addAdHocField(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+
+  if (!nodeEntry || !fieldEntry?.[0].tanaFieldDefinition) return false;
+  if (hasDirectFieldValue(nodeEntry[0].tanaFieldValues, fieldId)) return false;
+
+  editor.tf.setNodes(
+    {
+      tanaFieldValues: {
+        ...(nodeEntry[0].tanaFieldValues ?? {}),
+        [fieldId]: null,
+      },
+    },
+    { at: nodeEntry[1] }
+  );
+
+  return true;
+}
+
+/** Sets a direct Field value whether its prior state was missing, null, or set. */
+export function setFieldValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  value: FieldValue
+): boolean {
+  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+
+  if (!nodeEntry) return false;
+
+  editor.tf.setNodes(
+    {
+      tanaFieldValues: {
+        ...(nodeEntry[0].tanaFieldValues ?? {}),
+        [fieldId]: value,
+      },
+    },
+    { at: nodeEntry[1] }
+  );
+
+  return true;
+}
+
+/** Clears a directly held value while preserving the direct Field relation. */
+export function clearFieldValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+
+  if (
+    !nodeEntry ||
+    !hasDirectFieldValue(nodeEntry[0].tanaFieldValues, fieldId)
+  ) {
+    return false;
+  }
+
+  editor.tf.setNodes(
+    {
+      tanaFieldValues: {
+        ...(nodeEntry[0].tanaFieldValues ?? {}),
+        [fieldId]: null,
+      },
+    },
+    { at: nodeEntry[1] }
+  );
+
+  return true;
+}
+
+/** Removes only the direct document key; bindings and definitions remain. */
+export function deleteAdHocField(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+
+  if (
+    !nodeEntry ||
+    !hasDirectFieldValue(nodeEntry[0].tanaFieldValues, fieldId)
+  ) {
+    return false;
+  }
+
+  const nextFieldValues = { ...(nodeEntry[0].tanaFieldValues ?? {}) };
+
+  delete nextFieldValues[fieldId];
+
+  if (Object.keys(nextFieldValues).length === 0) {
+    editor.tf.unsetNodes('tanaFieldValues', { at: nodeEntry[1] });
+  } else {
+    editor.tf.setNodes({ tanaFieldValues: nextFieldValues }, { at: nodeEntry[1] });
+  }
+
+  return true;
+}
+
 /**
  * Creates a normal Plate block with Field metadata. The NodeId plugin is the
  * only identity owner and assigns the FieldId during insertion.
@@ -316,7 +495,7 @@ export function bindFieldToSupertag(
   return true;
 }
 
-type FieldTemplateChoice =
+type FieldInputChoice =
   | { fieldId: NodeId }
   | { name: string; type: 'create' };
 
@@ -329,7 +508,7 @@ export function completeSupertagFieldTemplateInput(
   editor: PlateEditor,
   temporaryNodeId: NodeId,
   supertagId: NodeId,
-  choice: FieldTemplateChoice
+  choice: FieldInputChoice
 ): NodeId | undefined {
   const temporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
 
@@ -363,6 +542,35 @@ export function completeSupertagFieldTemplateInput(
 
   editor.tf.removeNodes({ at: currentTemporaryPath });
   focusTanaNode(editor, supertagId);
+
+  return fieldId;
+}
+
+/**
+ * Completes the same Plate `>` picker for a normal Node. The original Node is
+ * kept; only its direct Field key is written as an explicit unset value.
+ */
+export function completeAdHocFieldInput(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  choice: FieldInputChoice
+): NodeId | undefined {
+  const nodePath = getTanaNodePath(editor.children, nodeId);
+
+  if (!nodePath || !isAdHocFieldInputNode(editor.children, nodePath)) {
+    return;
+  }
+
+  const fieldId =
+    'fieldId' in choice
+      ? choice.fieldId
+      : (findFieldDefinitionExactMatch(editor.children, choice.name)?.id ??
+        createFieldDefinition(editor, choice.name, { type: 'plain' }));
+  const fieldEntry = fieldId ? getTanaNodeEntry(editor, fieldId) : undefined;
+
+  if (!fieldId || !fieldEntry?.[0].tanaFieldDefinition) return;
+
+  addAdHocField(editor, nodeId, fieldId);
 
   return fieldId;
 }

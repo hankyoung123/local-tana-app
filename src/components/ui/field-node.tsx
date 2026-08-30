@@ -9,10 +9,12 @@ import { ListPlusIcon, PlusIcon } from 'lucide-react';
 import { PlateElement, useEditorSelector } from 'platejs/react';
 
 import {
+  completeAdHocFieldInput,
   completeSupertagFieldTemplateInput,
   getFieldDefinitionCandidates,
   getSupertagFieldInputParentId,
   hasFieldDefinitionExactMatch,
+  isAdHocFieldInputNode,
   prioritizeFieldDefinitionCandidates,
 } from '@/lib/tana';
 import { cn } from '@/lib/utils';
@@ -26,10 +28,9 @@ import {
   InlineComboboxItem,
 } from './inline-combobox';
 
-type FieldInputContext = {
-  supertagId: string;
-  temporaryNodeId: string;
-};
+type FieldInputContext =
+  | { kind: 'ad-hoc'; nodeId: string }
+  | { kind: 'supertag-template'; supertagId: string; temporaryNodeId: string };
 
 export function FieldInputElement(
   props: PlateElementProps<TComboboxInputElement>
@@ -57,8 +58,18 @@ export function FieldInputElement(
       ? getSupertagFieldInputParentId(editor.children, temporaryPath)
       : undefined;
 
-    return supertagId && typeof temporaryNode?.id === 'string'
-      ? { supertagId, temporaryNodeId: temporaryNode.id }
+    if (supertagId && typeof temporaryNode?.id === 'string') {
+      return {
+        kind: 'supertag-template',
+        supertagId,
+        temporaryNodeId: temporaryNode.id,
+      };
+    }
+
+    return temporaryPath &&
+      typeof temporaryNode?.id === 'string' &&
+      isAdHocFieldInputNode(editor.children, temporaryPath)
+      ? { kind: 'ad-hoc', nodeId: temporaryNode.id }
       : undefined;
   }, [editor, element]);
   const normalizedSearch = search.trim();
@@ -75,12 +86,18 @@ export function FieldInputElement(
     (choice: { fieldId: string } | { name: string; type: 'create' }) => {
       if (!context) return;
 
-      completeSupertagFieldTemplateInput(
-        editor,
-        context.temporaryNodeId,
-        context.supertagId,
-        choice
-      );
+      if (context.kind === 'supertag-template') {
+        completeSupertagFieldTemplateInput(
+          editor,
+          context.temporaryNodeId,
+          context.supertagId,
+          choice
+        );
+
+        return;
+      }
+
+      completeAdHocFieldInput(editor, context.nodeId, choice);
     },
     [context, editor]
   );

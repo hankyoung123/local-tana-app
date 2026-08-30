@@ -16,6 +16,7 @@ import type {
   FieldDefinition,
   FieldType,
   FieldValue,
+  FieldValueState,
   NodeId,
   TanaBlockElement,
   TanaIndex,
@@ -23,12 +24,16 @@ import type {
 } from '@/lib/tana';
 import {
   bindFieldToSupertag,
+  clearFieldValue,
   createFieldDefinition,
+  deleteAdHocField,
   getFieldValueCandidates,
   getNodeSupertagIds,
   getSupertagFieldBindings,
+  isFieldDefined,
   isFieldValueCompatible,
   removeSupertag,
+  setFieldValue,
 } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -92,32 +97,22 @@ export function TanaInspector({
 
   const supertagIds = getNodeSupertagIds(index, selectedNode.id);
   const fieldBindings = supertagIds.flatMap((supertagId) =>
-    getSupertagFieldBindings(index, supertagId).map((resolved) => ({
-      ...resolved,
-      supertagId,
-    }))
+    getSupertagFieldBindings(index, supertagId)
   );
+  const definedFields = Array.from(
+    new Set([
+      ...fieldBindings.map(({ field }) => field.id),
+      ...Object.keys(selectedNode.fieldValues ?? {}),
+    ])
+  ).flatMap((fieldId) => {
+    const field = index.nodesById.get(fieldId);
+
+    return field?.fieldDefinition &&
+      isFieldDefined(index, selectedNode.id, fieldId)
+      ? [field]
+      : [];
+  });
   const backlinks = index.backlinks.get(selectedNode.id) ?? [];
-
-  const updateSelectedNode = (props: Partial<TanaBlockElement>) => {
-    editor.tf.setNodes(props, { at: selectedNode.path });
-  };
-
-  const updateFieldValue = (fieldId: NodeId, fieldValue?: FieldValue) => {
-    const nextValues = { ...(selectedNode.fieldValues ?? {}) };
-
-    if (fieldValue) {
-      nextValues[fieldId] = fieldValue;
-    } else {
-      delete nextValues[fieldId];
-    }
-
-    if (Object.keys(nextValues).length === 0) {
-      editor.tf.unsetNodes('tanaFieldValues', { at: selectedNode.path });
-    } else {
-      updateSelectedNode({ tanaFieldValues: nextValues });
-    }
-  };
 
   return (
     <aside className="hidden h-full w-72 shrink-0 overflow-y-auto border-l bg-[#fafbfa] xl:block">
@@ -161,22 +156,39 @@ export function TanaInspector({
       </InspectorSection>
 
       <InspectorSection icon={<TagIcon />} title="字段">
-        {fieldBindings.length === 0 ? (
+        {definedFields.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            已应用的超级标签没有字段。
+            在空节点中输入 &gt; 即可直接添加字段。
           </p>
         ) : (
           <div className="space-y-3">
-            {fieldBindings.map(({ definition, field, supertagId }) => (
+            {definedFields.map((field) => {
+              const isDirectField = Object.prototype.hasOwnProperty.call(
+                selectedNode.fieldValues ?? {},
+                field.id
+              );
+
+              return (
               <FieldControl
-                key={`${supertagId}:${field.id}`}
-                definition={definition}
+                key={field.id}
+                definition={field.fieldDefinition!}
                 index={index}
                 label={field.text || field.id}
                 value={selectedNode.fieldValues?.[field.id]}
-                onChange={(value) => updateFieldValue(field.id, value)}
+                onChange={(value) =>
+                  setFieldValue(editor, selectedNode.id, field.id, value)
+                }
+                onClear={() =>
+                  clearFieldValue(editor, selectedNode.id, field.id)
+                }
+                onRemove={
+                  isDirectField
+                    ? () => deleteAdHocField(editor, selectedNode.id, field.id)
+                    : undefined
+                }
               />
-            ))}
+              );
+            })}
           </div>
         )}
       </InspectorSection>
@@ -255,13 +267,17 @@ function FieldControl({
   index,
   label,
   onChange,
+  onClear,
+  onRemove,
   value,
 }: {
   definition: FieldDefinition;
   index: TanaIndex;
   label: string;
-  onChange: (value?: FieldValue) => void;
-  value?: FieldValue;
+  onChange: (value: FieldValue) => void;
+  onClear: () => void;
+  onRemove?: () => void;
+  value?: FieldValueState;
 }) {
   const compatibleValue =
     value && isFieldValueCompatible(definition, value) ? value : undefined;
@@ -269,9 +285,19 @@ function FieldControl({
     <button
       className="text-[10px] text-muted-foreground hover:text-foreground"
       type="button"
-      onClick={() => onChange()}
+      onClick={onClear}
     >
       清除
+    </button>
+  ) : null;
+  const removeButton = onRemove ? (
+    <button
+      className="text-muted-foreground hover:text-destructive"
+      type="button"
+      aria-label={`移除字段 ${label}`}
+      onClick={onRemove}
+    >
+      <Trash2Icon className="size-3" />
     </button>
   ) : null;
   const labelElement = (
@@ -286,6 +312,7 @@ function FieldControl({
         <span>{label}</span>
         <div className="flex items-center gap-2">
           {clearButton}
+          {removeButton}
           <Checkbox
             checked={compatibleValue?.type === 'checkbox' ? compatibleValue.value : false}
             onCheckedChange={(checked) =>
@@ -314,12 +341,15 @@ function FieldControl({
       <label className="block">
         <span className="flex items-center justify-between">
           {labelElement}
-          {clearButton}
+          <span className="flex items-center gap-2">
+            {clearButton}
+            {removeButton}
+          </span>
         </span>
         <Select
           value={currentValue}
           onValueChange={(nextValue) => {
-            if (nextValue === EMPTY_VALUE) return onChange();
+            if (nextValue === EMPTY_VALUE) return onClear();
 
             onChange({ type: definition.type, value: nextValue });
           }}
@@ -347,7 +377,10 @@ function FieldControl({
     <label className="block">
       <span className="flex items-center justify-between">
         {labelElement}
-        {clearButton}
+        <span className="flex items-center gap-2">
+          {clearButton}
+          {removeButton}
+        </span>
       </span>
       <Input
         className="h-8 text-xs"
@@ -360,7 +393,7 @@ function FieldControl({
         }
         value={currentValue}
         onChange={(event) => {
-          if (event.target.value === '') return onChange();
+          if (event.target.value === '') return onClear();
 
           if (definition.type === 'number') {
             const numericValue = event.target.valueAsNumber;
@@ -625,6 +658,7 @@ function SupertagDefinitionEditor({
               label="默认值"
               value={binding.defaultValue}
               onChange={(value) => updateDefault(field.id, value)}
+              onClear={() => updateDefault(field.id)}
             />
           </div>
         ))}

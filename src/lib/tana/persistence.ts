@@ -69,7 +69,8 @@ function hasValidSemanticData(element: TElement): boolean {
 
     if (
       !Object.entries(semantic.tanaFieldValues).every(
-        ([fieldId, fieldValue]) => fieldId.length > 0 && isFieldValue(fieldValue)
+        ([fieldId, fieldValue]) =>
+          fieldId.length > 0 && (fieldValue === null || isFieldValue(fieldValue))
       )
     ) {
       return false;

@@ -7,17 +7,25 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from './constants';
 import {
+  addAdHocField,
   bindFieldToSupertag,
+  clearFieldValue,
+  completeAdHocFieldInput,
   completeSupertagFieldTemplateInput,
   createFieldDefinition,
+  deleteAdHocField,
   findFieldDefinitionExactMatch,
   getFieldDefinitionCandidates,
   getFieldValueCandidates,
   getSupertagFieldBindings,
   hasFieldDefinitionExactMatch,
+  isAdHocFieldInputNode,
+  isFieldDefined,
   isFieldValueCompatible,
+  isFieldSet,
   isSupertagFieldInputNode,
   prioritizeFieldDefinitionCandidates,
+  setFieldValue,
 } from './fields';
 import { TANA_FIELD_INPUT_KEY } from './constants';
 import { buildTanaIndex } from './index';
@@ -222,7 +230,7 @@ describe('Tana field nodes', () => {
     });
   });
 
-  test('triggers the Plate Field Combobox only from a transient Supertag template node', () => {
+  test('triggers the shared Plate Field Combobox only from valid template or normal Nodes', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -243,9 +251,13 @@ describe('Tana field nodes', () => {
     ]);
 
     assert.equal(isSupertagFieldInputNode(editor.children, [1]), true);
+    assert.equal(isAdHocFieldInputNode(editor.children, [1]), false);
     assert.equal(isSupertagFieldInputNode(editor.children, [2]), false);
+    assert.equal(isAdHocFieldInputNode(editor.children, [2]), false);
     assert.equal(isSupertagFieldInputNode(editor.children, [3]), false);
+    assert.equal(isAdHocFieldInputNode(editor.children, [3]), false);
     assert.equal(isSupertagFieldInputNode(editor.children, [4]), false);
+    assert.equal(isAdHocFieldInputNode(editor.children, [4]), true);
 
     editor.tf.select([1, 0], { edge: 'end' });
     editor.tf.insertText('>');
@@ -270,7 +282,197 @@ describe('Tana field nodes', () => {
     editor.tf.select([4, 0], { edge: 'end' });
     editor.tf.insertText('>');
 
-    assert.equal(editor.children[4].children[0].text, '>');
+    assert.equal(
+      editor.children[4].children.some(
+        (child) => child.type === TANA_FIELD_INPUT_KEY
+      ),
+      true
+    );
+  });
+
+  test('derives Field Defined and Set separately from bindings and direct keys', () => {
+    const index = buildTanaIndex([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [{ fieldId: 'priority' }] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Missing' }], id: 'missing', type: KEYS.p },
+      {
+        children: [{ text: 'Direct empty' }],
+        id: 'direct-empty',
+        tanaFieldValues: { priority: null },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Direct value' }],
+        id: 'direct-value',
+        tanaFieldValues: { priority: { type: 'plain', value: 'High' } },
+        type: KEYS.p,
+      },
+      {
+        children: [
+          { text: 'Tagged' },
+          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
+        ],
+        id: 'tagged',
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.equal(isFieldDefined(index, 'missing', 'priority'), false);
+    assert.equal(isFieldSet(index.nodesById.get('missing')!, 'priority'), false);
+    assert.equal(isFieldDefined(index, 'direct-empty', 'priority'), true);
+    assert.equal(isFieldSet(index.nodesById.get('direct-empty')!, 'priority'), false);
+    assert.equal(isFieldDefined(index, 'direct-value', 'priority'), true);
+    assert.equal(isFieldSet(index.nodesById.get('direct-value')!, 'priority'), true);
+    assert.equal(isFieldDefined(index, 'tagged', 'priority'), true);
+    assert.equal(isFieldSet(index.nodesById.get('tagged')!, 'priority'), false);
+  });
+
+  test('adds, sets, clears, and deletes only direct Field keys', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.equal(addAdHocField(editor, 'task', 'priority'), true);
+    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
+    assert.equal(addAdHocField(editor, 'task', 'priority'), false);
+    assert.equal(
+      setFieldValue(editor, 'task', 'priority', {
+        type: 'plain',
+        value: 'High',
+      }),
+      true
+    );
+    assert.deepEqual(editor.children[1].tanaFieldValues, {
+      priority: { type: 'plain', value: 'High' },
+    });
+    assert.equal(clearFieldValue(editor, 'task', 'priority'), true);
+    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
+    assert.equal(deleteAdHocField(editor, 'task', 'priority'), true);
+    assert.equal(editor.children[1].tanaFieldValues, undefined);
+    assert.equal(isFieldDefined(buildTanaIndex(editor.children), 'task', 'priority'), false);
+  });
+
+  test('keeps a template Field defined after deleting its direct value', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [{ fieldId: 'priority' }] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [
+          { text: 'Task' },
+          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
+        ],
+        id: 'task',
+        tanaFieldValues: { priority: { type: 'plain', value: 'High' } },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.equal(deleteAdHocField(editor, 'task', 'priority'), true);
+
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(index.nodesById.get('task')?.fieldValues, undefined);
+    assert.equal(isFieldDefined(index, 'task', 'priority'), true);
+    assert.equal(isFieldSet(index.nodesById.get('task')!, 'priority'), false);
+  });
+
+  test('adds an existing Field to a normal Node through the shared > workflow', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'task', type: KEYS.p },
+    ]);
+
+    editor.tf.select([1, 0], { edge: 'end' });
+    editor.tf.insertText('>');
+
+    const input = Array.from(
+      editor.api.nodes({
+        at: [1],
+        match: (node) => node.type === TANA_FIELD_INPUT_KEY,
+      })
+    )[0];
+
+    assert.ok(input);
+    editor.tf.removeNodes({ at: input![1] });
+    assert.equal(
+      completeAdHocFieldInput(editor, 'task', { fieldId: 'priority' }),
+      'priority'
+    );
+    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
+    assert.equal(
+      editor.children.filter((node) => node.tanaFieldDefinition).length,
+      1
+    );
+  });
+
+  test('creates a plain Field only when the normal > workflow has no exact match', () => {
+    const editor = createEditor([
+      { children: [{ text: '' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.equal(
+      completeAdHocFieldInput(editor, 'task', {
+        name: 'Priority',
+        type: 'create',
+      }),
+      'priority'
+    );
+    assert.deepEqual(editor.children[0].tanaFieldValues, { priority: null });
+    assert.equal(
+      editor.children.filter((node) => node.tanaFieldDefinition).length,
+      1
+    );
+
+    const newEditor = createEditor([
+      { children: [{ text: '' }], id: 'task', type: KEYS.p },
+    ]);
+    const fieldId = completeAdHocFieldInput(newEditor, 'task', {
+      name: 'Status',
+      type: 'create',
+    });
+
+    assert.equal(fieldId, 'node-1');
+    assert.deepEqual(newEditor.children[0].tanaFieldValues, {
+      [fieldId!]: null,
+    });
+    assert.deepEqual(newEditor.children[1].tanaFieldDefinition, { type: 'plain' });
   });
 
   test('removes an escaped Field Combobox input without changing its temporary Node', () => {

@@ -109,16 +109,24 @@ describe('Tana supertag operations', () => {
         tanaFieldValues: { title: { type: 'plain', value: 'Keep me' } },
         type: KEYS.p,
       },
+      {
+        children: [{ text: 'Direct empty task' }],
+        id: 'direct-empty-task',
+        tanaFieldValues: { title: null },
+        type: KEYS.p,
+      },
     ]);
 
     assert.equal(applySupertag(editor, 'empty-task', 'project-tag'), true);
     assert.equal(applySupertag(editor, 'existing-task', 'project-tag'), true);
+    assert.equal(applySupertag(editor, 'direct-empty-task', 'project-tag'), true);
     assert.deepEqual(editor.children[3].tanaFieldValues, {
       title: { type: 'plain', value: 'Untitled' },
     });
     assert.deepEqual(editor.children[4].tanaFieldValues, {
       title: { type: 'plain', value: 'Keep me' },
     });
+    assert.deepEqual(editor.children[5].tanaFieldValues, { title: null });
   });
 
   test('does not move another Node selection while applying a relation', () => {

@@ -21,6 +21,9 @@ export type FieldValue =
   | { type: 'options'; value: NodeId }
   | { type: 'plain'; value: string };
 
+/** A present `null` key means a Node directly defines an unset Field. */
+export type FieldValueState = FieldValue | null;
+
 export type FieldBinding = {
   defaultValue?: FieldValue;
   fieldId: FieldId;
@@ -42,7 +45,7 @@ export type SupertagDefinition = {
 
 export type TanaBlockElement = TElement & {
   tanaFieldDefinition?: FieldDefinition;
-  tanaFieldValues?: Readonly<Record<FieldId, FieldValue>>;
+  tanaFieldValues?: Readonly<Record<FieldId, FieldValueState>>;
   tanaSupertagDefinition?: SupertagDefinition;
   tanaViewDefinition?: TanaViewDefinition;
 };
@@ -52,7 +55,7 @@ export type TanaNode = {
   node: TElement;
   path: Path;
   text: string;
-  fieldValues?: Readonly<Record<FieldId, FieldValue>>;
+  fieldValues?: Readonly<Record<FieldId, FieldValueState>>;
   fieldDefinition?: FieldDefinition;
   supertagDefinition?: SupertagDefinition;
   viewDefinition?: TanaViewDefinition;
@@ -66,7 +69,7 @@ export type ReferenceRelation = {
 
 export type TanaIndex = {
   backlinks: ReadonlyMap<NodeId, readonly ReferenceRelation[]>;
-  fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValue>>;
+  fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValueState>>;
   nodesById: ReadonlyMap<NodeId, TanaNode>;
   nodesBySupertag: ReadonlyMap<string, readonly NodeId[]>;
 };

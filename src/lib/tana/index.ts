@@ -8,7 +8,7 @@ import {
 } from './constants';
 import type {
   FieldId,
-  FieldValue,
+  FieldValueState,
   NodeId,
   ReferenceRelation,
   SupertagDefinition,
@@ -45,7 +45,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const nodesById = new Map<NodeId, TanaNode>();
   const backlinks = new Map<NodeId, ReferenceRelation[]>();
   const nodesBySupertag = new Map<NodeId, NodeId[]>();
-  const fieldValues = new Map<NodeId, ReadonlyMap<FieldId, FieldValue>>();
+  const fieldValues = new Map<NodeId, ReadonlyMap<FieldId, FieldValueState>>();
 
   document.forEach((descendant, index) => {
     const path = [index];

@@ -32,6 +32,17 @@ describe('Plate document persistence', () => {
       ]),
       false
     );
+    assert.equal(
+      isValidTanaDocument([
+        {
+          children: [{ text: 'Unset field' }],
+          id: 'unset-field',
+          tanaFieldValues: { priority: null },
+          type: 'p',
+        },
+      ]),
+      true
+    );
   });
 
   test('migrates copied reference names to key-only semantic nodes', () => {
