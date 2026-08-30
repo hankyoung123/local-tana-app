@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 
-import { filterWords } from '@platejs/combobox';
 import type { TComboboxInputElement, TElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
@@ -108,8 +107,12 @@ export function SupertagInputElement(
       : undefined;
   }, [editor, element]);
   const normalizedSearch = search.trim();
-  const hasMatchingCandidate = candidates.some((candidate) =>
-    filterWords(candidate.text, normalizedSearch)
+  const hasExactCandidate = candidates.some(
+    (candidate) =>
+      candidate.text.trim().localeCompare(normalizedSearch, undefined, {
+        sensitivity: 'accent',
+        usage: 'search',
+      }) === 0
   );
 
   const applyCandidate = React.useCallback(
@@ -146,6 +149,15 @@ export function SupertagInputElement(
           <InlineComboboxEmpty>没有超级标签</InlineComboboxEmpty>
 
           <InlineComboboxGroup>
+            {normalizedSearch && !hasExactCandidate && (
+              <InlineComboboxItem
+                value={normalizedSearch}
+                onClick={createAndApplySupertag}
+              >
+                <PlusIcon className="mr-2 text-emerald-700" />
+                <span className={cn('truncate')}>创建 #{normalizedSearch}</span>
+              </InlineComboboxItem>
+            )}
             {candidates.map((candidate) => (
               <InlineComboboxItem
                 key={candidate.id}
@@ -156,15 +168,6 @@ export function SupertagInputElement(
                 <span className={cn('truncate')}>{candidate.text}</span>
               </InlineComboboxItem>
             ))}
-            {normalizedSearch && !hasMatchingCandidate && (
-              <InlineComboboxItem
-                value={`创建 ${normalizedSearch}`}
-                onClick={createAndApplySupertag}
-              >
-                <PlusIcon className="mr-2 text-emerald-700" />
-                <span className={cn('truncate')}>创建 #{normalizedSearch}</span>
-              </InlineComboboxItem>
-            )}
           </InlineComboboxGroup>
         </InlineComboboxContent>
       </InlineCombobox>

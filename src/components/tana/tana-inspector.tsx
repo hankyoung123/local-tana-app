@@ -392,19 +392,11 @@ function SupertagDefinitionEditor({
 
   return (
     <section className="p-5">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3">
         <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
           <HashIcon className="size-3.5" />
           定义
         </h3>
-        <button
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-          type="button"
-          aria-label="移除超级标签定义"
-          onClick={() => editor.tf.unsetNodes('tanaSupertagDefinition', { at: path })}
-        >
-          <Trash2Icon className="size-3.5" />
-        </button>
       </div>
 
       <div className="mb-3 space-y-1">

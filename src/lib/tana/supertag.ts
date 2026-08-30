@@ -4,13 +4,7 @@ import type { PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
 import { buildTanaIndex } from './index';
-import type {
-  FieldDefinition,
-  FieldValue,
-  NodeId,
-  SupertagDefinition,
-  TanaBlockElement,
-} from './types';
+import type { NodeId, TanaBlockElement } from './types';
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -22,10 +16,7 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
     : undefined;
 }
 
-function getSupertagDefinition(
-  editor: PlateEditor,
-  supertagId: NodeId
-): NodeEntry<TanaBlockElement> | undefined {
+function getSupertagDefinition(editor: PlateEditor, supertagId: NodeId) {
   const entry = getTanaNodeEntry(editor, supertagId);
 
   return entry?.[0].tanaSupertagDefinition ? entry : undefined;
@@ -33,32 +24,6 @@ function getSupertagDefinition(
 
 function normalizeSupertagName(name: string) {
   return name.trim();
-}
-
-function getFieldDefault(field: FieldDefinition): FieldValue {
-  switch (field.type) {
-    case 'boolean':
-      return { type: field.type, value: false };
-    case 'number':
-      return { type: field.type, value: 0 };
-    case 'select':
-      return { type: field.type, value: field.options[0] ?? '' };
-    case 'date':
-    case 'node-reference':
-    case 'text':
-      return { type: field.type, value: '' };
-  }
-}
-
-function getSupertagFieldDefaults(definition: SupertagDefinition) {
-  return definition.fields.reduce<Record<string, FieldValue>>(
-    (defaults, field) => {
-      defaults[field.id] = getFieldDefault(field);
-
-      return defaults;
-    },
-    {}
-  );
 }
 
 function isSelectionInNode(editor: PlateEditor, nodePath: number[]) {
@@ -109,7 +74,7 @@ export function createSupertag(editor: PlateEditor, name: string) {
     : undefined;
 }
 
-/** Applies a definition relation once and initializes only missing field values. */
+/** Applies a definition relation once without inventing field values. */
 export function applySupertag(
   editor: PlateEditor,
   nodeId: NodeId,
@@ -124,18 +89,9 @@ export function applySupertag(
 
   if (index.nodesBySupertag.get(supertagId)?.includes(nodeId)) return false;
 
-  const [node, nodePath] = nodeEntry;
-  const defaults = getSupertagFieldDefaults(
-    definitionEntry[0].tanaSupertagDefinition!
-  );
-  const existingFieldValues = node.tanaFieldValues ?? {};
-  const nextFieldValues = { ...defaults, ...existingFieldValues };
-
-  if (Object.keys(nextFieldValues).length > 0) {
-    editor.tf.setNodes({ tanaFieldValues: nextFieldValues }, { at: nodePath });
-  }
-
+  const [, nodePath] = nodeEntry;
   const selection = editor.selection;
+  const selectionIsInNode = !!selection && isSelectionInNode(editor, nodePath);
 
   editor.tf.insertNodes(
     {
@@ -145,11 +101,14 @@ export function applySupertag(
     },
     {
       at:
-        selection && isSelectionInNode(editor, nodePath)
+        selection && selectionIsInNode
           ? selection
           : editor.api.end(nodePath),
     }
   );
+
+  if (!selectionIsInNode) return true;
+
   editor.tf.move({ unit: 'offset' });
 
   const currentBlockPath = editor.api.block()?.[1];

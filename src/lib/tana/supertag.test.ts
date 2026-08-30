@@ -52,6 +52,11 @@ describe('Tana supertag operations', () => {
     assert.deepEqual(buildTanaIndex(editor.children).nodesBySupertag.get(supertagId), [
       'task',
     ]);
+
+    const abbreviatedId = createSupertag(editor, 'proj');
+
+    assert.equal(abbreviatedId, 'node-2');
+    assert.equal(editor.children[2].children[0].text, 'proj');
   });
 
   test('does not duplicate an applied supertag relation', () => {
@@ -92,7 +97,7 @@ describe('Tana supertag operations', () => {
     assert.equal('value' in (tag ?? {}), false);
   });
 
-  test('initializes field defaults but preserves existing values', () => {
+  test('leaves fields unset and preserves existing field values', () => {
     const fields: FieldDefinition[] = [
       { id: 'text', name: 'Text', type: 'text' },
       { id: 'number', name: 'Number', type: 'number' },
@@ -109,22 +114,44 @@ describe('Tana supertag operations', () => {
         type: KEYS.p,
       },
       {
-        children: [{ text: 'Task' }],
-        id: 'task',
+        children: [{ text: 'Empty task' }],
+        id: 'empty-task',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Existing task' }],
+        id: 'existing-task',
         tanaFieldValues: { text: { type: 'text', value: 'Keep me' } },
         type: KEYS.p,
       },
     ]);
 
-    assert.equal(applySupertag(editor, 'task', 'project-tag'), true);
-    assert.deepEqual(editor.children[1].tanaFieldValues, {
+    assert.equal(applySupertag(editor, 'empty-task', 'project-tag'), true);
+    assert.equal(applySupertag(editor, 'existing-task', 'project-tag'), true);
+    assert.equal(editor.children[1].tanaFieldValues, undefined);
+    assert.deepEqual(editor.children[2].tanaFieldValues, {
       text: { type: 'text', value: 'Keep me' },
-      number: { type: 'number', value: 0 },
-      boolean: { type: 'boolean', value: false },
-      date: { type: 'date', value: '' },
-      select: { type: 'select', value: 'A' },
-      reference: { type: 'node-reference', value: '' },
     });
+  });
+
+  test('does not move another Node selection while applying a relation', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project-tag',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+      { children: [{ text: 'B' }], id: 'b', type: KEYS.p },
+    ]);
+    editor.tf.select([2, 0], { edge: 'end' });
+    const selectionBeforeApply = structuredClone(editor.selection);
+    const nodeBBeforeApply = structuredClone(editor.children[2]);
+
+    assert.equal(applySupertag(editor, 'a', 'project-tag'), true);
+    assert.deepEqual(editor.selection, selectionBeforeApply);
+    assert.deepEqual(editor.children[2], nodeBBeforeApply);
   });
 
   test('removes only the relation while preserving field values and definition', () => {
