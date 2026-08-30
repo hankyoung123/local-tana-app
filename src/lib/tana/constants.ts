@@ -4,6 +4,8 @@ import type { NodeEntry, Path, TElement } from 'platejs';
 
 export const TANA_SUPERTAG_KEY = 'tana_supertag';
 export const TANA_SUPERTAG_INPUT_KEY = 'tana_supertag_input';
+export const TANA_FIELD_COMBOBOX_KEY = 'tana_field_combobox';
+export const TANA_FIELD_INPUT_KEY = 'tana_field_input';
 
 /**
  * The single Local Tana node boundary: a top-level Plate block element.

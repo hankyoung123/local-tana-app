@@ -1,9 +1,15 @@
 import { ElementApi } from 'platejs';
-import type { NodeEntry } from 'platejs';
+import type { NodeEntry, Path, Value } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from './constants';
-import { getTanaNodeDescendantPaths } from './outliner';
+import { buildTanaIndex } from './index';
+import {
+  getTanaAncestorPaths,
+  getTanaNodeDescendantPaths,
+  getTanaNodePath,
+} from './outliner';
+import { focusTanaNode } from './zoom';
 import type {
   FieldBinding,
   FieldDefinition,
@@ -18,6 +24,13 @@ export type ResolvedFieldBinding = {
   binding: FieldBinding;
   definition: FieldDefinition;
   field: TanaNode;
+};
+
+export type FieldDefinitionCandidate = Pick<
+  TanaNode,
+  'fieldDefinition' | 'id' | 'text'
+> & {
+  fieldDefinition: FieldDefinition;
 };
 
 /** Field values are never coerced across Field Definition type changes. */
@@ -36,6 +49,50 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   return isTanaNodeElement(entry)
     ? (entry as NodeEntry<TanaBlockElement>)
     : undefined;
+}
+
+/** Finds the containing Supertag Definition solely from flat-indent ancestry. */
+export function getSupertagTemplateAncestorId(
+  document: Value,
+  path: Path
+): NodeId | undefined {
+  return getTanaAncestorPaths(document, path)
+    .reverse()
+    .flatMap((ancestorPath) => {
+      const ancestor = document[ancestorPath[0]] as TanaBlockElement | undefined;
+
+      return ancestor?.tanaSupertagDefinition && typeof ancestor.id === 'string'
+        ? [ancestor.id]
+        : [];
+    })[0];
+}
+
+/** Field candidates remain a direct read-only projection of the Plate document. */
+export function getFieldDefinitionCandidates(
+  document: Value
+): FieldDefinitionCandidate[] {
+  const { nodesById } = buildTanaIndex(document);
+
+  return Array.from(nodesById.values()).flatMap((node) =>
+    node.fieldDefinition ? [{ ...node, fieldDefinition: node.fieldDefinition }] : []
+  );
+}
+
+export function findFieldDefinitionExactMatch(
+  document: Value,
+  name: string
+): FieldDefinitionCandidate | undefined {
+  const normalizedName = name.trim();
+
+  if (!normalizedName) return;
+
+  return getFieldDefinitionCandidates(document).find(
+    (candidate) =>
+      candidate.text.trim().localeCompare(normalizedName, undefined, {
+        sensitivity: 'accent',
+        usage: 'search',
+      }) === 0
+  );
 }
 
 /** Resolves field bindings from document nodes without creating a schema cache. */
@@ -158,4 +215,54 @@ export function bindFieldToSupertag(
   );
 
   return true;
+}
+
+type FieldTemplateChoice =
+  | { fieldId: NodeId }
+  | { name: string; type: 'create' };
+
+/**
+ * Completes one transient `>` picker interaction using existing document
+ * transforms: bind or create a Field Definition, remove the temporary node,
+ * then return focus to the Supertag Definition.
+ */
+export function completeSupertagFieldTemplateInput(
+  editor: PlateEditor,
+  temporaryNodeId: NodeId,
+  supertagId: NodeId,
+  choice: FieldTemplateChoice
+): NodeId | undefined {
+  const temporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
+
+  if (
+    !temporaryPath ||
+    getSupertagTemplateAncestorId(editor.children, temporaryPath) !== supertagId
+  ) {
+    return;
+  }
+
+  const fieldId =
+    'fieldId' in choice
+      ? choice.fieldId
+      : createFieldDefinition(editor, choice.name, { type: 'plain' }, supertagId);
+
+  if (!fieldId) return;
+
+  const supertagEntry = getTanaNodeEntry(editor, supertagId);
+  const alreadyBound = supertagEntry?.[0].tanaSupertagDefinition?.fields.some(
+    (binding) => binding.fieldId === fieldId
+  );
+
+  if (!alreadyBound && !bindFieldToSupertag(editor, supertagId, fieldId)) {
+    return;
+  }
+
+  const currentTemporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
+
+  if (!currentTemporaryPath) return;
+
+  editor.tf.removeNodes({ at: currentTemporaryPath });
+  focusTanaNode(editor, supertagId);
+
+  return fieldId;
 }

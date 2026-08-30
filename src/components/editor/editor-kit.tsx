@@ -11,6 +11,7 @@ import { BlockPlaceholderKit } from '@/components/editor/plugins/block-placehold
 import { CursorOverlayKit } from '@/components/editor/plugins/cursor-overlay-kit';
 import { DndKit } from '@/components/editor/plugins/dnd-kit';
 import { ExitBreakKit } from '@/components/editor/plugins/exit-break-kit';
+import { FieldKit } from '@/components/editor/plugins/field-kit';
 import { FixedToolbarKit } from '@/components/editor/plugins/fixed-toolbar-kit';
 import { FloatingToolbarKit } from '@/components/editor/plugins/floating-toolbar-kit';
 import { LinkKit } from '@/components/editor/plugins/link-kit';
@@ -31,6 +32,7 @@ export const EditorKit = [
   ...LinkKit,
   ...MentionKit,
   ...SupertagKit,
+  ...FieldKit,
 
   // Marks
   ...BasicMarksKit,
