@@ -53,6 +53,12 @@ const document: Value = [
     },
     type: 'p',
   },
+  {
+    id: 'gamma',
+    children: [{ text: 'Gamma notes' }],
+    tanaFieldValues: { estimate: null },
+    type: 'p',
+  },
 ];
 
 const index = buildTanaIndex(document);
@@ -78,6 +84,24 @@ describe('runTanaQuery', () => {
         { fieldId: 'estimate', kind: 'field-exists' },
       ]).map(({ id }) => id),
       ['alpha']
+    );
+  });
+
+  test('treats a null Field value as not set for field-exists', () => {
+    assert.deepEqual(
+      runTanaQuery(index, [{ fieldId: 'estimate', kind: 'field-exists' }]).map(
+        ({ id }) => id
+      ),
+      ['alpha']
+    );
+  });
+
+  test('matches a FieldValue for field-exists', () => {
+    assert.deepEqual(
+      runTanaQuery(index, [{ fieldId: 'status', kind: 'field-exists' }]).map(
+        ({ id }) => id
+      ),
+      ['alpha', 'beta']
     );
   });
 

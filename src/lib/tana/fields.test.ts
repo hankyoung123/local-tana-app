@@ -368,6 +368,37 @@ describe('Tana field nodes', () => {
     assert.equal(isFieldDefined(buildTanaIndex(editor.children), 'task', 'priority'), false);
   });
 
+  test('rejects new values without a compatible Field Definition', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+    const before = structuredClone(editor.children);
+
+    assert.equal(
+      setFieldValue(editor, 'task', 'missing-definition', {
+        type: 'plain',
+        value: 'No field',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children, before);
+
+    assert.equal(
+      setFieldValue(editor, 'task', 'estimate', {
+        type: 'plain',
+        value: 'Wrong type',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children, before);
+  });
+
   test('keeps a template Field defined after deleting its direct value', () => {
     const editor = createEditor([
       {

@@ -338,8 +338,12 @@ export function setFieldValue(
   value: FieldValue
 ): boolean {
   const nodeEntry = getTanaNodeEntry(editor, nodeId);
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
 
-  if (!nodeEntry) return false;
+  if (!nodeEntry || !fieldEntry?.[0].tanaFieldDefinition) return false;
+  if (!isFieldValueCompatible(fieldEntry[0].tanaFieldDefinition, value)) {
+    return false;
+  }
 
   editor.tf.setNodes(
     {

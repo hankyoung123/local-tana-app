@@ -52,7 +52,7 @@ export function matchesTanaQueryClause(
     case 'field-equals':
       return fieldValuesEqual(clause, node, index);
     case 'field-exists':
-      return index.fieldValues.get(node.id)?.has(clause.fieldId) ?? false;
+      return index.fieldValues.get(node.id)?.get(clause.fieldId) != null;
     case 'has-supertag':
       return index.nodesBySupertag.get(clause.supertagId)?.includes(node.id) ?? false;
     case 'text-contains':
