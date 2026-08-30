@@ -2,18 +2,21 @@
 
 import * as React from 'react';
 
+import { filterWords } from '@platejs/combobox';
 import type { TComboboxInputElement, TElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
-import { HashIcon } from 'lucide-react';
+import { HashIcon, PlusIcon } from 'lucide-react';
 import { PlateElement, useEditorSelector } from 'platejs/react';
 
 import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
+  applySupertag as applySupertagToNode,
+  createSupertag,
   getNodeDisplayName,
   getSupertagCandidates,
+  isTanaNodeElement,
   navigateToNode,
-  TANA_SUPERTAG_KEY,
 } from '@/lib/tana';
 import { cn } from '@/lib/utils';
 
@@ -92,28 +95,38 @@ export function SupertagInputElement(
         ),
     }
   );
+  const targetNodeId = React.useMemo(() => {
+    const inputPath = editor.api.findPath(element);
+    const targetPath = inputPath ? [inputPath[0]] : undefined;
+    const targetNode = targetPath ? editor.children[targetPath[0]] : undefined;
 
-  const applySupertag = React.useCallback(
-    (item: { id: string; text: string }) => {
-      editor.tf.insertNodes({
-        children: [{ text: '' }],
-        key: item.id,
-        type: TANA_SUPERTAG_KEY,
-      });
-      editor.tf.move({ unit: 'offset' });
-
-      const pathAbove = editor.api.block()?.[1];
-
-      if (
-        editor.selection &&
-        pathAbove &&
-        editor.api.isEnd(editor.selection.anchor, pathAbove)
-      ) {
-        editor.tf.insertText(' ');
-      }
-    },
-    [editor]
+    return targetNode &&
+      targetPath &&
+      isTanaNodeElement(targetNode, targetPath) &&
+      typeof targetNode.id === 'string'
+      ? targetNode.id
+      : undefined;
+  }, [editor, element]);
+  const normalizedSearch = search.trim();
+  const hasMatchingCandidate = candidates.some((candidate) =>
+    filterWords(candidate.text, normalizedSearch)
   );
+
+  const applyCandidate = React.useCallback(
+    (supertagId: string) => {
+      if (!targetNodeId) return;
+
+      applySupertagToNode(editor, targetNodeId, supertagId);
+    },
+    [editor, targetNodeId]
+  );
+  const createAndApplySupertag = React.useCallback(() => {
+    if (!targetNodeId) return;
+
+    const supertagId = createSupertag(editor, normalizedSearch);
+
+    if (supertagId) applySupertagToNode(editor, targetNodeId, supertagId);
+  }, [editor, normalizedSearch, targetNodeId]);
 
   return (
     <PlateElement {...props} as="span">
@@ -137,12 +150,21 @@ export function SupertagInputElement(
               <InlineComboboxItem
                 key={candidate.id}
                 value={candidate.text}
-                onClick={() => applySupertag(candidate)}
+                onClick={() => applyCandidate(candidate.id)}
               >
                 <HashIcon className="mr-2 text-emerald-700" />
                 <span className={cn('truncate')}>{candidate.text}</span>
               </InlineComboboxItem>
             ))}
+            {normalizedSearch && !hasMatchingCandidate && (
+              <InlineComboboxItem
+                value={`创建 ${normalizedSearch}`}
+                onClick={createAndApplySupertag}
+              >
+                <PlusIcon className="mr-2 text-emerald-700" />
+                <span className={cn('truncate')}>创建 #{normalizedSearch}</span>
+              </InlineComboboxItem>
+            )}
           </InlineComboboxGroup>
         </InlineComboboxContent>
       </InlineCombobox>

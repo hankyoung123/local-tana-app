@@ -21,7 +21,7 @@ import type {
   TanaBlockElement,
   TanaIndex,
 } from '@/lib/tana';
-import { getNodeSupertagIds, TANA_SUPERTAG_KEY } from '@/lib/tana';
+import { getNodeSupertagIds, removeSupertag } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -104,20 +104,6 @@ export function TanaInspector({
     }
   };
 
-  const removeSupertag = (supertagId: NodeId) => {
-    const entries = Array.from(
-      editor.api.nodes({
-        at: selectedNode.path,
-        match: (node) =>
-          'type' in node &&
-          node.type === TANA_SUPERTAG_KEY &&
-          node.key === supertagId,
-      })
-    );
-
-    entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
-  };
-
   return (
     <aside className="hidden h-full w-72 shrink-0 overflow-y-auto border-l bg-[#fafbfa] xl:block">
       <div className="border-b p-5">
@@ -147,7 +133,9 @@ export function TanaInspector({
                   className="ml-1 rounded p-1 hover:bg-emerald-100"
                   type="button"
                   aria-label={`移除 ${supertagId}`}
-                  onClick={() => removeSupertag(supertagId)}
+                  onClick={() =>
+                    removeSupertag(editor, selectedNode.id, supertagId)
+                  }
                 >
                   <Trash2Icon className="size-3" />
                 </button>
