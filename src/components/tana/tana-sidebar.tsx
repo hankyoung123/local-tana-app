@@ -47,8 +47,8 @@ export function TanaSidebar({
           <Input
             className="h-8 bg-white pl-8 text-xs shadow-none"
             value={search}
-            aria-label="Search nodes"
-            placeholder="Search nodes"
+            aria-label="搜索节点"
+            placeholder="搜索节点"
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
@@ -56,10 +56,10 @@ export function TanaSidebar({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
         {normalizedSearch ? (
-          <SidebarSection title="Search results">
+          <SidebarSection title="搜索结果">
             {results.length === 0 ? (
               <p className="px-2 py-2 text-muted-foreground text-xs">
-                No matching nodes
+                没有匹配的节点
               </p>
             ) : (
               results.map((node) => (
@@ -75,26 +75,26 @@ export function TanaSidebar({
           </SidebarSection>
         ) : (
           <>
-            <SidebarSection title="Workspace">
+            <SidebarSection title="工作区">
               {homeNode ? (
                 <SidebarButton
                   active={activeNodeId === homeNode.id}
                   onClick={() => onNavigate(homeNode.id)}
                 >
                   <HomeIcon />
-                  <span className="truncate">{homeNode.text || 'Workspace'}</span>
+                  <span className="truncate">{homeNode.text || '工作区'}</span>
                 </SidebarButton>
               ) : (
                 <p className="px-2 py-2 text-muted-foreground text-xs">
-                  No nodes yet
+                  还没有节点
                 </p>
               )}
             </SidebarSection>
 
-            <SidebarSection title="Supertags">
+            <SidebarSection title="超级标签">
               {supertags.length === 0 ? (
                 <p className="px-2 py-2 text-muted-foreground text-xs">
-                  Select a node to define one
+                  选择一个节点以定义超级标签
                 </p>
               ) : (
                 supertags.map((node) => (
@@ -113,10 +113,10 @@ export function TanaSidebar({
               )}
             </SidebarSection>
 
-            <SidebarSection title="Views">
+            <SidebarSection title="视图">
               {views.length === 0 ? (
                 <p className="px-2 py-2 text-muted-foreground text-xs">
-                  Define a node as a view
+                  将节点定义为视图
                 </p>
               ) : (
                 views.map((view) => (

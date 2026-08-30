@@ -46,7 +46,7 @@ export function PlateEditor() {
   if (!loadedDocument) {
     return (
       <div className="grid h-dvh place-items-center bg-[#f4f6f5] text-muted-foreground text-sm">
-        Loading workspace…
+        正在加载工作区…
       </div>
     );
   }

@@ -8,6 +8,7 @@ import type { PlateElementProps } from 'platejs/react';
 import { HashIcon } from 'lucide-react';
 import { PlateElement, useEditorSelector } from 'platejs/react';
 
+import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   getNodeDisplayName,
   getSupertagCandidates,
@@ -33,6 +34,7 @@ export function SupertagElement(
   props: PlateElementProps<SupertagElementType>
 ) {
   const { element, editor } = props;
+  const tanaNavigation = useTanaNavigation();
   const displayName = useEditorSelector(
     (currentEditor) => getNodeDisplayName(currentEditor.children, element.key),
     [element.key]
@@ -44,9 +46,13 @@ export function SupertagElement(
 
       event.preventDefault();
       event.stopPropagation();
-      navigateToNode(editor, element.key);
+      if (tanaNavigation) {
+        tanaNavigation.navigateToNode(element.key);
+      } else {
+        navigateToNode(editor, element.key);
+      }
     },
-    [editor, element.key]
+    [editor, element.key, tanaNavigation]
   );
 
   return (
@@ -124,7 +130,7 @@ export function SupertagInputElement(
         </span>
 
         <InlineComboboxContent className="my-1.5">
-          <InlineComboboxEmpty>No supertags</InlineComboboxEmpty>
+          <InlineComboboxEmpty>没有超级标签</InlineComboboxEmpty>
 
           <InlineComboboxGroup>
             {candidates.map((candidate) => (

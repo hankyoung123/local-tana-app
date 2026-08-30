@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import type { Value } from 'platejs';
 
 import { buildTanaIndex } from './index';
-import { runTanaQuery } from './query';
+import { describeTanaQueryClause, runTanaQuery } from './query';
 
 const document: Value = [
   {
@@ -71,6 +71,24 @@ describe('runTanaQuery', () => {
         { kind: 'text-contains', text: 'BETA' },
       ]).map(({ id }) => id),
       ['beta']
+    );
+  });
+
+  test('describes query clauses in the Chinese interface without changing query semantics', () => {
+    assert.equal(
+      describeTanaQueryClause(index, {
+        kind: 'has-supertag',
+        supertagId: 'project-tag',
+      }),
+      '包含 #Project'
+    );
+    assert.equal(
+      describeTanaQueryClause(index, {
+        kind: 'field-equals',
+        fieldId: 'status',
+        value: { type: 'select', value: 'Active' },
+      }),
+      'status 等于 Active'
     );
   });
 });

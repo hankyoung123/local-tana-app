@@ -74,7 +74,7 @@ export function TanaViewDefinitionEditor({
           }
         >
           <ListFilterIcon />
-          Define as view
+          定义为视图
         </Button>
       </div>
     );
@@ -111,12 +111,12 @@ export function TanaViewDefinitionEditor({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
           <ListFilterIcon className="size-3.5" />
-          View definition
+          视图定义
         </h3>
         <button
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           type="button"
-          aria-label="Remove view definition"
+          aria-label="移除视图定义"
           onClick={() => editor.tf.unsetNodes('tanaViewDefinition', { at: path })}
         >
           <Trash2Icon className="size-3.5" />
@@ -135,7 +135,7 @@ export function TanaViewDefinitionEditor({
             <button
               className="rounded p-0.5 text-muted-foreground hover:text-destructive"
               type="button"
-              aria-label={`Remove clause ${indexInList + 1}`}
+              aria-label={`移除筛选条件 ${indexInList + 1}`}
               onClick={() =>
                 updateClauses(
                   definition.clauses.filter((_, index) => index !== indexInList)
@@ -154,17 +154,17 @@ export function TanaViewDefinitionEditor({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="has-supertag">hasSupertag</SelectItem>
-            <SelectItem value="field-equals">field equals</SelectItem>
-            <SelectItem value="field-exists">field exists</SelectItem>
-            <SelectItem value="text-contains">text contains</SelectItem>
+            <SelectItem value="has-supertag">包含超级标签</SelectItem>
+            <SelectItem value="field-equals">字段等于</SelectItem>
+            <SelectItem value="field-exists">字段已设置</SelectItem>
+            <SelectItem value="text-contains">文本包含</SelectItem>
           </SelectContent>
         </Select>
 
         {kind === 'has-supertag' && (
           <Select value={supertagId} onValueChange={setSupertagId}>
             <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="Choose supertag" />
+              <SelectValue placeholder="选择超级标签" />
             </SelectTrigger>
             <SelectContent>
               {supertags.map((supertag) => (
@@ -179,7 +179,7 @@ export function TanaViewDefinitionEditor({
         {(kind === 'field-equals' || kind === 'field-exists') && (
           <Select value={fieldId} onValueChange={setFieldId}>
             <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="Choose field" />
+              <SelectValue placeholder="选择字段" />
             </SelectTrigger>
             <SelectContent>
               {Array.from(fields.values()).map((field) => (
@@ -204,7 +204,7 @@ export function TanaViewDefinitionEditor({
           <Input
             className="h-8 text-xs"
             value={text}
-            placeholder="Text to find"
+            placeholder="要查找的文本"
             onChange={(event) => setText(event.target.value)}
           />
         )}
@@ -216,7 +216,7 @@ export function TanaViewDefinitionEditor({
           onClick={addClause}
         >
           <PlusIcon />
-          Add clause
+          添加筛选条件
         </Button>
       </div>
     </section>
@@ -242,8 +242,8 @@ function QueryValueInput({
     const options =
       field.type === 'boolean'
         ? [
-            { label: 'true', value: 'true' },
-            { label: 'false', value: 'false' },
+            { label: '是', value: 'true' },
+            { label: '否', value: 'false' },
           ]
         : field.type === 'select'
           ? field.options.map((option) => ({ label: option, value: option }))
@@ -255,7 +255,7 @@ function QueryValueInput({
     return (
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-8 w-full text-xs">
-          <SelectValue placeholder="Choose value" />
+          <SelectValue placeholder="选择值" />
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (
@@ -273,7 +273,7 @@ function QueryValueInput({
       className="h-8 text-xs"
       type={field.type === 'number' ? 'number' : field.type}
       value={value}
-      placeholder="Value"
+      placeholder="值"
       onChange={(event) => onChange(event.target.value)}
     />
   );

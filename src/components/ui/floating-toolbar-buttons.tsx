@@ -27,22 +27,22 @@ export function FloatingToolbarButtons() {
     <>
       <ToolbarGroup>
         <TurnIntoToolbarButton />
-        <MarkToolbarButton nodeType={KEYS.bold} tooltip="Bold (⌘+B)">
+        <MarkToolbarButton nodeType={KEYS.bold} tooltip="加粗（⌘+B）">
           <BoldIcon />
         </MarkToolbarButton>
-        <MarkToolbarButton nodeType={KEYS.italic} tooltip="Italic (⌘+I)">
+        <MarkToolbarButton nodeType={KEYS.italic} tooltip="斜体（⌘+I）">
           <ItalicIcon />
         </MarkToolbarButton>
-        <MarkToolbarButton nodeType={KEYS.underline} tooltip="Underline (⌘+U)">
+        <MarkToolbarButton nodeType={KEYS.underline} tooltip="下划线（⌘+U）">
           <UnderlineIcon />
         </MarkToolbarButton>
         <MarkToolbarButton
           nodeType={KEYS.strikethrough}
-          tooltip="Strikethrough (⌘+⇧+X)"
+          tooltip="删除线（⌘+⇧+X）"
         >
           <StrikethroughIcon />
         </MarkToolbarButton>
-        <MarkToolbarButton nodeType={KEYS.code} tooltip="Code (⌘+E)">
+        <MarkToolbarButton nodeType={KEYS.code} tooltip="行内代码（⌘+E）">
           <Code2Icon />
         </MarkToolbarButton>
         <LinkToolbarButton />

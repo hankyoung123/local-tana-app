@@ -37,6 +37,15 @@ import { TanaViewDefinitionEditor } from './tana-view-editor';
 
 const EMPTY_VALUE = '__local_tana_empty__';
 
+const fieldTypeLabels: Record<FieldType, string> = {
+  boolean: '布尔值',
+  date: '日期',
+  'node-reference': '节点引用',
+  number: '数字',
+  select: '单选',
+  text: '文本',
+};
+
 type TanaInspectorProps = {
   editor: PlateEditor;
   index: TanaIndex;
@@ -58,7 +67,7 @@ export function TanaInspector({
     return (
       <aside className="hidden h-full w-72 shrink-0 border-l bg-[#fafbfa] p-5 xl:block">
         <p className="text-muted-foreground text-xs">
-          Select a node to inspect its Tana semantics.
+          选择一个节点以查看它的 Tana 语义。
         </p>
       </aside>
     );
@@ -113,7 +122,7 @@ export function TanaInspector({
     <aside className="hidden h-full w-72 shrink-0 overflow-y-auto border-l bg-[#fafbfa] xl:block">
       <div className="border-b p-5">
         <p className="mb-1 text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
-          Inspector
+          检查器
         </p>
         <h2 className="truncate font-semibold text-sm">{selectedNode.text}</h2>
         <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
@@ -121,10 +130,10 @@ export function TanaInspector({
         </p>
       </div>
 
-      <InspectorSection icon={<HashIcon />} title="Supertags">
+      <InspectorSection icon={<HashIcon />} title="超级标签">
         {supertagIds.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Type # in the node to apply a supertag.
+            在节点中输入 # 即可应用超级标签。
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -137,7 +146,7 @@ export function TanaInspector({
                 <button
                   className="ml-1 rounded p-1 hover:bg-emerald-100"
                   type="button"
-                  aria-label={`Remove ${supertagId}`}
+                  aria-label={`移除 ${supertagId}`}
                   onClick={() => removeSupertag(supertagId)}
                 >
                   <Trash2Icon className="size-3" />
@@ -148,10 +157,10 @@ export function TanaInspector({
         )}
       </InspectorSection>
 
-      <InspectorSection icon={<TagIcon />} title="Fields">
+      <InspectorSection icon={<TagIcon />} title="字段">
         {fieldDefinitions.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Applied supertags have no fields.
+            已应用的超级标签没有字段。
           </p>
         ) : (
           <div className="space-y-3">
@@ -168,9 +177,9 @@ export function TanaInspector({
         )}
       </InspectorSection>
 
-      <InspectorSection icon={<ArrowUpRightIcon />} title="Backlinks">
+      <InspectorSection icon={<ArrowUpRightIcon />} title="反向引用">
         {backlinks.length === 0 ? (
-          <p className="text-muted-foreground text-xs">No references yet.</p>
+          <p className="text-muted-foreground text-xs">暂无引用。</p>
         ) : (
           <div className="space-y-1">
             {backlinks.map((backlink, indexInList) => {
@@ -283,10 +292,10 @@ function FieldControl({
           }}
         >
           <SelectTrigger className="h-8 w-full text-xs">
-            <SelectValue placeholder="Not set" />
+            <SelectValue placeholder="未设置" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={EMPTY_VALUE}>Not set</SelectItem>
+            <SelectItem value={EMPTY_VALUE}>未设置</SelectItem>
             {options.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -354,7 +363,7 @@ function SupertagDefinitionEditor({
           }
         >
           <HashIcon />
-          Define as supertag
+          定义为超级标签
         </Button>
       </div>
     );
@@ -398,12 +407,12 @@ function SupertagDefinitionEditor({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
           <HashIcon className="size-3.5" />
-          Definition
+          定义
         </h3>
         <button
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           type="button"
-          aria-label="Remove supertag definition"
+          aria-label="移除超级标签定义"
           onClick={() => editor.tf.unsetNodes('tanaSupertagDefinition', { at: path })}
         >
           <Trash2Icon className="size-3.5" />
@@ -418,12 +427,12 @@ function SupertagDefinitionEditor({
           >
             <span className="min-w-0 flex-1 truncate">{field.name}</span>
             <span className="text-[10px] text-muted-foreground">
-              {field.type}
+              {fieldTypeLabels[field.type]}
             </span>
             <button
               className="rounded p-0.5 text-muted-foreground hover:text-destructive"
               type="button"
-              aria-label={`Remove field ${field.name}`}
+              aria-label={`移除字段 ${field.name}`}
               onClick={() =>
                 updateFields(
                   definition.fields.filter(({ id }) => id !== field.id)
@@ -440,7 +449,7 @@ function SupertagDefinitionEditor({
         <Input
           className="h-8 text-xs"
           value={fieldName}
-          placeholder="Field name"
+          placeholder="字段名称"
           onChange={(event) => setFieldName(event.target.value)}
         />
         <Select
@@ -462,7 +471,7 @@ function SupertagDefinitionEditor({
               ] as const
             ).map((type) => (
               <SelectItem key={type} value={type}>
-                {type}
+                {fieldTypeLabels[type]}
               </SelectItem>
             ))}
           </SelectContent>
@@ -471,7 +480,7 @@ function SupertagDefinitionEditor({
           <Input
             className="h-8 text-xs"
             value={selectOptions}
-            placeholder="Options, comma separated"
+            placeholder="选项，以逗号分隔"
             onChange={(event) => setSelectOptions(event.target.value)}
           />
         )}
@@ -483,7 +492,7 @@ function SupertagDefinitionEditor({
           onClick={addField}
         >
           <PlusIcon />
-          Add field
+          添加字段
         </Button>
       </div>
     </section>

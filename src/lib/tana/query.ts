@@ -25,13 +25,13 @@ export function describeTanaQueryClause(
 ): string {
   switch (clause.kind) {
     case 'field-equals':
-      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} equals ${String(clause.value.value)}`;
+      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} 等于 ${String(clause.value.value)}`;
     case 'field-exists':
-      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} exists`;
+      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} 已设置`;
     case 'has-supertag':
-      return `has #${index.nodesById.get(clause.supertagId)?.text ?? clause.supertagId}`;
+      return `包含 #${index.nodesById.get(clause.supertagId)?.text ?? clause.supertagId}`;
     case 'text-contains':
-      return `text contains “${clause.text}”`;
+      return `文本包含“${clause.text}”`;
   }
 }
 

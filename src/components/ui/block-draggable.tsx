@@ -11,7 +11,7 @@ import {
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
-import { ChevronRight, GripVertical } from 'lucide-react';
+import { CircleIcon, ChevronRight, GripVertical } from 'lucide-react';
 import { type Path, type TElement, getPluginByType } from 'platejs';
 import {
   type PlateEditor,
@@ -26,6 +26,7 @@ import {
 import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
+import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   Tooltip,
   TooltipContent,
@@ -60,16 +61,19 @@ function TanaDraggableNode({
   ...props
 }: PlateElementProps & { tanaPath: Path }) {
   const openIds = usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
+  const tanaNavigation = useTanaNavigation();
+  const focusedNodeId = tanaNavigation?.focusedNodeId ?? null;
   const { hasChildren, isInteractable } = useEditorSelector(
     (editor) => ({
       hasChildren: hasTanaNodeDescendants(editor.children, tanaPath),
       isInteractable: isTanaNodeInteractable(
         editor.children,
         tanaPath,
-        openIds
+        openIds,
+        focusedNodeId
       ),
     }),
-    [openIds, tanaPath]
+    [focusedNodeId, openIds, tanaPath]
   );
 
   if (!isInteractable) {
@@ -82,6 +86,7 @@ function TanaDraggableNode({
       hasChildren={hasChildren}
       openIds={openIds}
       tanaPath={tanaPath}
+      zoomToNode={tanaNavigation?.zoomToNode}
     />
   );
 }
@@ -126,11 +131,13 @@ function Draggable({
   hasChildren,
   openIds,
   tanaPath,
+  zoomToNode,
   ...props
 }: PlateElementProps & {
   hasChildren: boolean;
   openIds: ReadonlySet<string>;
   tanaPath: Path;
+  zoomToNode?: (nodeId: string) => void;
 }) {
   const { children, editor, element } = props;
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
@@ -209,6 +216,11 @@ function Draggable({
                 style={{ top: `${dragButtonTop + 3}px` }}
                 tanaPath={tanaPath}
               />
+              <TanaZoomButton
+                nodeId={element.id}
+                onZoomToNode={zoomToNode}
+                style={{ top: `${dragButtonTop + 3}px` }}
+              />
               <Button
                 ref={handleRef}
                 variant="ghost"
@@ -250,6 +262,38 @@ function Draggable({
   );
 }
 
+function TanaZoomButton({
+  nodeId,
+  onZoomToNode,
+  style,
+}: {
+  nodeId: unknown;
+  onZoomToNode?: (nodeId: string) => void;
+  style: React.CSSProperties;
+}) {
+  if (typeof nodeId !== 'string' || !onZoomToNode) return null;
+
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label="聚焦节点"
+      className="-left-5 absolute size-6 cursor-pointer select-none p-px text-[#8b938d] hover:bg-accent hover:text-[#1f6f52] [&_svg]:size-3"
+      contentEditable={false}
+      data-plate-prevent-deselect
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onZoomToNode(nodeId);
+      }}
+      onMouseDown={(event) => event.preventDefault()}
+      style={style}
+    >
+      <CircleIcon />
+    </Button>
+  );
+}
+
 function TanaCollapseButton({
   hasChildren,
   nodeId,
@@ -271,7 +315,7 @@ function TanaCollapseButton({
     <Button
       size="icon"
       variant="ghost"
-      aria-label={open ? 'Collapse node' : 'Expand node'}
+      aria-label={open ? '折叠节点' : '展开节点'}
       className="-left-0 absolute size-6 cursor-pointer select-none p-px text-muted-foreground hover:bg-accent [&_svg]:size-3.5"
       contentEditable={false}
       style={style}
@@ -494,7 +538,7 @@ const DragHandle = React.memo(function DragHandle({
           <GripVertical className="text-muted-foreground" />
         </div>
       </TooltipTrigger>
-      <TooltipContent>Drag to move</TooltipContent>
+      <TooltipContent>拖动以移动</TooltipContent>
     </Tooltip>
   );
 });

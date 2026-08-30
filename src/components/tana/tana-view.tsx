@@ -32,18 +32,18 @@ export function TanaView({
         <div className="mb-3 flex items-center justify-between gap-4">
           <Button size="sm" variant="ghost" onClick={onBack}>
             <ArrowLeftIcon />
-            Back to editor
+            返回编辑器
           </Button>
           <span className="text-muted-foreground text-xs tabular-nums">
-            {results.length} {results.length === 1 ? 'result' : 'results'}
+            {results.length} 条结果
           </span>
         </div>
-        <p className="mb-1 text-muted-foreground text-xs">View</p>
+        <p className="mb-1 text-muted-foreground text-xs">视图</p>
         <h1 className="font-semibold text-2xl">{view.text}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {clauses.length === 0 ? (
             <span className="rounded bg-amber-50 px-2 py-1 text-amber-800 text-xs">
-              No filters — all nodes
+              未设置筛选条件：显示所有节点
             </span>
           ) : (
             clauses.map((clause, indexInList) => (
@@ -63,9 +63,9 @@ export function TanaView({
           <div className="grid min-h-48 place-items-center rounded-lg border border-dashed text-center">
             <div>
               <ListFilterIcon className="mx-auto mb-2 size-5 text-muted-foreground" />
-              <p className="font-medium text-sm">No matching nodes</p>
+              <p className="font-medium text-sm">没有匹配的节点</p>
               <p className="mt-1 text-muted-foreground text-xs">
-                Edit this view’s clauses in the Inspector.
+                请在检查器中编辑此视图的筛选条件。
               </p>
             </div>
           </div>

@@ -42,15 +42,15 @@ type SlashItem = {
 };
 
 const blockItems = [
-  { icon: <PilcrowIcon />, label: 'Text', value: KEYS.p },
-  { icon: <Heading1Icon />, label: 'Heading 1', value: KEYS.h1 },
-  { icon: <Heading2Icon />, label: 'Heading 2', value: KEYS.h2 },
-  { icon: <Heading3Icon />, label: 'Heading 3', value: KEYS.h3 },
-  { icon: <ListIcon />, label: 'Bulleted list', value: KEYS.ul },
-  { icon: <ListOrderedIcon />, label: 'Numbered list', value: KEYS.ol },
-  { icon: <SquareIcon />, label: 'To-do list', value: KEYS.listTodo },
-  { icon: <ChevronRightIcon />, label: 'Toggle', value: KEYS.toggle },
-  { icon: <QuoteIcon />, label: 'Quote', value: KEYS.blockquote },
+  { icon: <PilcrowIcon />, label: '文本', value: KEYS.p },
+  { icon: <Heading1Icon />, label: '标题 1', value: KEYS.h1 },
+  { icon: <Heading2Icon />, label: '标题 2', value: KEYS.h2 },
+  { icon: <Heading3Icon />, label: '标题 3', value: KEYS.h3 },
+  { icon: <ListIcon />, label: '无序列表', value: KEYS.ul },
+  { icon: <ListOrderedIcon />, label: '有序列表', value: KEYS.ol },
+  { icon: <SquareIcon />, label: '待办列表', value: KEYS.listTodo },
+  { icon: <ChevronRightIcon />, label: '折叠块', value: KEYS.toggle },
+  { icon: <QuoteIcon />, label: '引用', value: KEYS.blockquote },
 ].map((item) => ({
   ...item,
   onSelect: (editor: PlateEditor, value: string) =>
@@ -60,15 +60,15 @@ const blockItems = [
 const inlineItems = [
   {
     icon: <LinkIcon />,
-    label: 'Link',
+    label: '链接',
     value: KEYS.link,
     onSelect: insertInlineElement,
   },
 ] satisfies SlashItem[];
 
 const groups = [
-  { group: 'Outliner', items: blockItems },
-  { group: 'Inline', items: inlineItems },
+  { group: '大纲', items: blockItems },
+  { group: '行内', items: inlineItems },
 ];
 
 export function SlashInputElement(
@@ -81,7 +81,7 @@ export function SlashInputElement(
       <InlineCombobox element={element} trigger="/">
         <InlineComboboxInput />
         <InlineComboboxContent>
-          <InlineComboboxEmpty>No results</InlineComboboxEmpty>
+          <InlineComboboxEmpty>没有结果</InlineComboboxEmpty>
 
           {groups.map(({ group, items }) => (
             <InlineComboboxGroup key={group}>

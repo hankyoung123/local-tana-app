@@ -16,6 +16,7 @@ import {
 
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
+import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   getNodeDisplayName,
   getNodeReferenceCandidates,
@@ -41,6 +42,7 @@ export function MentionElement(
   const focused = useFocused();
   const mounted = useMounted();
   const readOnly = useReadOnly();
+  const tanaNavigation = useTanaNavigation();
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
   const displayName = useEditorSelector(
     (editor) => getNodeDisplayName(editor.children, targetNodeId),
@@ -60,9 +62,13 @@ export function MentionElement(
       event.preventDefault();
       event.stopPropagation();
 
-      navigateToNode(props.editor, targetNodeId);
+      if (tanaNavigation) {
+        tanaNavigation.navigateToNode(targetNodeId);
+      } else {
+        navigateToNode(props.editor, targetNodeId);
+      }
     },
-    [element.key, props.editor]
+    [element.key, props.editor, tanaNavigation]
   );
 
   return (
@@ -139,7 +145,7 @@ export function MentionInputElement(
         </span>
 
         <InlineComboboxContent className="my-1.5">
-          <InlineComboboxEmpty>No results</InlineComboboxEmpty>
+          <InlineComboboxEmpty>没有结果</InlineComboboxEmpty>
 
           <InlineComboboxGroup>
             {candidates.map((candidate) => {

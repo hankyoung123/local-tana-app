@@ -35,15 +35,15 @@ import {
 import { ToolbarButton, ToolbarMenuGroup } from './toolbar';
 
 export const turnIntoItems = [
-  { icon: <PilcrowIcon />, label: 'Text', value: KEYS.p },
-  { icon: <Heading1Icon />, label: 'Heading 1', value: KEYS.h1 },
-  { icon: <Heading2Icon />, label: 'Heading 2', value: KEYS.h2 },
-  { icon: <Heading3Icon />, label: 'Heading 3', value: KEYS.h3 },
-  { icon: <ListIcon />, label: 'Bulleted list', value: KEYS.ul },
-  { icon: <ListOrderedIcon />, label: 'Numbered list', value: KEYS.ol },
-  { icon: <SquareIcon />, label: 'To-do list', value: KEYS.listTodo },
-  { icon: <ChevronRightIcon />, label: 'Toggle', value: KEYS.toggle },
-  { icon: <QuoteIcon />, label: 'Quote', value: KEYS.blockquote },
+  { icon: <PilcrowIcon />, label: '文本', value: KEYS.p },
+  { icon: <Heading1Icon />, label: '标题 1', value: KEYS.h1 },
+  { icon: <Heading2Icon />, label: '标题 2', value: KEYS.h2 },
+  { icon: <Heading3Icon />, label: '标题 3', value: KEYS.h3 },
+  { icon: <ListIcon />, label: '无序列表', value: KEYS.ul },
+  { icon: <ListOrderedIcon />, label: '有序列表', value: KEYS.ol },
+  { icon: <SquareIcon />, label: '待办列表', value: KEYS.listTodo },
+  { icon: <ChevronRightIcon />, label: '折叠块', value: KEYS.toggle },
+  { icon: <QuoteIcon />, label: '引用', value: KEYS.blockquote },
 ];
 
 export function TurnIntoToolbarButton(props: DropdownMenuProps) {
@@ -63,7 +63,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
         <ToolbarButton
           className="min-w-[110px]"
           pressed={open}
-          tooltip="Turn into"
+          tooltip="转换为"
           isDropdown
         >
           {selectedItem.label}
@@ -80,7 +80,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
       >
         <ToolbarMenuGroup
           value={value}
-          label="Turn into"
+          label="转换为"
           onValueChange={(type) => setBlockType(editor, type)}
         >
           {turnIntoItems.map(({ icon, label, value: itemValue }) => (
