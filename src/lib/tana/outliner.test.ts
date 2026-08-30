@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { findElementIdsHiddenInToggle } from '@platejs/toggle/react';
 import type { Value } from 'platejs';
+import { createPlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from './constants';
 import {
@@ -17,7 +19,7 @@ const outliner: Value = [
 ];
 
 describe('Tana outliner behavior', () => {
-  test('uses the same top-level node boundary as Plate Block Selection', () => {
+  test('uses Plate Block Selection only for Tana nodes', () => {
     assert.equal(isTanaNodeElement(outliner[0], [0]), true);
     assert.equal(isTanaNodeElement(outliner[1], [0, 0]), false);
     assert.equal(
@@ -26,6 +28,31 @@ describe('Tana outliner behavior', () => {
         [3]
       ),
       false
+    );
+
+    const editor = createPlateEditor({
+      plugins: [
+        BlockSelectionPlugin.configure({
+          options: { isSelectable: isTanaNodeElement },
+        }),
+      ],
+      value: [
+        outliner[0],
+        {
+          children: [{ text: '' }],
+          id: 'table',
+          type: 'table',
+        },
+        outliner[2],
+      ],
+    });
+    const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+
+    selection.selectAll();
+
+    assert.deepEqual(
+      selection.getNodes().map(([node]) => node.id),
+      ['parent', 'sibling']
     );
   });
 

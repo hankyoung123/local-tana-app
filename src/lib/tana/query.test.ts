@@ -21,7 +21,6 @@ const document: Value = [
         children: [{ text: '' }],
         key: 'project-tag',
         type: 'tana_supertag',
-        value: 'Project',
       },
     ],
     tanaFieldValues: {
