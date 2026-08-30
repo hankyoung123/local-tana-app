@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { BlockSelectionPlugin } from '@platejs/selection/react';
-import { findElementIdsHiddenInToggle } from '@platejs/toggle/react';
 import { KEYS, normalizeNodeId, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 import { TogglePlugin } from '@platejs/toggle/react';
@@ -11,10 +10,13 @@ import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex, getNodeReferenceCandidates } from './index';
 import {
+  getTanaNodeDescendantPaths,
+  getTanaParentPath,
   getTanaParentPaths,
-  getTanaParentPathsNeedingToggle,
+  hasTanaNodeDescendants,
+  isTanaNodeCollapsed,
+  isTanaNodeHidden,
 } from './outliner';
-import { promoteTanaParentsToToggles } from '@/components/tana/tana-outliner-behavior';
 
 const outliner: Value = [
   { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
@@ -106,32 +108,100 @@ describe('Tana outliner behavior', () => {
     );
   });
 
-  test('promotes an ordinary parent and keeps its child visible with Plate Toggle', () => {
-    assert.deepEqual(getTanaParentPaths(outliner), [[0]]);
-    assert.deepEqual(getTanaParentPathsNeedingToggle(outliner), [[0]]);
+  test('derives hierarchy for every presentation without changing node types', () => {
+    const styledOutliner: Value = [
+      { children: [{ text: 'Heading parent' }], id: 'heading', type: KEYS.h1 },
+      { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Quote parent' }], id: 'quote', type: KEYS.blockquote },
+      { children: [{ text: 'Quote child' }], id: 'quote-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Todo parent' }],
+        id: 'todo',
+        [KEYS.listType]: KEYS.listTodo,
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Todo child' }], id: 'todo-child', indent: 1, type: KEYS.p },
+    ];
+
+    assert.deepEqual(getTanaParentPaths(styledOutliner), [[0], [2], [4]]);
+    assert.deepEqual(getTanaParentPath(styledOutliner, [1]), [0]);
+    assert.deepEqual(getTanaNodeDescendantPaths(styledOutliner, [2]), [[3]]);
+    assert.equal(hasTanaNodeDescendants(styledOutliner, [0]), true);
+    assert.equal(hasTanaNodeDescendants(styledOutliner, [1]), false);
+    assert.equal(styledOutliner[0].type, KEYS.h1);
+    assert.equal(styledOutliner[2].type, KEYS.blockquote);
+    assert.equal(styledOutliner[4].type, KEYS.p);
+    assert.equal(styledOutliner[4][KEYS.listType], KEYS.listTodo);
+  });
+
+  test('uses Plate openIds to collapse without changing the document', () => {
+    const collapsibleOutliner: Value = [
+      {
+        children: [{ text: 'Heading parent' }],
+        id: 'heading',
+        tanaFieldValues: { status: { type: 'text', value: 'Active' } },
+        type: KEYS.h1,
+      },
+      { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Quote parent' }], id: 'quote', type: KEYS.blockquote },
+      { children: [{ text: 'Quote child' }], id: 'quote-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Todo parent' }],
+        id: 'todo',
+        [KEYS.listType]: KEYS.listTodo,
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Todo child' }], id: 'todo-child', indent: 1, type: KEYS.p },
+    ];
+    const editor = createPlateEditor({
+      plugins: EditorKit,
+      value: structuredClone(collapsibleOutliner),
+    });
+
+    editor
+      .getApi(TogglePlugin)
+      .toggle.toggleIds(['heading', 'quote', 'todo'], true);
+
+    let openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
+    assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
+
+    editor.tf.setNodes({ type: KEYS.blockquote }, { at: [0] });
+    openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(editor.children[0].id, 'heading');
+    assert.equal(editor.children[0].type, KEYS.blockquote);
+    assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
+    assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
+    assert.deepEqual(editor.children[0].tanaFieldValues, {
+      status: { type: 'text', value: 'Active' },
+    });
+
+    const beforeCollapse = structuredClone(editor.children);
+
+    editor.getApi(TogglePlugin).toggle.toggleIds(['heading']);
+    openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), true);
+    assert.equal(isTanaNodeHidden(editor.children, [1], openIds), true);
+    assert.deepEqual(editor.children, beforeCollapse);
+
+    editor.getApi(TogglePlugin).toggle.toggleIds(['heading']);
+    openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
+    assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
+    assert.equal(editor.children[1].id, 'heading-child');
+  });
+
+  test('leaves an existing Plate Toggle presentation untouched', () => {
     assert.deepEqual(
-      getTanaParentPathsNeedingToggle([
-        { children: [{ text: 'Heading parent' }], id: 'heading', type: KEYS.h1 },
+      getTanaParentPaths([
+        { children: [{ text: 'Toggle parent' }], id: 'toggle', type: KEYS.toggle },
         { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
       ]),
       [[0]]
-    );
-
-    const editor = createPlateEditor({
-      plugins: [TogglePlugin],
-      value: structuredClone(outliner),
-    });
-    const paths = getTanaParentPathsNeedingToggle(editor.children);
-
-    promoteTanaParentsToToggles(editor, paths);
-
-    assert.equal(editor.children[0].type, KEYS.toggle);
-    assert.deepEqual(
-      findElementIdsHiddenInToggle(
-        editor.getOptions(TogglePlugin).openIds ?? new Set<string>(),
-        editor.children as never
-      ),
-      []
     );
   });
 

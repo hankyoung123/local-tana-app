@@ -14,7 +14,7 @@ import {
 } from '@/lib/tana';
 
 import { TanaInspector } from './tana-inspector';
-import { TanaOutlinerBehavior } from './tana-outliner-behavior';
+import { TanaOutlinerOpenState } from './tana-outliner-open-state';
 import { TanaSidebar } from './tana-sidebar';
 import { TanaView } from './tana-view';
 
@@ -82,7 +82,7 @@ export function TanaWorkspace({
 
   return (
     <div className="flex h-dvh min-w-0 flex-col bg-[#f4f6f5] text-[#202421]">
-      <TanaOutlinerBehavior />
+      <TanaOutlinerOpenState />
       <header className="flex h-12 shrink-0 items-center border-b border-[#dfe4e1] bg-white px-4">
         <div className="flex min-w-0 flex-1 items-center gap-5">
           <div className="flex shrink-0 items-center gap-2">

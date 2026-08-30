@@ -5,14 +5,16 @@ import * as React from 'react';
 import { DndPlugin, useDraggable, useDropLine } from '@platejs/dnd';
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
-import { GripVertical } from 'lucide-react';
-import { type TElement, getPluginByType } from 'platejs';
+import { TogglePlugin } from '@platejs/toggle/react';
+import { ChevronRight, GripVertical } from 'lucide-react';
+import { type Path, type TElement, getPluginByType } from 'platejs';
 import {
   type PlateEditor,
   type PlateElementProps,
   type RenderNodeWrapper,
   MemoizedChildren,
   useEditorRef,
+  useEditorSelector,
   useElement,
   usePluginOption,
 } from 'platejs/react';
@@ -25,7 +27,13 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { isTanaNodeElement } from '@/lib/tana';
+import {
+  hasTanaNodeDescendants,
+  isTanaNodeElement,
+  isTanaNodeHidden,
+} from '@/lib/tana';
+
+const EMPTY_OPEN_IDS = new Set<string>();
 
 export const BlockDraggable: RenderNodeWrapper = (props) => {
   const { editor, element, path } = props;
@@ -38,12 +46,25 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
 
   if (!enabled) return;
 
-  return (props) => <Draggable {...props} />;
+  return (nodeProps) => <Draggable {...nodeProps} tanaPath={path} />;
 };
 
-function Draggable(props: PlateElementProps) {
+function Draggable({ tanaPath, ...props }: PlateElementProps & { tanaPath: Path }) {
   const { children, editor, element } = props;
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
+  const openIds =
+    usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
+  const { hasChildren, isHidden } = useEditorSelector(
+    (currentEditor) => ({
+      hasChildren: hasTanaNodeDescendants(currentEditor.children, tanaPath),
+      isHidden: isTanaNodeHidden(
+        currentEditor.children,
+        tanaPath,
+        openIds
+      ),
+    }),
+    [openIds, tanaPath]
+  );
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
@@ -88,6 +109,7 @@ function Draggable(props: PlateElementProps) {
     <div
       className={cn(
         'relative',
+        isHidden && 'invisible m-0 h-0 overflow-hidden',
         isDragging && 'opacity-50',
         getPluginByType(editor, element.type)?.node.isContainer
           ? 'group/container'
@@ -111,10 +133,16 @@ function Draggable(props: PlateElementProps) {
                 'pointer-events-auto mr-1 flex items-center',
               )}
             >
+              <TanaCollapseButton
+                hasChildren={hasChildren}
+                nodeId={element.id}
+                open={typeof element.id === 'string' && openIds.has(element.id)}
+                style={{ top: `${dragButtonTop + 3}px` }}
+              />
               <Button
                 ref={handleRef}
                 variant="ghost"
-                className="-left-0 absolute h-6 w-full p-0"
+                className="left-4 absolute h-6 w-4 p-0"
                 style={{ top: `${dragButtonTop + 3}px` }}
                 data-plate-prevent-deselect
               >
@@ -149,6 +177,47 @@ function Draggable(props: PlateElementProps) {
         <DropLine />
       </div>
     </div>
+  );
+}
+
+function TanaCollapseButton({
+  hasChildren,
+  nodeId,
+  open,
+  style,
+}: {
+  hasChildren: boolean;
+  nodeId: unknown;
+  open: boolean;
+  style: React.CSSProperties;
+}) {
+  const editor = useEditorRef();
+
+  if (!hasChildren || typeof nodeId !== 'string') return null;
+
+  return (
+    <Button
+      size="icon"
+      variant="ghost"
+      aria-label={open ? 'Collapse node' : 'Expand node'}
+      className="-left-0 absolute size-6 cursor-pointer select-none p-px text-muted-foreground hover:bg-accent [&_svg]:size-3.5"
+      contentEditable={false}
+      style={style}
+      data-plate-prevent-deselect
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        editor.getApi(TogglePlugin).toggle.toggleIds([nodeId]);
+      }}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <ChevronRight
+        className={cn(
+          'transition-transform duration-75',
+          open && 'rotate-90'
+        )}
+      />
+    </Button>
   );
 }
 

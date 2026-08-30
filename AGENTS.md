@@ -21,5 +21,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   presentation and editing behavior only.
 - `isTanaNodeElement` is the sole Node boundary. Keep NodeId, TanaIndex,
   selection, DnD, navigation, search, and reference candidates aligned to it.
-- Toggle promotion is only for parent collapse behavior. Never use `toggle` as
-  a condition for Tana Node identity.
+- Collapse is UI behavior only: derive parent/descendant structure from flat
+  indent, then use Plate Toggle's `openIds`. Never change a Node's Plate type
+  or write collapse state into Tana semantics.
