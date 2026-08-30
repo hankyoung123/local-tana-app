@@ -1,7 +1,7 @@
 import type { Descendant, TElement, Value } from 'platejs';
 
 import { isTauri } from '@tauri-apps/api/core';
-import { KEYS } from 'platejs';
+import { KEYS, normalizeNodeId } from 'platejs';
 
 import {
   isTanaNodeElement,
@@ -11,7 +11,7 @@ import {
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 type DocumentRow = {
   schema_version: number;
@@ -257,6 +257,15 @@ export function migratePlateDocument(
     if (version === 1) {
       migrated = stripCopiedSemanticNames(migrated);
       version = 2;
+
+      continue;
+    }
+
+    if (version === 2) {
+      migrated = normalizeNodeId(migrated, {
+        filter: isTanaNodeElement,
+      });
+      version = 3;
 
       continue;
     }

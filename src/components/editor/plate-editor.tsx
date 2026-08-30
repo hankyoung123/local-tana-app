@@ -13,12 +13,12 @@ import {
 } from '@/components/tana/tana-workspace';
 import {
   createDocumentSaveController,
+  isTanaNodeElement,
   loadPlateDocument,
   savePlateDocument,
   usesSQLitePersistence,
 } from '@/lib/tana';
 import { initialDocument } from '@/lib/tana/initial-document';
-import { TANA_NODE_TYPES } from '@/lib/tana/constants';
 
 export function PlateEditor() {
   const [loadedDocument, setLoadedDocument] = React.useState<Value>();
@@ -68,8 +68,7 @@ function LoadedPlateEditor({
 }) {
   const editor = usePlateEditor({
     nodeId: {
-      allow: [...TANA_NODE_TYPES],
-      filter: ([, path]) => path.length === 1,
+      filter: isTanaNodeElement,
       initialValueIds: 'always',
     },
     plugins: EditorKit,

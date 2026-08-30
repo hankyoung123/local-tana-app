@@ -33,9 +33,12 @@ export function getTanaParentPaths(document: Value): Path[] {
   return paths;
 }
 
-/** Only paragraph nodes need promotion; existing Plate toggles remain untouched. */
-export function getOrdinaryTanaParentPaths(document: Value): Path[] {
+/**
+ * Collapse behavior is separate from node identity: any parent node that is
+ * not already a Plate Toggle needs promotion, whatever its current block type.
+ */
+export function getTanaParentPathsNeedingToggle(document: Value): Path[] {
   return getTanaParentPaths(document).filter(
-    ([index]) => document[index]?.type === KEYS.p
+    ([index]) => document[index]?.type !== KEYS.toggle
   );
 }

@@ -8,6 +8,7 @@ import { useEditorRef, useEditorSelector } from 'platejs/react';
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import {
   buildTanaIndex,
+  isTanaNodeElement,
   navigateToNode,
   type NodeId,
 } from '@/lib/tana';
@@ -35,11 +36,17 @@ export function TanaWorkspace({
       const selectedTopLevel = currentEditor.selection
         ? currentEditor.children[currentEditor.selection.anchor.path[0]]
         : undefined;
+      const selectedTopLevelPath = currentEditor.selection
+        ? [currentEditor.selection.anchor.path[0]]
+        : undefined;
 
       return {
         index: buildTanaIndex(currentEditor.children),
         selectedNodeId:
-          selectedTopLevel && typeof selectedTopLevel.id === 'string'
+          selectedTopLevel &&
+          selectedTopLevelPath &&
+          isTanaNodeElement(selectedTopLevel, selectedTopLevelPath) &&
+          typeof selectedTopLevel.id === 'string'
             ? selectedTopLevel.id
             : null,
       };

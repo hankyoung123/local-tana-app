@@ -54,12 +54,30 @@ describe('Plate document persistence', () => {
       1
     );
 
-    assert.equal(CURRENT_SCHEMA_VERSION, 2);
+    assert.equal(CURRENT_SCHEMA_VERSION, 3);
     assert.deepEqual(migrated[0].children[1], {
       children: [{ text: '' }],
       key: 'target',
       type: 'mention',
     });
+  });
+
+  test('migrates every legacy top-level block to a NodeId without changing its type', () => {
+    const migrated = migratePlateDocument(
+      [
+        { children: [{ text: 'Heading' }], type: 'h1' },
+        { children: [{ text: 'Quote' }], type: 'blockquote' },
+        { children: [{ text: 'Existing' }], id: 'existing', type: 'p' },
+      ],
+      2
+    );
+
+    assert.equal(migrated[0].type, 'h1');
+    assert.equal(migrated[1].type, 'blockquote');
+    assert.equal(typeof migrated[0].id, 'string');
+    assert.equal(typeof migrated[1].id, 'string');
+    assert.equal(migrated[2].id, 'existing');
+    assert.equal(isValidTanaDocument(migrated), true);
   });
 
   test('flushes a debounced final edit before close', async () => {

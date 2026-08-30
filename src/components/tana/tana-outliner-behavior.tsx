@@ -11,9 +11,9 @@ import {
   useEditorSelector,
 } from 'platejs/react';
 
-import { getOrdinaryTanaParentPaths } from '@/lib/tana/outliner';
+import { getTanaParentPathsNeedingToggle } from '@/lib/tana/outliner';
 
-/** Promotes new ordinary parents and opens them with Plate's Toggle API. */
+/** Promotes new parents and opens them with Plate's Toggle API. */
 export function promoteTanaParentsToToggles(
   editor: PlateEditor,
   parentPaths: Path[]
@@ -33,11 +33,12 @@ export function promoteTanaParentsToToggles(
   editor.getApi(TogglePlugin).toggle.toggleIds(parentIds, true);
 }
 
-/** Promotes ordinary parents to Plate Toggle blocks; Plate owns collapse state. */
+/** Promotes parent nodes to Plate Toggle blocks; Plate owns collapse state. */
 export function TanaOutlinerBehavior() {
   const editor = useEditorRef();
   const parentPaths = useEditorSelector(
-    (currentEditor) => getOrdinaryTanaParentPaths(currentEditor.children),
+    (currentEditor) =>
+      getTanaParentPathsNeedingToggle(currentEditor.children),
     [],
     {
       equalityFn: (previous, next) =>

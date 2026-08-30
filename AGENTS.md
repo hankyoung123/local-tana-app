@@ -16,3 +16,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - TanaIndex is derived and read-only.
 - Do not introduce a second editor or state path.
 - Prefer Plate official APIs before custom code.
+- Every top-level Plate outliner block (`path.length === 1`) is a Tana Node,
+  regardless of its Plate type. NodeId is identity; the Plate type controls
+  presentation and editing behavior only.
+- `isTanaNodeElement` is the sole Node boundary. Keep NodeId, TanaIndex,
+  selection, DnD, navigation, search, and reference candidates aligned to it.
+- Toggle promotion is only for parent collapse behavior. Never use `toggle` as
+  a condition for Tana Node identity.

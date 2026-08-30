@@ -83,7 +83,7 @@ describe('buildTanaIndex', () => {
     assert.equal('value' in (renamed[1].children[3] as object), false);
   });
 
-  test('excludes table, media, and nested internal blocks from TanaIndex', () => {
+  test('indexes top-level blocks but not their nested internal elements', () => {
     const withInternalBlocks = [
       ...document,
       {
@@ -109,10 +109,10 @@ describe('buildTanaIndex', () => {
     ] as Value;
     const index = buildTanaIndex(withInternalBlocks);
 
-    assert.equal(index.nodesById.has('table'), false);
+    assert.equal(index.nodesById.has('table'), true);
     assert.equal(index.nodesById.has('row'), false);
     assert.equal(index.nodesById.has('cell'), false);
     assert.equal(index.nodesById.has('nested'), false);
-    assert.equal(index.nodesById.has('image'), false);
+    assert.equal(index.nodesById.has('image'), true);
   });
 });
