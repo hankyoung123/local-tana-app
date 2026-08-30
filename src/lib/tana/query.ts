@@ -10,13 +10,11 @@ export function getFieldDefinition(
   index: TanaIndex,
   fieldId: FieldId
 ): FieldDefinition | undefined {
-  for (const node of index.nodesById.values()) {
-    const field = node.supertagDefinition?.fields.find(
-      ({ id }) => id === fieldId
-    );
+  return index.nodesById.get(fieldId)?.fieldDefinition;
+}
 
-    if (field) return field;
-  }
+export function getFieldDisplayName(index: TanaIndex, fieldId: FieldId): string {
+  return index.nodesById.get(fieldId)?.text || fieldId;
 }
 
 export function describeTanaQueryClause(
@@ -25,9 +23,9 @@ export function describeTanaQueryClause(
 ): string {
   switch (clause.kind) {
     case 'field-equals':
-      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} 等于 ${String(clause.value.value)}`;
+      return `${getFieldDisplayName(index, clause.fieldId)} 等于 ${String(clause.value.value)}`;
     case 'field-exists':
-      return `${getFieldDefinition(index, clause.fieldId)?.name ?? clause.fieldId} 已设置`;
+      return `${getFieldDisplayName(index, clause.fieldId)} 已设置`;
     case 'has-supertag':
       return `包含 #${index.nodesById.get(clause.supertagId)?.text ?? clause.supertagId}`;
     case 'text-contains':

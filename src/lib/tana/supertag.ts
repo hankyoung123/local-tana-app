@@ -74,7 +74,10 @@ export function createSupertag(editor: PlateEditor, name: string) {
     : undefined;
 }
 
-/** Applies a definition relation once without inventing field values. */
+/**
+ * Applies a definition relation once. Only explicit binding defaults are
+ * instantiated, and existing instance values always win.
+ */
 export function applySupertag(
   editor: PlateEditor,
   nodeId: NodeId,
@@ -89,7 +92,22 @@ export function applySupertag(
 
   if (index.nodesBySupertag.get(supertagId)?.includes(nodeId)) return false;
 
-  const [, nodePath] = nodeEntry;
+  const [node, nodePath] = nodeEntry;
+  const bindings = definitionEntry[0].tanaSupertagDefinition!.fields;
+  const nextFieldValues = { ...(node.tanaFieldValues ?? {}) };
+  let hasNewDefault = false;
+
+  bindings.forEach(({ defaultValue, fieldId }) => {
+    if (defaultValue !== undefined && nextFieldValues[fieldId] === undefined) {
+      nextFieldValues[fieldId] = structuredClone(defaultValue);
+      hasNewDefault = true;
+    }
+  });
+
+  if (hasNewDefault) {
+    editor.tf.setNodes({ tanaFieldValues: nextFieldValues }, { at: nodePath });
+  }
+
   const selection = editor.selection;
   const selectionIsInNode = !!selection && isSelectionInNode(editor, nodePath);
 

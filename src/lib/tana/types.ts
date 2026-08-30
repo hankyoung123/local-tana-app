@@ -1,33 +1,30 @@
 import type { Path, TElement } from 'platejs';
 
 export type NodeId = string;
-export type FieldId = string;
-
-type FieldDefinitionBase = {
-  id: FieldId;
-  name: string;
-};
+export type FieldId = NodeId;
 
 export type FieldDefinition =
-  | (FieldDefinitionBase & { type: 'boolean' })
-  | (FieldDefinitionBase & { type: 'date' })
-  | (FieldDefinitionBase & { type: 'node-reference' })
-  | (FieldDefinitionBase & { type: 'number' })
-  | (FieldDefinitionBase & {
-      options: readonly string[];
-      type: 'select';
-    })
-  | (FieldDefinitionBase & { type: 'text' });
+  | { type: 'checkbox' }
+  | { type: 'date' }
+  | { sourceSupertagId: NodeId; type: 'from-supertag' }
+  | { type: 'number' }
+  | { options: readonly NodeId[]; type: 'options' }
+  | { type: 'plain' };
 
 export type FieldType = FieldDefinition['type'];
 
 export type FieldValue =
-  | { type: 'boolean'; value: boolean }
+  | { type: 'checkbox'; value: boolean }
   | { type: 'date'; value: string }
-  | { type: 'node-reference'; value: NodeId }
+  | { type: 'from-supertag'; value: NodeId }
   | { type: 'number'; value: number }
-  | { type: 'select'; value: string }
-  | { type: 'text'; value: string };
+  | { type: 'options'; value: NodeId }
+  | { type: 'plain'; value: string };
+
+export type FieldBinding = {
+  defaultValue?: FieldValue;
+  fieldId: FieldId;
+};
 
 export type TanaQueryClause =
   | { kind: 'field-equals'; fieldId: FieldId; value: FieldValue }
@@ -40,10 +37,11 @@ export type TanaViewDefinition = {
 };
 
 export type SupertagDefinition = {
-  fields: readonly FieldDefinition[];
+  fields: readonly FieldBinding[];
 };
 
 export type TanaBlockElement = TElement & {
+  tanaFieldDefinition?: FieldDefinition;
   tanaFieldValues?: Readonly<Record<FieldId, FieldValue>>;
   tanaSupertagDefinition?: SupertagDefinition;
   tanaViewDefinition?: TanaViewDefinition;
@@ -55,6 +53,7 @@ export type TanaNode = {
   path: Path;
   text: string;
   fieldValues?: Readonly<Record<FieldId, FieldValue>>;
+  fieldDefinition?: FieldDefinition;
   supertagDefinition?: SupertagDefinition;
   viewDefinition?: TanaViewDefinition;
 };

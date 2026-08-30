@@ -53,6 +53,7 @@ function isElement(value: Descendant): value is TElement {
 
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
+    tanaFieldDefinition?: unknown;
     tanaFieldValues?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaViewDefinition?: unknown;
@@ -66,9 +67,20 @@ function hasValidSemanticData(element: TElement): boolean {
       return false;
     }
 
-    if (!Object.values(semantic.tanaFieldValues).every(isFieldValue)) {
+    if (
+      !Object.entries(semantic.tanaFieldValues).every(
+        ([fieldId, fieldValue]) => fieldId.length > 0 && isFieldValue(fieldValue)
+      )
+    ) {
       return false;
     }
+  }
+
+  if (
+    semantic.tanaFieldDefinition !== undefined &&
+    !isFieldDefinition(semantic.tanaFieldDefinition)
+  ) {
+    return false;
   }
 
   if (semantic.tanaSupertagDefinition !== undefined) {
@@ -81,9 +93,9 @@ function hasValidSemanticData(element: TElement): boolean {
     const fieldIds = new Set<string>();
 
     for (const field of definition.fields) {
-      if (!isFieldDefinition(field) || fieldIds.has(field.id)) return false;
+      if (!isFieldBinding(field) || fieldIds.has(field.fieldId)) return false;
 
-      fieldIds.add(field.id);
+      fieldIds.add(field.fieldId);
     }
   }
 
@@ -97,36 +109,54 @@ function hasValidSemanticData(element: TElement): boolean {
 }
 
 function isFieldDefinition(value: unknown): value is {
-  id: string;
-  name: string;
   options?: string[];
+  sourceSupertagId?: string;
   type: string;
 } {
   if (!value || typeof value !== 'object') return false;
 
   const field = value as Record<string, unknown>;
   const validType = [
-    'boolean',
+    'checkbox',
     'date',
-    'node-reference',
+    'from-supertag',
     'number',
-    'select',
-    'text',
+    'options',
+    'plain',
   ].includes(field.type as string);
 
-  if (
-    typeof field.id !== 'string' ||
-    field.id.length === 0 ||
-    typeof field.name !== 'string' ||
-    !validType
-  ) {
+  if (!validType) {
     return false;
   }
 
+  if (field.type === 'options') {
+    return (
+      Array.isArray(field.options) &&
+      field.options.every(
+        (option) => typeof option === 'string' && option.length > 0
+      )
+    );
+  }
+
   return (
-    field.type !== 'select' ||
-    (Array.isArray(field.options) &&
-      field.options.every((option) => typeof option === 'string'))
+    field.type !== 'from-supertag' ||
+    (typeof field.sourceSupertagId === 'string' &&
+      field.sourceSupertagId.length > 0)
+  );
+}
+
+function isFieldBinding(value: unknown): value is {
+  defaultValue?: unknown;
+  fieldId: string;
+} {
+  if (!value || typeof value !== 'object') return false;
+
+  const binding = value as Record<string, unknown>;
+
+  return (
+    typeof binding.fieldId === 'string' &&
+    binding.fieldId.length > 0 &&
+    (binding.defaultValue === undefined || isFieldValue(binding.defaultValue))
   );
 }
 
@@ -136,7 +166,7 @@ function isFieldValue(value: unknown): boolean {
   const fieldValue = value as Record<string, unknown>;
 
   switch (fieldValue.type) {
-    case 'boolean':
+    case 'checkbox':
       return typeof fieldValue.value === 'boolean';
     case 'number':
       return (
@@ -144,9 +174,9 @@ function isFieldValue(value: unknown): boolean {
         Number.isFinite(fieldValue.value)
       );
     case 'date':
-    case 'node-reference':
-    case 'select':
-    case 'text':
+    case 'from-supertag':
+    case 'options':
+    case 'plain':
       return typeof fieldValue.value === 'string';
     default:
       return false;
@@ -170,11 +200,13 @@ export function isValidTanaDocument(value: unknown): value is Value {
     const isTanaNode = isTanaNodeElement(descendant, path);
     const semantic = descendant as TElement & {
       key?: unknown;
+      tanaFieldDefinition?: unknown;
       tanaFieldValues?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
+      semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldValues !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaViewDefinition !== undefined;

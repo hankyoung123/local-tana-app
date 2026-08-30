@@ -261,7 +261,7 @@ describe('Tana outliner behavior', () => {
       {
         children: [{ text: 'Heading parent' }],
         id: 'heading',
-        tanaFieldValues: { status: { type: 'text', value: 'Active' } },
+        tanaFieldValues: { status: { type: 'plain', value: 'Active' } },
         type: KEYS.h1,
       },
       { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
@@ -297,7 +297,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
     assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
     assert.deepEqual(editor.children[0].tanaFieldValues, {
-      status: { type: 'text', value: 'Active' },
+      status: { type: 'plain', value: 'Active' },
     });
 
     const beforeCollapse = structuredClone(editor.children);
@@ -334,7 +334,7 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'B' }],
         id: 'b',
         indent: 1,
-        tanaFieldValues: { status: { type: 'text', value: 'Active' } },
+        tanaFieldValues: { status: { type: 'plain', value: 'Active' } },
         type: KEYS.blockquote,
       },
       { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
@@ -384,7 +384,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(zoomOutliner[1].id, 'b');
     assert.equal(zoomOutliner[1].indent, 1);
     assert.deepEqual(zoomOutliner[1].tanaFieldValues, {
-      status: { type: 'text', value: 'Active' },
+      status: { type: 'plain', value: 'Active' },
     });
   });
 
@@ -493,7 +493,7 @@ describe('Tana outliner behavior', () => {
           children: [{ text: 'Project tag' }],
           id: 'project-tag',
           tanaSupertagDefinition: {
-            fields: [{ id: 'status', name: 'Status', type: 'text' }],
+            fields: [],
           },
           type: KEYS.p,
         },
@@ -508,7 +508,7 @@ describe('Tana outliner behavior', () => {
           ],
           id: 'project',
           tanaFieldValues: {
-            status: { type: 'text', value: 'Active' },
+            status: { type: 'plain', value: 'Active' },
           },
           type: KEYS.p,
         },
@@ -542,7 +542,7 @@ describe('Tana outliner behavior', () => {
       assert.equal(project.id, 'project');
       assert.equal(index.nodesById.get('project')?.id, 'project');
       assert.deepEqual(index.fieldValues.get('project'), new Map([
-        ['status', { type: 'text', value: 'Active' }],
+        ['status', { type: 'plain', value: 'Active' }],
       ]));
       assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project']);
       assert.deepEqual(index.backlinks.get('project'), [

@@ -10,9 +10,25 @@ const document: Value = [
   {
     id: 'project-tag',
     children: [{ text: 'Project' }],
-    tanaSupertagDefinition: { fields: [] },
+    tanaSupertagDefinition: {
+      fields: [{ fieldId: 'estimate' }, { fieldId: 'status' }],
+    },
     type: 'p',
   },
+  {
+    id: 'estimate',
+    children: [{ text: 'Estimate' }],
+    tanaFieldDefinition: { type: 'number' },
+    type: 'p',
+  },
+  {
+    id: 'status',
+    children: [{ text: 'Status' }],
+    tanaFieldDefinition: { options: ['active', 'done'], type: 'options' },
+    type: 'p',
+  },
+  { id: 'active', children: [{ text: 'Active' }], type: 'p' },
+  { id: 'done', children: [{ text: 'Done' }], type: 'p' },
   {
     id: 'alpha',
     children: [
@@ -25,7 +41,7 @@ const document: Value = [
     ],
     tanaFieldValues: {
       estimate: { type: 'number', value: 3 },
-      status: { type: 'select', value: 'Active' },
+      status: { type: 'options', value: 'active' },
     },
     type: 'p',
   },
@@ -33,7 +49,7 @@ const document: Value = [
     id: 'beta',
     children: [{ text: 'Beta notes' }],
     tanaFieldValues: {
-      status: { type: 'select', value: 'Done' },
+      status: { type: 'options', value: 'done' },
     },
     type: 'p',
   },
@@ -57,7 +73,7 @@ describe('runTanaQuery', () => {
         {
           fieldId: 'status',
           kind: 'field-equals',
-          value: { type: 'select', value: 'Active' },
+          value: { type: 'options', value: 'active' },
         },
         { fieldId: 'estimate', kind: 'field-exists' },
       ]).map(({ id }) => id),
@@ -86,9 +102,9 @@ describe('runTanaQuery', () => {
       describeTanaQueryClause(index, {
         kind: 'field-equals',
         fieldId: 'status',
-        value: { type: 'select', value: 'Active' },
+        value: { type: 'options', value: 'active' },
       }),
-      'status 等于 Active'
+      'Status 等于 active'
     );
   });
 });

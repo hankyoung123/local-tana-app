@@ -1,4 +1,5 @@
 export * from './tana/constants';
+export * from './tana/fields';
 export * from './tana/index';
 export * from './tana/navigation';
 export * from './tana/outliner';

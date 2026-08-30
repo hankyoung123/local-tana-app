@@ -9,7 +9,6 @@ import { isTanaNodeElement } from './constants';
 import { buildTanaIndex } from './index';
 import { navigateToNode } from './navigation';
 import { applySupertag, createSupertag, removeSupertag } from './supertag';
-import type { FieldDefinition } from './types';
 import { TanaZoomPlugin } from './zoom';
 
 function createEditor(value: Value) {
@@ -75,62 +74,50 @@ describe('Tana supertag operations', () => {
     assert.equal(tagElements(editor.children[1] as TElement).length, 1);
   });
 
-  test('derives tag display text from a renamed definition Node', () => {
+  test('instantiates explicit defaults only and never overwrites field values', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project-tag',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-
-    assert.equal(applySupertag(editor, 'task', 'project-tag'), true);
-    editor.tf.select([0, 0], { edge: 'end' });
-    editor.tf.insertText(' Renamed');
-
-    const index = buildTanaIndex(editor.children);
-    const tag = tagElements(editor.children[1] as TElement)[0];
-
-    assert.equal(index.nodesById.get('task')?.text.includes('#Project Renamed'), true);
-    assert.equal('value' in (tag ?? {}), false);
-  });
-
-  test('leaves fields unset and preserves existing field values', () => {
-    const fields: FieldDefinition[] = [
-      { id: 'text', name: 'Text', type: 'text' },
-      { id: 'number', name: 'Number', type: 'number' },
-      { id: 'boolean', name: 'Boolean', type: 'boolean' },
-      { id: 'date', name: 'Date', type: 'date' },
-      { id: 'select', name: 'Select', options: ['A', 'B'], type: 'select' },
-      { id: 'reference', name: 'Reference', type: 'node-reference' },
-    ];
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project-tag',
-        tanaSupertagDefinition: { fields },
+        tanaSupertagDefinition: {
+          fields: [
+            {
+              defaultValue: { type: 'plain', value: 'Untitled' },
+              fieldId: 'title',
+            },
+            { fieldId: 'estimate' },
+          ],
+        },
         type: KEYS.p,
       },
       {
-        children: [{ text: 'Empty task' }],
-        id: 'empty-task',
+        children: [{ text: 'Title' }],
+        id: 'title',
+        tanaFieldDefinition: { type: 'plain' },
         type: KEYS.p,
       },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Empty task' }], id: 'empty-task', type: KEYS.p },
       {
         children: [{ text: 'Existing task' }],
         id: 'existing-task',
-        tanaFieldValues: { text: { type: 'text', value: 'Keep me' } },
+        tanaFieldValues: { title: { type: 'plain', value: 'Keep me' } },
         type: KEYS.p,
       },
     ]);
 
     assert.equal(applySupertag(editor, 'empty-task', 'project-tag'), true);
     assert.equal(applySupertag(editor, 'existing-task', 'project-tag'), true);
-    assert.equal(editor.children[1].tanaFieldValues, undefined);
-    assert.deepEqual(editor.children[2].tanaFieldValues, {
-      text: { type: 'text', value: 'Keep me' },
+    assert.deepEqual(editor.children[3].tanaFieldValues, {
+      title: { type: 'plain', value: 'Untitled' },
+    });
+    assert.deepEqual(editor.children[4].tanaFieldValues, {
+      title: { type: 'plain', value: 'Keep me' },
     });
   });
 
@@ -139,19 +126,35 @@ describe('Tana supertag operations', () => {
       {
         children: [{ text: 'Project' }],
         id: 'project-tag',
-        tanaSupertagDefinition: { fields: [] },
+        tanaSupertagDefinition: {
+          fields: [
+            {
+              defaultValue: { type: 'plain', value: 'Untitled' },
+              fieldId: 'title',
+            },
+          ],
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Title' }],
+        id: 'title',
+        tanaFieldDefinition: { type: 'plain' },
         type: KEYS.p,
       },
       { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
       { children: [{ text: 'B' }], id: 'b', type: KEYS.p },
     ]);
-    editor.tf.select([2, 0], { edge: 'end' });
+    editor.tf.select([3, 0], { edge: 'end' });
     const selectionBeforeApply = structuredClone(editor.selection);
-    const nodeBBeforeApply = structuredClone(editor.children[2]);
+    const nodeBBeforeApply = structuredClone(editor.children[3]);
 
     assert.equal(applySupertag(editor, 'a', 'project-tag'), true);
     assert.deepEqual(editor.selection, selectionBeforeApply);
-    assert.deepEqual(editor.children[2], nodeBBeforeApply);
+    assert.deepEqual(editor.children[3], nodeBBeforeApply);
+    assert.deepEqual(editor.children[2].tanaFieldValues, {
+      title: { type: 'plain', value: 'Untitled' },
+    });
   });
 
   test('removes only the relation while preserving field values and definition', () => {
@@ -159,27 +162,31 @@ describe('Tana supertag operations', () => {
       {
         children: [{ text: 'Project' }],
         id: 'project-tag',
-        tanaSupertagDefinition: {
-          fields: [{ id: 'status', name: 'Status', type: 'text' }],
-        },
+        tanaSupertagDefinition: { fields: [{ fieldId: 'status' }] },
         type: KEYS.p,
       },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaFieldValues: { status: { type: 'plain', value: 'Active' } },
+        type: KEYS.p,
+      },
     ]);
 
     assert.equal(applySupertag(editor, 'task', 'project-tag'), true);
-    editor.tf.setNodes(
-      { tanaFieldValues: { status: { type: 'text', value: 'Active' } } },
-      { at: [1] }
-    );
-
     assert.equal(removeSupertag(editor, 'task', 'project-tag'), true);
 
     const index = buildTanaIndex(editor.children);
 
     assert.equal(index.nodesBySupertag.has('project-tag'), false);
-    assert.deepEqual(editor.children[1].tanaFieldValues, {
-      status: { type: 'text', value: 'Active' },
+    assert.deepEqual(editor.children[2].tanaFieldValues, {
+      status: { type: 'plain', value: 'Active' },
     });
     assert.ok(index.nodesById.get('project-tag'));
   });

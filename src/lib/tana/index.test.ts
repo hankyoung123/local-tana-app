@@ -29,7 +29,7 @@ const document: Value = [
       },
     ],
     tanaFieldValues: {
-      status: { type: 'select', value: 'Active' },
+      status: { type: 'options', value: 'active' },
     },
     type: 'p',
   },
@@ -59,7 +59,7 @@ describe('buildTanaIndex', () => {
     ]);
     assert.deepEqual(index.nodesBySupertag.get('project'), ['task']);
     assert.deepEqual(index.fieldValues.get('task'), new Map([
-      ['status', { type: 'select', value: 'Active' }],
+      ['status', { type: 'options', value: 'active' }],
     ]));
     assert.deepEqual(document, before);
   });

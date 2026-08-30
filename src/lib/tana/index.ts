@@ -57,6 +57,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
 
     nodesById.set(descendant.id, {
       fieldValues: tanaNode.tanaFieldValues,
+      fieldDefinition: tanaNode.tanaFieldDefinition,
       id: descendant.id,
       node: descendant,
       path,

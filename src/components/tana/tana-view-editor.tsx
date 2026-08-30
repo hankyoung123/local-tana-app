@@ -14,7 +14,7 @@ import type {
   TanaIndex,
   TanaQueryClause,
 } from '@/lib/tana';
-import { describeTanaQueryClause } from '@/lib/tana';
+import { describeTanaQueryClause, getFieldValueCandidates } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -47,15 +47,10 @@ export function TanaViewDefinitionEditor({
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ supertagDefinition }) => !!supertagDefinition
   );
-  const fields = Array.from(index.nodesById.values()).reduce(
-    (byId, tanaNode) => {
-      tanaNode.supertagDefinition?.fields.forEach((field) => {
-        byId.set(field.id, field);
-      });
-
-      return byId;
-    },
-    new Map<string, FieldDefinition>()
+  const fields = new Map(
+    Array.from(index.nodesById.values())
+      .filter((tanaNode) => !!tanaNode.fieldDefinition)
+      .map((tanaNode) => [tanaNode.id, tanaNode])
   );
   const selectedField = fields.get(fieldId);
 
@@ -94,7 +89,7 @@ export function TanaViewDefinitionEditor({
     } else if (kind === 'text-contains' && text.trim()) {
       clause = { kind, text: text.trim() };
     } else if (kind === 'field-equals' && selectedField) {
-      const value = getFieldValue(selectedField, rawValue);
+      const value = getFieldValue(selectedField.fieldDefinition!, rawValue);
 
       if (value) clause = { fieldId: selectedField.id, kind, value };
     }
@@ -184,7 +179,7 @@ export function TanaViewDefinitionEditor({
             <SelectContent>
               {Array.from(fields.values()).map((field) => (
                 <SelectItem key={field.id} value={field.id}>
-                  {field.name}
+                  {field.text || field.id}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -193,7 +188,7 @@ export function TanaViewDefinitionEditor({
 
         {kind === 'field-equals' && selectedField && (
           <QueryValueInput
-            field={selectedField}
+            field={selectedField.fieldDefinition!}
             index={index}
             value={rawValue}
             onChange={setRawValue}
@@ -235,22 +230,20 @@ function QueryValueInput({
   value: string;
 }) {
   if (
-    field.type === 'boolean' ||
-    field.type === 'select' ||
-    field.type === 'node-reference'
+    field.type === 'checkbox' ||
+    field.type === 'options' ||
+    field.type === 'from-supertag'
   ) {
     const options =
-      field.type === 'boolean'
+      field.type === 'checkbox'
         ? [
             { label: '是', value: 'true' },
             { label: '否', value: 'false' },
           ]
-        : field.type === 'select'
-          ? field.options.map((option) => ({ label: option, value: option }))
-          : Array.from(index.nodesById.values()).map((node) => ({
-              label: node.text || node.id,
-              value: node.id,
-            }));
+        : getFieldValueCandidates(index, field).map((node) => ({
+            label: node.text || node.id,
+            value: node.id,
+          }));
 
     return (
       <Select value={value} onValueChange={onChange}>
@@ -271,7 +264,7 @@ function QueryValueInput({
   return (
     <Input
       className="h-8 text-xs"
-      type={field.type === 'number' ? 'number' : field.type}
+      type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
       value={value}
       placeholder="值"
       onChange={(event) => onChange(event.target.value)}
@@ -286,20 +279,20 @@ function getFieldValue(
   if (!rawValue) return;
 
   switch (field.type) {
-    case 'boolean':
-      return { type: 'boolean', value: rawValue === 'true' };
+    case 'checkbox':
+      return { type: 'checkbox', value: rawValue === 'true' };
     case 'date':
       return { type: 'date', value: rawValue };
-    case 'node-reference':
-      return { type: 'node-reference', value: rawValue };
+    case 'from-supertag':
+      return { type: 'from-supertag', value: rawValue };
     case 'number': {
       const value = Number(rawValue);
 
       return Number.isNaN(value) ? undefined : { type: 'number', value };
     }
-    case 'select':
-      return { type: 'select', value: rawValue };
-    case 'text':
-      return { type: 'text', value: rawValue };
+    case 'options':
+      return { type: 'options', value: rawValue };
+    case 'plain':
+      return { type: 'plain', value: rawValue };
   }
 }
