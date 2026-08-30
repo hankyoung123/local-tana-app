@@ -1,13 +1,13 @@
-import { ElementApi } from 'platejs';
-import type { NodeEntry, Path, Value } from 'platejs';
+import { ElementApi, TextApi } from 'platejs';
+import type { NodeEntry, Path, TElement, Value } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex } from './index';
 import {
-  getTanaAncestorPaths,
   getTanaNodeDescendantPaths,
   getTanaNodePath,
+  getTanaParentPath,
 } from './outliner';
 import { focusTanaNode } from './zoom';
 import type {
@@ -51,20 +51,73 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
     : undefined;
 }
 
-/** Finds the containing Supertag Definition solely from flat-indent ancestry. */
-export function getSupertagTemplateAncestorId(
+function getTanaElementText(element: TElement): string {
+  return element.children
+    .map((child) => {
+      if (TextApi.isText(child)) return child.text;
+
+      return ElementApi.isElement(child) ? getTanaElementText(child) : '';
+    })
+    .join('');
+}
+
+function getDirectSupertagDefinitionParent(
+  document: Value,
+  path: Path
+): TanaBlockElement | undefined {
+  const parentPath = getTanaParentPath(document, path);
+  const parent = parentPath ? document[parentPath[0]] : undefined;
+
+  if (
+    !parent ||
+    !parentPath ||
+    !ElementApi.isElement(parent) ||
+    !isTanaNodeElement(parent, parentPath) ||
+    !(parent as TanaBlockElement).tanaSupertagDefinition
+  ) {
+    return;
+  }
+
+  return parent as TanaBlockElement;
+}
+
+/**
+ * Identifies the one empty, direct Supertag child that Plate may turn into a
+ * transient `>` Field Combobox input. This derives solely from the document;
+ * no temporary flag or parallel workflow state is introduced.
+ */
+export function isSupertagFieldInputNode(
+  document: Value,
+  path: Path
+): boolean {
+  const node = path.length === 1 ? document[path[0]] : undefined;
+
+  if (!node || !ElementApi.isElement(node) || !isTanaNodeElement(node, path)) {
+    return false;
+  }
+
+  const tanaNode = node as TanaBlockElement;
+
+  return (
+    getTanaElementText(tanaNode) === '' &&
+    tanaNode.tanaFieldDefinition === undefined &&
+    tanaNode.tanaSupertagDefinition === undefined &&
+    tanaNode.tanaFieldValues === undefined &&
+    tanaNode.tanaViewDefinition === undefined &&
+    !!getDirectSupertagDefinitionParent(document, path)
+  );
+}
+
+/** Returns the direct Supertag parent only for a verified transient input node. */
+export function getSupertagFieldInputParentId(
   document: Value,
   path: Path
 ): NodeId | undefined {
-  return getTanaAncestorPaths(document, path)
-    .reverse()
-    .flatMap((ancestorPath) => {
-      const ancestor = document[ancestorPath[0]] as TanaBlockElement | undefined;
+  if (!isSupertagFieldInputNode(document, path)) return;
 
-      return ancestor?.tanaSupertagDefinition && typeof ancestor.id === 'string'
-        ? [ancestor.id]
-        : [];
-    })[0];
+  const parent = getDirectSupertagDefinitionParent(document, path);
+
+  return typeof parent?.id === 'string' ? parent.id : undefined;
 }
 
 /** Field candidates remain a direct read-only projection of the Plate document. */
@@ -78,6 +131,56 @@ export function getFieldDefinitionCandidates(
   );
 }
 
+function isFieldDefinitionNameExact(
+  candidate: FieldDefinitionCandidate,
+  normalizedName: string
+): boolean {
+  return (
+    candidate.text.trim().localeCompare(normalizedName, undefined, {
+      sensitivity: 'accent',
+      usage: 'search',
+    }) === 0
+  );
+}
+
+/**
+ * Keeps Plate's fuzzy filtering intact while placing an exact candidate first
+ * in the already-derived candidate list.
+ */
+export function prioritizeFieldDefinitionCandidates(
+  candidates: readonly FieldDefinitionCandidate[],
+  name: string
+): FieldDefinitionCandidate[] {
+  const normalizedName = name.trim();
+
+  if (!normalizedName) return [...candidates];
+
+  const exact: FieldDefinitionCandidate[] = [];
+  const fuzzy: FieldDefinitionCandidate[] = [];
+
+  candidates.forEach((candidate) => {
+    (isFieldDefinitionNameExact(candidate, normalizedName) ? exact : fuzzy).push(
+      candidate
+    );
+  });
+
+  return [...exact, ...fuzzy];
+}
+
+export function hasFieldDefinitionExactMatch(
+  candidates: readonly FieldDefinitionCandidate[],
+  name: string
+): boolean {
+  const normalizedName = name.trim();
+
+  return (
+    normalizedName.length > 0 &&
+    candidates.some((candidate) =>
+      isFieldDefinitionNameExact(candidate, normalizedName)
+    )
+  );
+}
+
 export function findFieldDefinitionExactMatch(
   document: Value,
   name: string
@@ -86,12 +189,8 @@ export function findFieldDefinitionExactMatch(
 
   if (!normalizedName) return;
 
-  return getFieldDefinitionCandidates(document).find(
-    (candidate) =>
-      candidate.text.trim().localeCompare(normalizedName, undefined, {
-        sensitivity: 'accent',
-        usage: 'search',
-      }) === 0
+  return getFieldDefinitionCandidates(document).find((candidate) =>
+    isFieldDefinitionNameExact(candidate, normalizedName)
   );
 }
 
@@ -236,7 +335,8 @@ export function completeSupertagFieldTemplateInput(
 
   if (
     !temporaryPath ||
-    getSupertagTemplateAncestorId(editor.children, temporaryPath) !== supertagId
+    !isSupertagFieldInputNode(editor.children, temporaryPath) ||
+    getSupertagFieldInputParentId(editor.children, temporaryPath) !== supertagId
   ) {
     return;
   }

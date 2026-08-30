@@ -11,22 +11,15 @@ import { FieldInputElement } from '@/components/ui/field-node';
 import {
   TANA_FIELD_COMBOBOX_KEY,
   TANA_FIELD_INPUT_KEY,
-  getSupertagTemplateAncestorId,
-  isTanaNodeElement,
+  isSupertagFieldInputNode,
 } from '@/lib/tana';
 
-function isEmptySupertagTemplateNode(editor: SlateEditor): boolean {
+function isSupertagFieldInput(editor: SlateEditor): boolean {
   const block = editor.api.block();
 
   if (!block) return false;
 
-  const [node, path] = block;
-
-  return (
-    isTanaNodeElement(node, path) &&
-    editor.api.string(path) === '' &&
-    !!getSupertagTemplateAncestorId(editor.children, path)
-  );
+  return isSupertagFieldInputNode(editor.children, block[1]);
 }
 
 const FieldInputPlugin = createPlatePlugin({
@@ -51,7 +44,7 @@ const FieldComboboxPlugin = createPlatePlugin<
     }),
     trigger: '>',
     triggerPreviousCharPattern: /.*/,
-    triggerQuery: isEmptySupertagTemplateNode,
+    triggerQuery: isSupertagFieldInput,
   },
 }).overrideEditor((context) => withTriggerCombobox(context as never));
 

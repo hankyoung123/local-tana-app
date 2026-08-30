@@ -11,9 +11,13 @@ import {
   completeSupertagFieldTemplateInput,
   createFieldDefinition,
   findFieldDefinitionExactMatch,
+  getFieldDefinitionCandidates,
   getFieldValueCandidates,
   getSupertagFieldBindings,
+  hasFieldDefinitionExactMatch,
   isFieldValueCompatible,
+  isSupertagFieldInputNode,
+  prioritizeFieldDefinitionCandidates,
 } from './fields';
 import { TANA_FIELD_INPUT_KEY } from './constants';
 import { buildTanaIndex } from './index';
@@ -218,7 +222,7 @@ describe('Tana field nodes', () => {
     });
   });
 
-  test('triggers the Plate Field Combobox only from an empty Supertag template node', () => {
+  test('triggers the Plate Field Combobox only from a transient Supertag template node', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -227,8 +231,21 @@ describe('Tana field nodes', () => {
         type: KEYS.p,
       },
       { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'field',
+        indent: 1,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'option', indent: 2, type: KEYS.p },
       { children: [{ text: '' }], id: 'outside', type: KEYS.p },
     ]);
+
+    assert.equal(isSupertagFieldInputNode(editor.children, [1]), true);
+    assert.equal(isSupertagFieldInputNode(editor.children, [2]), false);
+    assert.equal(isSupertagFieldInputNode(editor.children, [3]), false);
+    assert.equal(isSupertagFieldInputNode(editor.children, [4]), false);
 
     editor.tf.select([1, 0], { edge: 'end' });
     editor.tf.insertText('>');
@@ -244,6 +261,16 @@ describe('Tana field nodes', () => {
     editor.tf.insertText('>');
 
     assert.equal(editor.children[2].children[0].text, '>');
+
+    editor.tf.select([3, 0], { edge: 'end' });
+    editor.tf.insertText('>');
+
+    assert.equal(editor.children[3].children[0].text, '>');
+
+    editor.tf.select([4, 0], { edge: 'end' });
+    editor.tf.insertText('>');
+
+    assert.equal(editor.children[4].children[0].text, '>');
   });
 
   test('removes an escaped Field Combobox input without changing its temporary Node', () => {
@@ -274,7 +301,7 @@ describe('Tana field nodes', () => {
     assert.deepEqual(editor.children, before);
   });
 
-  test('uses an exact existing Field Definition without creating a duplicate', () => {
+  test('prioritizes an exact Field Definition and does not offer a duplicate creation', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -284,14 +311,27 @@ describe('Tana field nodes', () => {
       },
       { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
       {
+        children: [{ text: 'High Priority' }],
+        id: 'high-priority',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+      {
         children: [{ text: 'Priority' }],
         id: 'priority',
         tanaFieldDefinition: { type: 'number' },
         type: KEYS.p,
       },
     ]);
+    const candidates = getFieldDefinitionCandidates(editor.children);
+    const prioritized = prioritizeFieldDefinitionCandidates(candidates, 'Priority');
     const exact = findFieldDefinitionExactMatch(editor.children, 'Priority');
 
+    assert.deepEqual(
+      prioritized.map(({ id }) => id),
+      ['priority', 'high-priority']
+    );
+    assert.equal(hasFieldDefinitionExactMatch(candidates, 'Priority'), true);
     assert.equal(exact?.id, 'priority');
     assert.equal(
       completeSupertagFieldTemplateInput(editor, 'template', 'project', {
@@ -301,13 +341,41 @@ describe('Tana field nodes', () => {
     );
     assert.equal(
       editor.children.filter((node) => node.tanaFieldDefinition).length,
-      1
+      2
     );
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
       fields: [{ fieldId: 'priority' }],
     });
     assert.equal(editor.children.some((node) => node.id === 'template'), false);
     assert.equal(editor.api.block()?.[0].id, 'project');
+  });
+
+  test('does not mutate a non-transient node when completing a Field input', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'field',
+        indent: 1,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+    const before = structuredClone(editor.children);
+
+    assert.equal(
+      completeSupertagFieldTemplateInput(editor, 'field', 'project', {
+        name: 'New field',
+        type: 'create',
+      }),
+      undefined
+    );
+    assert.deepEqual(editor.children, before);
   });
 
   test('creates a plain Field Definition in the Supertag subtree and binds it', () => {

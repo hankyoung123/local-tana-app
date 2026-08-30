@@ -11,8 +11,9 @@ import { PlateElement, useEditorSelector } from 'platejs/react';
 import {
   completeSupertagFieldTemplateInput,
   getFieldDefinitionCandidates,
-  getSupertagTemplateAncestorId,
-  isTanaNodeElement,
+  getSupertagFieldInputParentId,
+  hasFieldDefinitionExactMatch,
+  prioritizeFieldDefinitionCandidates,
 } from '@/lib/tana';
 import { cn } from '@/lib/utils';
 
@@ -51,35 +52,23 @@ export function FieldInputElement(
   const context = React.useMemo<FieldInputContext | undefined>(() => {
     const inputPath = editor.api.findPath(element);
     const temporaryPath = inputPath ? [inputPath[0]] : undefined;
-    const temporaryNode = temporaryPath
-      ? editor.children[temporaryPath[0]]
+    const temporaryNode = temporaryPath ? editor.children[temporaryPath[0]] : undefined;
+    const supertagId = temporaryPath
+      ? getSupertagFieldInputParentId(editor.children, temporaryPath)
       : undefined;
 
-    if (
-      !temporaryNode ||
-      !temporaryPath ||
-      !isTanaNodeElement(temporaryNode, temporaryPath) ||
-      typeof temporaryNode.id !== 'string'
-    ) {
-      return;
-    }
-
-    const supertagId = getSupertagTemplateAncestorId(
-      editor.children,
-      temporaryPath
-    );
-
-    return supertagId
+    return supertagId && typeof temporaryNode?.id === 'string'
       ? { supertagId, temporaryNodeId: temporaryNode.id }
       : undefined;
   }, [editor, element]);
   const normalizedSearch = search.trim();
-  const hasExactCandidate = candidates.some(
-    (candidate) =>
-      candidate.text.trim().localeCompare(normalizedSearch, undefined, {
-        sensitivity: 'accent',
-        usage: 'search',
-      }) === 0
+  const prioritizedCandidates = React.useMemo(
+    () => prioritizeFieldDefinitionCandidates(candidates, normalizedSearch),
+    [candidates, normalizedSearch]
+  );
+  const hasExactCandidate = hasFieldDefinitionExactMatch(
+    candidates,
+    normalizedSearch
   );
 
   const complete = React.useCallback(
@@ -126,7 +115,7 @@ export function FieldInputElement(
                 <span className={cn('truncate')}>创建 &gt;{normalizedSearch}</span>
               </InlineComboboxItem>
             )}
-            {candidates.map((candidate) => (
+            {prioritizedCandidates.map((candidate) => (
               <InlineComboboxItem
                 key={candidate.id}
                 value={candidate.text}
