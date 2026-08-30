@@ -1,9 +1,7 @@
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
 import { ElementApi } from 'platejs';
-import type { PlateEditor } from 'platejs/react';
-
-import { TanaZoomPlugin as BaseTanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from './constants';
 import {
@@ -14,6 +12,28 @@ import {
 import type { NodeId } from './types';
 
 const EMPTY_OPEN_IDS = new Set<string>();
+
+export const TANA_ZOOM_PLUGIN_KEY = 'tanaZoom' as const;
+
+/** Plate owns the sole Zoom state and its Escape fallback. */
+export const TanaZoomPlugin = createPlatePlugin<
+  typeof TANA_ZOOM_PLUGIN_KEY,
+  { focusedNodeId: NodeId | null }
+>({
+  key: TANA_ZOOM_PLUGIN_KEY,
+  options: {
+    focusedNodeId: null,
+  },
+  priority: 0,
+}).overrideEditor(({ editor, getOption, tf: { escape } }) => ({
+  transforms: {
+    escape: () => {
+      if (!getOption('focusedNodeId')) return escape();
+
+      return zoomOutTanaNode(editor);
+    },
+  },
+}));
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -154,20 +174,3 @@ export function resetInvalidTanaZoom(editor: PlateEditor) {
 
   return true;
 }
-
-/**
- * Core invokes `editor.tf.escape()` after Plate node UI has received the key.
- * This low-priority override therefore becomes the Zoom fallback only when no
- * higher-level Plate UI has consumed Escape.
- */
-export const TanaZoomPlugin = BaseTanaZoomPlugin.overrideEditor(
-  ({ editor, getOption, tf: { escape } }) => ({
-    transforms: {
-      escape: () => {
-        if (!getOption('focusedNodeId')) return escape();
-
-        return zoomOutTanaNode(editor);
-      },
-    },
-  })
-);
