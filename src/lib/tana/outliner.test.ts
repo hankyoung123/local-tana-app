@@ -30,6 +30,9 @@ import {
   isTanaNodeInteractable,
 } from './outliner';
 
+// Plate Navigation schedules browser scrolling; Bun's Node test runtime has no rAF.
+globalThis.requestAnimationFrame ??= () => 0;
+
 const outliner: Value = [
   { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
   { children: [{ text: 'Child' }], id: 'child', indent: 1, type: 'p' },

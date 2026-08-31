@@ -32,6 +32,7 @@ import {
 } from '@/lib/tana';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -74,13 +75,11 @@ const fieldTypes: readonly FieldType[] = [
 
 type TanaInspectorProps = {
   editor: PlateEditor;
-  onNavigate: (nodeId: NodeId) => void;
   selectedNodeId: NodeId | null;
 };
 
 export function TanaInspector({
   editor,
-  onNavigate,
   selectedNodeId,
 }: TanaInspectorProps) {
   const index = useTanaIndex();
@@ -236,7 +235,11 @@ export function TanaInspector({
                   key={`${backlink.sourceNodeId}:${indexInList}`}
                   className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
                   type="button"
-                  onClick={() => onNavigate(backlink.sourceNodeId)}
+                  onClick={() =>
+                    editor
+                      .getTransforms(TanaZoomPlugin)
+                      .zoom.to(backlink.sourceNodeId)
+                  }
                 >
                   <ArrowUpRightIcon className="mt-0.5 size-3 shrink-0" />
                   <span className="line-clamp-2">

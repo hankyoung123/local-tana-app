@@ -27,7 +27,6 @@ import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   Tooltip,
   TooltipContent,
@@ -62,7 +61,6 @@ function TanaDraggableNode({
   ...props
 }: PlateElementProps & { tanaPath: Path }) {
   const openIds = usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
-  const tanaNavigation = useTanaNavigation();
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
   const { hasChildren, isInteractable } = useEditorSelector(
@@ -88,7 +86,6 @@ function TanaDraggableNode({
       hasChildren={hasChildren}
       openIds={openIds}
       tanaPath={tanaPath}
-      zoomToNode={tanaNavigation?.zoomToNode}
     />
   );
 }
@@ -140,13 +137,11 @@ function Draggable({
   hasChildren,
   openIds,
   tanaPath,
-  zoomToNode,
   ...props
 }: PlateElementProps & {
   hasChildren: boolean;
   openIds: ReadonlySet<string>;
   tanaPath: Path;
-  zoomToNode?: (nodeId: string) => void;
 }) {
   const { children, editor, element } = props;
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
@@ -226,8 +221,8 @@ function Draggable({
                 tanaPath={tanaPath}
               />
               <TanaZoomButton
+                editor={editor}
                 nodeId={element.id}
-                onZoomToNode={zoomToNode}
                 style={{ top: `${dragButtonTop + 3}px` }}
               />
               <Button
@@ -272,15 +267,15 @@ function Draggable({
 }
 
 function TanaZoomButton({
+  editor,
   nodeId,
-  onZoomToNode,
   style,
 }: {
+  editor: PlateEditor;
   nodeId: unknown;
-  onZoomToNode?: (nodeId: string) => void;
   style: React.CSSProperties;
 }) {
-  if (typeof nodeId !== 'string' || !onZoomToNode) return null;
+  if (typeof nodeId !== 'string') return null;
 
   return (
     <Button
@@ -293,7 +288,7 @@ function TanaZoomButton({
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        onZoomToNode(nodeId);
+        editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
       }}
       onMouseDown={(event) => event.preventDefault()}
       style={style}

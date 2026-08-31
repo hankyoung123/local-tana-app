@@ -75,37 +75,38 @@ function reveal(editor: PlateEditor, targetNodeId: NodeId) {
   return true;
 }
 
+function navigate(editor: PlateEditor, targetPath: number[]) {
+  const point = editor.api.start(targetPath);
+
+  if (!point) return false;
+
+  return editor.tf.navigation.navigate({
+    flash: false,
+    focus: true,
+    scroll: true,
+    select: point,
+    target: { path: targetPath, type: 'node' },
+  });
+}
+
 function focus(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
-  if (!targetEntry) return false;
+  if (!targetEntry || !reveal(editor, targetNodeId)) return false;
 
-  const [targetNode, targetPath] = targetEntry;
-
-  reveal(editor, targetNodeId);
-  editor.tf.select(targetPath);
-  editor.tf.focus();
-
-  if (typeof window !== 'undefined') {
-    window.requestAnimationFrame(() => {
-      editor.api.toDOMNode(targetNode)?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    });
-  }
-
-  return true;
+  return navigate(editor, targetEntry[1]);
 }
 
 function zoomTo(editor: PlateEditor, targetNodeId: NodeId) {
-  if (!getTanaNodeEntry(editor, targetNodeId)) return false;
+  const targetEntry = getTanaNodeEntry(editor, targetNodeId);
+
+  if (!targetEntry) return false;
 
   editor.setOption(TanaZoomPlugin, 'focusedNodeId', targetNodeId);
   reveal(editor, targetNodeId);
   pruneBlockSelection(editor);
 
-  return focus(editor, targetNodeId);
+  return navigate(editor, targetEntry[1]);
 }
 
 function zoomRoot(editor: PlateEditor) {

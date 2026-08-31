@@ -3,28 +3,25 @@
 import * as React from 'react';
 
 import { HashIcon, HomeIcon, ListFilterIcon, SearchIcon } from 'lucide-react';
+import { useEditorRef } from 'platejs/react';
 
 import type { NodeId, TanaIndex } from '@/lib/tana';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
 type TanaSidebarProps = {
   activeNodeId: NodeId | null;
   index: TanaIndex;
-  onNavigate: (nodeId: NodeId) => void;
-  onOpenView: (nodeId: NodeId) => void;
-  onWorkspaceRoot: () => void;
   workspaceRootActive: boolean;
 };
 
 export function TanaSidebar({
   activeNodeId,
   index,
-  onNavigate,
-  onOpenView,
-  onWorkspaceRoot,
   workspaceRootActive,
 }: TanaSidebarProps) {
+  const editor = useEditorRef();
   const [search, setSearch] = React.useState('');
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const results = normalizedSearch
@@ -67,7 +64,7 @@ export function TanaSidebar({
               results.map((node) => (
                 <SidebarButton
                   key={node.id}
-                  onClick={() => onNavigate(node.id)}
+                  onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
                 >
                   <SearchIcon />
                   <span className="truncate">{node.text}</span>
@@ -80,7 +77,7 @@ export function TanaSidebar({
             <SidebarSection title="工作区">
               <SidebarButton
                 active={workspaceRootActive}
-                onClick={onWorkspaceRoot}
+                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
               >
                 <HomeIcon />
                 <span className="truncate">工作区</span>
@@ -97,7 +94,9 @@ export function TanaSidebar({
                   <SidebarButton
                     key={node.id}
                     active={activeNodeId === node.id}
-                    onClick={() => onNavigate(node.id)}
+                    onClick={() =>
+                      editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
+                    }
                   >
                     <HashIcon />
                     <span className="truncate">{node.text}</span>
@@ -119,7 +118,9 @@ export function TanaSidebar({
                   <SidebarButton
                     key={view.id}
                     active={activeNodeId === view.id}
-                    onClick={() => onOpenView(view.id)}
+                    onClick={() =>
+                      editor.getTransforms(TanaZoomPlugin).zoom.to(view.id)
+                    }
                   >
                     <ListFilterIcon />
                     <span className="truncate">{view.text}</span>

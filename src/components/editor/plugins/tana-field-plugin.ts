@@ -25,8 +25,6 @@ import type {
   TanaBlockElement,
 } from '@/lib/tana/types';
 
-import { TanaZoomPlugin } from './tana-zoom-plugin';
-
 export const TANA_FIELD_PLUGIN_KEY = 'tanaField' as const;
 
 export type FieldInputChoice =
@@ -474,7 +472,18 @@ function completeTemplateInput(
   if (!currentTemporaryPath) return;
 
   editor.tf.removeNodes({ at: currentTemporaryPath });
-  editor.getApi(TanaZoomPlugin).zoom.focus(supertagId);
+  const supertagPath = getTanaNodePath(editor.children, supertagId);
+  const point = supertagPath ? editor.api.end(supertagPath) : undefined;
+
+  if (supertagPath && point) {
+    editor.tf.navigation.navigate({
+      flash: false,
+      focus: true,
+      scroll: true,
+      select: point,
+      target: { path: supertagPath, type: 'node' },
+    });
+  }
 
   return fieldId;
 }

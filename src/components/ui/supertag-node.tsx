@@ -9,7 +9,6 @@ import { HashIcon, PlusIcon } from 'lucide-react';
 import { PlateElement } from 'platejs/react';
 
 import { useTanaIndex } from '@/components/tana/tana-index-context';
-import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   isTanaNodeElement,
 } from '@/lib/tana';
@@ -38,7 +37,6 @@ export function SupertagElement(
   props: PlateElementProps<SupertagElementType>
 ) {
   const { element, editor } = props;
-  const tanaNavigation = useTanaNavigation();
   const displayName = getNodeDisplayNameFromIndex(useTanaIndex(), element.key);
 
   const navigateToDefinition = React.useCallback(
@@ -47,13 +45,9 @@ export function SupertagElement(
 
       event.preventDefault();
       event.stopPropagation();
-      if (tanaNavigation) {
-        tanaNavigation.navigateToNode(element.key);
-      } else {
-        editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
-      }
+      editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
     },
-    [editor, element.key, tanaNavigation]
+    [editor, element.key]
   );
 
   return (

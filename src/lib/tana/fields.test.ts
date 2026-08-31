@@ -29,6 +29,9 @@ import {
 } from './fields';
 import { buildTanaIndex } from './index';
 
+// Plate Navigation schedules browser scrolling; Bun's Node test runtime has no rAF.
+globalThis.requestAnimationFrame ??= () => 0;
+
 function createEditor(value: Value) {
   let nextId = 0;
 

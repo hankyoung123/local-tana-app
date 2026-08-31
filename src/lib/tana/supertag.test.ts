@@ -10,6 +10,9 @@ import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex } from './index';
 
+// Plate Navigation schedules browser scrolling; Bun's Node test runtime has no rAF.
+globalThis.requestAnimationFrame ??= () => 0;
+
 function createEditor(value: Value) {
   let nextId = 0;
 

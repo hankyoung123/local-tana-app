@@ -16,7 +16,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
-import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   getNodeDisplayNameFromIndex,
@@ -42,7 +41,6 @@ export function MentionElement(
   const focused = useFocused();
   const mounted = useMounted();
   const readOnly = useReadOnly();
-  const tanaNavigation = useTanaNavigation();
   const index = useTanaIndex();
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
   const displayName = getNodeDisplayNameFromIndex(index, targetNodeId);
@@ -60,13 +58,9 @@ export function MentionElement(
       event.preventDefault();
       event.stopPropagation();
 
-      if (tanaNavigation) {
-        tanaNavigation.navigateToNode(targetNodeId);
-      } else {
-        props.editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
-      }
+      props.editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
     },
-    [element.key, props.editor, tanaNavigation]
+    [element.key, props.editor]
   );
 
   return (

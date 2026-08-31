@@ -1,26 +1,25 @@
 'use client';
 
 import { ArrowLeftIcon, ArrowUpRightIcon, ListFilterIcon } from 'lucide-react';
+import { useEditorRef } from 'platejs/react';
 
-import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana';
+import type { TanaIndex, TanaNode } from '@/lib/tana';
 import {
   describeTanaQueryClause,
   getNodeSupertagIds,
   runTanaQuery,
 } from '@/lib/tana';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
 
 export function TanaView({
   index,
-  onBack,
-  onNavigate,
   view,
 }: {
   index: TanaIndex;
-  onBack: () => void;
-  onNavigate: (nodeId: NodeId) => void;
   view: TanaNode;
 }) {
+  const editor = useEditorRef();
   const clauses = view.viewDefinition?.clauses ?? [];
   const results = runTanaQuery(index, clauses).filter(
     ({ id }) => id !== view.id
@@ -30,9 +29,13 @@ export function TanaView({
     <section className="flex min-w-0 flex-1 flex-col bg-white">
       <header className="shrink-0 border-b px-6 py-5 sm:px-10">
         <div className="mb-3 flex items-center justify-between gap-4">
-          <Button size="sm" variant="ghost" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.out()}
+          >
             <ArrowLeftIcon />
-            返回编辑器
+            返回上级
           </Button>
           <span className="text-muted-foreground text-xs tabular-nums">
             {results.length} 条结果
@@ -79,7 +82,9 @@ export function TanaView({
                   key={node.id}
                   className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50"
                   type="button"
-                  onClick={() => onNavigate(node.id)}
+                  onClick={() =>
+                    editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
+                  }
                 >
                   <ArrowUpRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">

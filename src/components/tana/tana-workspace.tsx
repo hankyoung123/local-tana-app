@@ -2,25 +2,21 @@
 
 import * as React from 'react';
 
-import { ChevronRightIcon, HashIcon } from 'lucide-react';
+import { ChevronRightIcon } from 'lucide-react';
 import { useEditorRef, useEditorSelector, usePluginOption } from 'platejs/react';
 
-import { Editor, EditorContainer } from '@/components/ui/editor';
 import {
   getTanaAncestorPaths,
   getTanaNodePath,
   isTanaNodeElement,
-  type NodeId,
-  type TanaNode,
 } from '@/lib/tana';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 
 import { TanaIndexProvider, useTanaIndex } from './tana-index-context';
 import { TanaInspector } from './tana-inspector';
-import { TanaNavigationProvider } from './tana-navigation-context';
+import { TanaNodeViewHost } from './tana-node-view-host';
 import { TanaOutlinerOpenState } from './tana-outliner-open-state';
 import { TanaSidebar } from './tana-sidebar';
-import { TanaView } from './tana-view';
 
 export type PersistenceStatus =
   | 'browser-preview'
@@ -47,7 +43,6 @@ function TanaWorkspaceContent({
 }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
-  const [activeViewId, setActiveViewId] = React.useState<NodeId | null>(null);
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
   const selectedNodeId = useEditorSelector(
@@ -71,37 +66,6 @@ function TanaWorkspaceContent({
     []
   );
 
-  const zoomToNode = React.useCallback(
-    (nodeId: NodeId) => {
-      setActiveViewId(null);
-      editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
-    },
-    [editor]
-  );
-
-  const zoomOut = React.useCallback(() => {
-    setActiveViewId(null);
-    editor.getTransforms(TanaZoomPlugin).zoom.out();
-  }, [editor]);
-
-  const zoomToWorkspaceRoot = React.useCallback(() => {
-    setActiveViewId(null);
-    editor.getTransforms(TanaZoomPlugin).zoom.root();
-  }, [editor]);
-
-  const handleNavigate = React.useCallback(
-    (nodeId: NodeId) => {
-      zoomToNode(nodeId);
-    },
-    [zoomToNode]
-  );
-
-  const handleOpenView = React.useCallback((nodeId: NodeId) => {
-    if (!editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)) return;
-
-    setActiveViewId(nodeId);
-  }, [editor]);
-
   const focusedNodeExists = useEditorSelector(
     (currentEditor) =>
       !focusedNodeId || !!currentEditor.api.node({ at: [], id: focusedNodeId }),
@@ -111,15 +75,6 @@ function TanaWorkspaceContent({
   React.useEffect(() => {
     if (!focusedNodeExists) editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
   }, [editor, focusedNodeExists]);
-
-  const navigation = React.useMemo(
-    () => ({
-      navigateToNode: handleNavigate,
-      zoomOut,
-      zoomToNode,
-    }),
-    [handleNavigate, zoomOut, zoomToNode]
-  );
 
   const breadcrumbNodeIds = React.useMemo(() => {
     if (!focusedNodeId || !index.nodesById.has(focusedNodeId)) {
@@ -143,177 +98,81 @@ function TanaWorkspaceContent({
     return node ? [node] : [];
   });
 
-  const activeView = activeViewId
-    ? index.nodesById.get(activeViewId)
-    : undefined;
-  const activeNodeId = activeViewId ?? focusedNodeId ?? selectedNodeId;
-  const activeNode = activeNodeId
-    ? index.nodesById.get(activeNodeId)
-    : undefined;
-  const focusedSupertag = focusedNodeId
-    ? index.nodesById.get(focusedNodeId)
-    : undefined;
-  const showSupertagInstances = !!focusedSupertag?.supertagDefinition;
-  const pageTitle = activeNode?.text || '工作区';
+  const activeNodeId = focusedNodeId ?? selectedNodeId;
 
   return (
-    <TanaNavigationProvider value={navigation}>
-      <div className="flex h-dvh min-w-0 flex-col bg-[#f4f6f5] text-[#202421]">
-        <TanaOutlinerOpenState />
-        <header className="flex h-12 shrink-0 items-center border-b border-[#dfe4e1] bg-white px-4">
-          <div className="flex min-w-0 flex-1 items-center gap-5">
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="grid size-6 place-items-center rounded bg-[#1f6f52] font-semibold text-[11px] text-white">
-                LT
-              </span>
-              <span className="font-semibold text-[13px]">Local Tana</span>
-            </div>
-
-            <nav
-              aria-label="路径导航"
-              className="flex min-w-0 items-center gap-1 text-[#6d746f] text-xs"
-            >
-              <button
-                className="truncate hover:text-[#343a36] disabled:text-[#343a36]"
-                disabled={!focusedNodeId}
-                onClick={zoomToWorkspaceRoot}
-                type="button"
-              >
-                工作区
-              </button>
-              {breadcrumbs.map((node, index) => {
-                const isCurrent = index === breadcrumbs.length - 1;
-
-                return (
-                  <React.Fragment key={node.id}>
-                    <ChevronRightIcon className="size-3.5 shrink-0" />
-                    {isCurrent ? (
-                      <span className="truncate font-medium text-[#343a36]">
-                        {node.text || '未命名节点'}
-                      </span>
-                    ) : (
-                      <button
-                        className="truncate hover:text-[#343a36]"
-                        onClick={() => zoomToNode(node.id)}
-                        type="button"
-                      >
-                        {node.text || '未命名节点'}
-                      </button>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </nav>
+    <div className="flex h-dvh min-w-0 flex-col bg-[#f4f6f5] text-[#202421]">
+      <TanaOutlinerOpenState />
+      <header className="flex h-12 shrink-0 items-center border-b border-[#dfe4e1] bg-white px-4">
+        <div className="flex min-w-0 flex-1 items-center gap-5">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="grid size-6 place-items-center rounded bg-[#1f6f52] font-semibold text-[11px] text-white">
+              LT
+            </span>
+            <span className="font-semibold text-[13px]">Local Tana</span>
           </div>
 
-          <p className="ml-3 shrink-0 text-[10px] text-muted-foreground">
-            {persistenceStatus === 'browser-preview' && '浏览器预览'}
-            {persistenceStatus === 'saving' && '正在保存…'}
-            {persistenceStatus === 'saved' && '已保存到 SQLite'}
-            {persistenceStatus === 'error' && '保存失败'}
-          </p>
-        </header>
-
-        <main className="flex min-h-0 flex-1">
-          <TanaSidebar
-            activeNodeId={activeNodeId}
-            index={index}
-            onNavigate={handleNavigate}
-            onOpenView={handleOpenView}
-            onWorkspaceRoot={zoomToWorkspaceRoot}
-            workspaceRootActive={!focusedNodeId && !activeViewId}
-          />
-
-          {activeView?.viewDefinition ? (
-            <TanaView
-              index={index}
-              view={activeView}
-              onBack={() => setActiveViewId(null)}
-              onNavigate={handleNavigate}
-            />
-          ) : showSupertagInstances && focusedSupertag ? (
-            <SupertagInstances
-              definition={focusedSupertag}
-              onNavigate={handleNavigate}
-            />
-          ) : (
-            <section className="flex min-w-0 flex-1 flex-col bg-white">
-              <div className="shrink-0 border-b border-[#e7ebe8] px-6 py-5 sm:px-[max(48px,calc(50%-390px))]">
-                <p className="mb-1 text-[#7b827d] text-xs">工作区</p>
-                <h1 className="font-semibold text-2xl text-[#202421] tracking-normal">
-                  {pageTitle}
-                </h1>
-              </div>
-
-              <EditorContainer className="min-h-0 flex-1" variant="default">
-                <Editor
-                  className="h-full px-8 pt-5 pb-40 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
-                  placeholder="新建节点…"
-                  variant="none"
-                />
-              </EditorContainer>
-            </section>
-          )}
-
-          <TanaInspector
-            editor={editor}
-            selectedNodeId={activeViewId ?? selectedNodeId}
-            onNavigate={handleNavigate}
-          />
-        </main>
-      </div>
-    </TanaNavigationProvider>
-  );
-}
-
-function SupertagInstances({
-  definition,
-  onNavigate,
-}: {
-  definition: TanaNode;
-  onNavigate: (nodeId: NodeId) => void;
-}) {
-  const index = useTanaIndex();
-  const instanceIds = index.nodesBySupertag.get(definition.id) ?? [];
-
-  return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <div className="shrink-0 border-b border-[#e7ebe8] px-6 py-5 sm:px-[max(48px,calc(50%-390px))]">
-        <p className="mb-1 flex items-center gap-1.5 text-[#1f6f52] text-xs">
-          <HashIcon className="size-3.5" />
-          超级标签
-        </p>
-        <h1 className="font-semibold text-2xl text-[#202421] tracking-normal">
-          # {definition.text || '未命名超级标签'}
-        </h1>
-      </div>
-      <div className="flex-1 overflow-y-auto px-6 py-4 sm:px-[max(48px,calc(50%-390px))]">
-        <p className="mb-3 text-muted-foreground text-xs">
-          实例 {instanceIds.length}
-        </p>
-        {instanceIds.length === 0 ? (
-          <p className="text-muted-foreground text-sm">暂无实例。</p>
-        ) : (
-          <div className="space-y-1">
-            {instanceIds.map((instanceId) => {
-              const instance = index.nodesById.get(instanceId);
-
-              if (!instance) return null;
+          <nav
+            aria-label="路径导航"
+            className="flex min-w-0 items-center gap-1 text-[#6d746f] text-xs"
+          >
+            <button
+              className="truncate hover:text-[#343a36] disabled:text-[#343a36]"
+              disabled={!focusedNodeId}
+              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
+              type="button"
+            >
+              工作区
+            </button>
+            {breadcrumbs.map((node, index) => {
+              const isCurrent = index === breadcrumbs.length - 1;
 
               return (
-                <button
-                  key={instance.id}
-                  className="flex w-full rounded-md px-3 py-2 text-left text-sm hover:bg-[#f2f6f3]"
-                  onClick={() => onNavigate(instance.id)}
-                  type="button"
-                >
-                  {instance.text || '未命名节点'}
-                </button>
+                <React.Fragment key={node.id}>
+                  <ChevronRightIcon className="size-3.5 shrink-0" />
+                  {isCurrent ? (
+                    <span className="truncate font-medium text-[#343a36]">
+                      {node.text || '未命名节点'}
+                    </span>
+                  ) : (
+                    <button
+                      className="truncate hover:text-[#343a36]"
+                      onClick={() =>
+                        editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
+                      }
+                      type="button"
+                    >
+                      {node.text || '未命名节点'}
+                    </button>
+                  )}
+                </React.Fragment>
               );
             })}
-          </div>
-        )}
-      </div>
-    </section>
+          </nav>
+        </div>
+
+        <p className="ml-3 shrink-0 text-[10px] text-muted-foreground">
+          {persistenceStatus === 'browser-preview' && '浏览器预览'}
+          {persistenceStatus === 'saving' && '正在保存…'}
+          {persistenceStatus === 'saved' && '已保存到 SQLite'}
+          {persistenceStatus === 'error' && '保存失败'}
+        </p>
+      </header>
+
+      <main className="flex min-h-0 flex-1">
+        <TanaSidebar
+          activeNodeId={activeNodeId}
+          index={index}
+          workspaceRootActive={!focusedNodeId}
+        />
+
+        <TanaNodeViewHost
+          focusedNodeId={focusedNodeId}
+          selectedNodeId={selectedNodeId}
+        />
+
+        <TanaInspector editor={editor} selectedNodeId={selectedNodeId} />
+      </main>
+    </div>
   );
 }
