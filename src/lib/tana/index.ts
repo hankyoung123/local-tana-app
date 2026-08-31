@@ -176,11 +176,24 @@ function getReferenceTargetByKey(element: TElement): NodeId | undefined {
 }
 
 export function getNodeDisplayName(document: Value, nodeId: NodeId): string {
-  return buildTanaIndex(document).nodesById.get(nodeId)?.text ?? 'Unknown node';
+  return getNodeDisplayNameFromIndex(buildTanaIndex(document), nodeId);
+}
+
+export function getNodeDisplayNameFromIndex(
+  index: TanaIndex,
+  nodeId: NodeId
+): string {
+  return index.nodesById.get(nodeId)?.text ?? 'Unknown node';
 }
 
 export function getSupertagCandidates(document: Value): SupertagCandidate[] {
-  return Array.from(buildTanaIndex(document).nodesById.values())
+  return getSupertagCandidatesFromIndex(buildTanaIndex(document));
+}
+
+export function getSupertagCandidatesFromIndex(
+  index: TanaIndex
+): SupertagCandidate[] {
+  return Array.from(index.nodesById.values())
     .filter(
       (node): node is TanaNode & { supertagDefinition: SupertagDefinition } =>
         !!node.supertagDefinition && node.text.length > 0
@@ -204,7 +217,13 @@ export function getNodeSupertagIds(
 export function getNodeReferenceCandidates(
   document: Value
 ): NodeReferenceCandidate[] {
-  return Array.from(buildTanaIndex(document).nodesById.values())
+  return getNodeReferenceCandidatesFromIndex(buildTanaIndex(document));
+}
+
+export function getNodeReferenceCandidatesFromIndex(
+  index: TanaIndex
+): NodeReferenceCandidate[] {
+  return Array.from(index.nodesById.values())
     .filter(({ text }) => text.length > 0)
     .map(({ id, text }) => ({ id, text }));
 }

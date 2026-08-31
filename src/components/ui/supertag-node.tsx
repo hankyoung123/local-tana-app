@@ -6,17 +6,19 @@ import type { TComboboxInputElement, TElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
 import { HashIcon, PlusIcon } from 'lucide-react';
-import { PlateElement, useEditorSelector } from 'platejs/react';
+import { PlateElement } from 'platejs/react';
 
+import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
-  applySupertag as applySupertagToNode,
-  createSupertag,
-  getNodeDisplayName,
-  getSupertagCandidates,
   isTanaNodeElement,
-  navigateToNode,
 } from '@/lib/tana';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import {
+  getNodeDisplayNameFromIndex,
+  getSupertagCandidatesFromIndex,
+} from '@/lib/tana/index';
 import { cn } from '@/lib/utils';
 
 import {
@@ -37,10 +39,7 @@ export function SupertagElement(
 ) {
   const { element, editor } = props;
   const tanaNavigation = useTanaNavigation();
-  const displayName = useEditorSelector(
-    (currentEditor) => getNodeDisplayName(currentEditor.children, element.key),
-    [element.key]
-  );
+  const displayName = getNodeDisplayNameFromIndex(useTanaIndex(), element.key);
 
   const navigateToDefinition = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -51,7 +50,7 @@ export function SupertagElement(
       if (tanaNavigation) {
         tanaNavigation.navigateToNode(element.key);
       } else {
-        navigateToNode(editor, element.key);
+        editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
       }
     },
     [editor, element.key, tanaNavigation]
@@ -81,19 +80,7 @@ export function SupertagInputElement(
 ) {
   const { editor, element } = props;
   const [search, setSearch] = React.useState('');
-  const candidates = useEditorSelector(
-    (currentEditor) => getSupertagCandidates(currentEditor.children),
-    [],
-    {
-      equalityFn: (previous, next) =>
-        previous.length === next.length &&
-        previous.every(
-          (candidate, index) =>
-            candidate.id === next[index]?.id &&
-            candidate.text === next[index]?.text
-        ),
-    }
-  );
+  const candidates = getSupertagCandidatesFromIndex(useTanaIndex());
   const targetNodeId = React.useMemo(() => {
     const inputPath = editor.api.findPath(element);
     const targetPath = inputPath ? [inputPath[0]] : undefined;
@@ -119,17 +106,21 @@ export function SupertagInputElement(
     (supertagId: string) => {
       if (!targetNodeId) return;
 
-      applySupertagToNode(editor, targetNodeId, supertagId);
+      editor.getTransforms(TanaSupertagPlugin).supertag.apply(
+        targetNodeId,
+        supertagId
+      );
     },
     [editor, targetNodeId]
   );
-  const createAndApplySupertag = React.useCallback(() => {
+  const createAndApplySupertag = () => {
     if (!targetNodeId) return;
 
-    const supertagId = createSupertag(editor, normalizedSearch);
+    const transforms = editor.getTransforms(TanaSupertagPlugin).supertag;
+    const supertagId = transforms.create(normalizedSearch);
 
-    if (supertagId) applySupertagToNode(editor, targetNodeId, supertagId);
-  }, [editor, normalizedSearch, targetNodeId]);
+    if (supertagId) transforms.apply(targetNodeId, supertagId);
+  };
 
   return (
     <PlateElement {...props} as="span">

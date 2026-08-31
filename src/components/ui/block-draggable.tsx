@@ -26,7 +26,7 @@ import {
 import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
-import { TanaZoomPlugin } from '@/lib/tana/zoom';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
 import {
   Tooltip,

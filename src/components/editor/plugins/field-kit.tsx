@@ -15,6 +15,8 @@ import {
   isSupertagFieldInputNode,
 } from '@/lib/tana';
 
+import { TanaFieldPlugin } from './tana-field-plugin';
+
 function isFieldInput(editor: SlateEditor): boolean {
   const block = editor.api.block();
 
@@ -52,4 +54,4 @@ const FieldComboboxPlugin = createPlatePlugin<
   },
 }).overrideEditor((context) => withTriggerCombobox(context as never));
 
-export const FieldKit = [FieldComboboxPlugin, FieldInputPlugin];
+export const FieldKit = [TanaFieldPlugin, FieldComboboxPlugin, FieldInputPlugin];

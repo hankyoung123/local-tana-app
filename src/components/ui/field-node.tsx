@@ -6,12 +6,15 @@ import type { TComboboxInputElement, TElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
 import { ListPlusIcon, PlusIcon } from 'lucide-react';
-import { PlateElement, useEditorSelector } from 'platejs/react';
+import { PlateElement } from 'platejs/react';
 
+import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
-  completeAdHocFieldInput,
-  completeSupertagFieldTemplateInput,
-  getFieldDefinitionCandidates,
+  TanaFieldPlugin,
+  type FieldInputChoice,
+} from '@/components/editor/plugins/tana-field-plugin';
+import {
+  getFieldDefinitionCandidatesFromIndex,
   getSupertagFieldInputParentId,
   hasFieldDefinitionExactMatch,
   isAdHocFieldInputNode,
@@ -37,19 +40,7 @@ export function FieldInputElement(
 ) {
   const { editor, element } = props;
   const [search, setSearch] = React.useState('');
-  const candidates = useEditorSelector(
-    (currentEditor) => getFieldDefinitionCandidates(currentEditor.children),
-    [],
-    {
-      equalityFn: (previous, next) =>
-        previous.length === next.length &&
-        previous.every(
-          (candidate, index) =>
-            candidate.id === next[index]?.id &&
-            candidate.text === next[index]?.text
-        ),
-    }
-  );
+  const candidates = getFieldDefinitionCandidatesFromIndex(useTanaIndex());
   const context = React.useMemo<FieldInputContext | undefined>(() => {
     const inputPath = editor.api.findPath(element);
     const temporaryPath = inputPath ? [inputPath[0]] : undefined;
@@ -83,12 +74,13 @@ export function FieldInputElement(
   );
 
   const complete = React.useCallback(
-    (choice: { fieldId: string } | { name: string; type: 'create' }) => {
+    (choice: FieldInputChoice) => {
       if (!context) return;
 
+      const field = editor.getTransforms(TanaFieldPlugin).field;
+
       if (context.kind === 'supertag-template') {
-        completeSupertagFieldTemplateInput(
-          editor,
+        field.completeTemplateInput(
           context.temporaryNodeId,
           context.supertagId,
           choice
@@ -97,7 +89,7 @@ export function FieldInputElement(
         return;
       }
 
-      completeAdHocFieldInput(editor, context.nodeId, choice);
+      field.completeAdHocInput(context.nodeId, choice);
     },
     [context, editor]
   );

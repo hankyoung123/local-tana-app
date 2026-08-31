@@ -3,37 +3,17 @@ import { TogglePlugin } from '@platejs/toggle/react';
 import { ElementApi } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
-import { isTanaNodeElement } from './constants';
+import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   getTanaAncestorPaths,
   getTanaNodePath,
   isTanaNodeInteractable,
-} from './outliner';
-import type { NodeId } from './types';
+} from '@/lib/tana/outliner';
+import type { NodeId } from '@/lib/tana/types';
 
 const EMPTY_OPEN_IDS = new Set<string>();
 
 export const TANA_ZOOM_PLUGIN_KEY = 'tanaZoom' as const;
-
-/** Plate owns the sole Zoom state and its Escape fallback. */
-export const TanaZoomPlugin = createPlatePlugin<
-  typeof TANA_ZOOM_PLUGIN_KEY,
-  { focusedNodeId: NodeId | null }
->({
-  key: TANA_ZOOM_PLUGIN_KEY,
-  options: {
-    focusedNodeId: null,
-  },
-  priority: 0,
-}).overrideEditor(({ editor, getOption, tf: { escape } }) => ({
-  transforms: {
-    escape: () => {
-      if (!getOption('focusedNodeId')) return escape();
-
-      return zoomOutTanaNode(editor);
-    },
-  },
-}));
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -51,11 +31,7 @@ function getFocusedNodeId(editor: PlateEditor) {
   return editor.getOption(TanaZoomPlugin, 'focusedNodeId');
 }
 
-/**
- * Removes only IDs that are outside the one shared interaction predicate.
- * Plate Block Selection remains the only selection state.
- */
-export function pruneTanaBlockSelection(editor: PlateEditor) {
+function pruneBlockSelection(editor: PlateEditor) {
   if (!editor.plugins[BlockSelectionPlugin.key]) return;
 
   const openIds = editor.getOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
@@ -77,8 +53,7 @@ export function pruneTanaBlockSelection(editor: PlateEditor) {
   blockSelection.set(interactableIds);
 }
 
-/** Opens flat-indent ancestors through Plate Toggle's existing openIds. */
-export function revealTanaNode(editor: PlateEditor, targetNodeId: NodeId) {
+function reveal(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
   if (!targetEntry) return false;
@@ -100,15 +75,14 @@ export function revealTanaNode(editor: PlateEditor, targetNodeId: NodeId) {
   return true;
 }
 
-/** Places the Plate caret and focus on an already-resolved Tana Node. */
-export function focusTanaNode(editor: PlateEditor, targetNodeId: NodeId) {
+function focus(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
   if (!targetEntry) return false;
 
   const [targetNode, targetPath] = targetEntry;
 
-  revealTanaNode(editor, targetNodeId);
+  reveal(editor, targetNodeId);
   editor.tf.select(targetPath);
   editor.tf.focus();
 
@@ -124,19 +98,24 @@ export function focusTanaNode(editor: PlateEditor, targetNodeId: NodeId) {
   return true;
 }
 
-/** Sets the sole Plate-owned Zoom state, then focuses the target NodeId. */
-export function zoomToTanaNode(editor: PlateEditor, targetNodeId: NodeId) {
+function zoomTo(editor: PlateEditor, targetNodeId: NodeId) {
   if (!getTanaNodeEntry(editor, targetNodeId)) return false;
 
   editor.setOption(TanaZoomPlugin, 'focusedNodeId', targetNodeId);
-  revealTanaNode(editor, targetNodeId);
-  pruneTanaBlockSelection(editor);
+  reveal(editor, targetNodeId);
+  pruneBlockSelection(editor);
 
-  return focusTanaNode(editor, targetNodeId);
+  return focus(editor, targetNodeId);
 }
 
-/** Returns to the indent parent or the canonical workspace root. */
-export function zoomOutTanaNode(editor: PlateEditor) {
+function zoomRoot(editor: PlateEditor) {
+  editor.setOption(TanaZoomPlugin, 'focusedNodeId', null);
+  pruneBlockSelection(editor);
+
+  return true;
+}
+
+function zoomOut(editor: PlateEditor) {
   const focusedNodeId = getFocusedNodeId(editor);
 
   if (!focusedNodeId) return false;
@@ -148,29 +127,51 @@ export function zoomOutTanaNode(editor: PlateEditor) {
   const parent = parentPath ? editor.api.node(parentPath)?.[0] : null;
   const parentId = parent && 'id' in parent ? parent.id : null;
 
-  if (typeof parentId === 'string') {
-    return zoomToTanaNode(editor, parentId);
-  }
+  if (typeof parentId === 'string') return zoomTo(editor, parentId);
 
-  return zoomToTanaWorkspaceRoot(editor);
+  return zoomRoot(editor);
 }
 
-/** Returns the editor to the canonical workspace root. */
-export function zoomToTanaWorkspaceRoot(editor: PlateEditor) {
-  editor.setOption(TanaZoomPlugin, 'focusedNodeId', null);
-  pruneTanaBlockSelection(editor);
-
-  return true;
-}
-
-/** Restores the canonical root when a focused NodeId no longer exists. */
-export function resetInvalidTanaZoom(editor: PlateEditor) {
+function resetInvalid(editor: PlateEditor) {
   const focusedNodeId = getFocusedNodeId(editor);
 
   if (!focusedNodeId || getTanaNodeEntry(editor, focusedNodeId)) return false;
 
-  editor.setOption(TanaZoomPlugin, 'focusedNodeId', null);
-  pruneTanaBlockSelection(editor);
-
-  return true;
+  return zoomRoot(editor);
 }
+
+/** Plate owns the sole Zoom state and all Tana-specific navigation transforms. */
+export const TanaZoomPlugin = createPlatePlugin<
+  typeof TANA_ZOOM_PLUGIN_KEY,
+  { focusedNodeId: NodeId | null }
+>({
+  key: TANA_ZOOM_PLUGIN_KEY,
+  options: {
+    focusedNodeId: null,
+  },
+  priority: 0,
+})
+  .extendEditorApi(({ editor }) => ({
+    zoom: {
+      focus: (nodeId: NodeId) => focus(editor, nodeId),
+      pruneBlockSelection: () => pruneBlockSelection(editor),
+      resetInvalid: () => resetInvalid(editor),
+      reveal: (nodeId: NodeId) => reveal(editor, nodeId),
+    },
+  }))
+  .extendEditorTransforms(({ editor }) => ({
+    zoom: {
+      out: () => zoomOut(editor),
+      root: () => zoomRoot(editor),
+      to: (nodeId: NodeId) => zoomTo(editor, nodeId),
+    },
+  }))
+  .overrideEditor(({ editor, getOption, tf: { escape } }) => ({
+    transforms: {
+      escape: () => {
+        if (!getOption('focusedNodeId')) return escape();
+
+        return zoomOut(editor);
+      },
+    },
+  }));

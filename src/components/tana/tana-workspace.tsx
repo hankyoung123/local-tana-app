@@ -7,20 +7,15 @@ import { useEditorRef, useEditorSelector, usePluginOption } from 'platejs/react'
 
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import {
-  buildTanaIndex,
   getTanaAncestorPaths,
   getTanaNodePath,
   isTanaNodeElement,
-  resetInvalidTanaZoom,
   type NodeId,
-  type TanaIndex,
   type TanaNode,
-  zoomOutTanaNode,
-  zoomToTanaNode,
-  zoomToTanaWorkspaceRoot,
 } from '@/lib/tana';
-import { TanaZoomPlugin } from '@/lib/tana/zoom';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 
+import { TanaIndexProvider, useTanaIndex } from './tana-index-context';
 import { TanaInspector } from './tana-inspector';
 import { TanaNavigationProvider } from './tana-navigation-context';
 import { TanaOutlinerOpenState } from './tana-outliner-open-state';
@@ -38,11 +33,24 @@ export function TanaWorkspace({
 }: {
   persistenceStatus: PersistenceStatus;
 }) {
+  return (
+    <TanaIndexProvider>
+      <TanaWorkspaceContent persistenceStatus={persistenceStatus} />
+    </TanaIndexProvider>
+  );
+}
+
+function TanaWorkspaceContent({
+  persistenceStatus,
+}: {
+  persistenceStatus: PersistenceStatus;
+}) {
   const editor = useEditorRef();
+  const index = useTanaIndex();
   const [activeViewId, setActiveViewId] = React.useState<NodeId | null>(null);
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
-  const derived = useEditorSelector(
+  const selectedNodeId = useEditorSelector(
     (currentEditor) => {
       const selectedTopLevel = currentEditor.selection
         ? currentEditor.children[currentEditor.selection.anchor.path[0]]
@@ -51,16 +59,14 @@ export function TanaWorkspace({
         ? [currentEditor.selection.anchor.path[0]]
         : undefined;
 
-      return {
-        index: buildTanaIndex(currentEditor.children),
-        selectedNodeId:
-          selectedTopLevel &&
-          selectedTopLevelPath &&
-          isTanaNodeElement(selectedTopLevel, selectedTopLevelPath) &&
-          typeof selectedTopLevel.id === 'string'
-            ? selectedTopLevel.id
-            : null,
-      };
+      return (
+        selectedTopLevel &&
+        selectedTopLevelPath &&
+        isTanaNodeElement(selectedTopLevel, selectedTopLevelPath) &&
+        typeof selectedTopLevel.id === 'string'
+          ? selectedTopLevel.id
+          : null
+      );
     },
     []
   );
@@ -68,19 +74,19 @@ export function TanaWorkspace({
   const zoomToNode = React.useCallback(
     (nodeId: NodeId) => {
       setActiveViewId(null);
-      zoomToTanaNode(editor, nodeId);
+      editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
     },
     [editor]
   );
 
   const zoomOut = React.useCallback(() => {
     setActiveViewId(null);
-    zoomOutTanaNode(editor);
+    editor.getTransforms(TanaZoomPlugin).zoom.out();
   }, [editor]);
 
   const zoomToWorkspaceRoot = React.useCallback(() => {
     setActiveViewId(null);
-    zoomToTanaWorkspaceRoot(editor);
+    editor.getTransforms(TanaZoomPlugin).zoom.root();
   }, [editor]);
 
   const handleNavigate = React.useCallback(
@@ -91,7 +97,7 @@ export function TanaWorkspace({
   );
 
   const handleOpenView = React.useCallback((nodeId: NodeId) => {
-    if (!zoomToTanaNode(editor, nodeId)) return;
+    if (!editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)) return;
 
     setActiveViewId(nodeId);
   }, [editor]);
@@ -103,7 +109,7 @@ export function TanaWorkspace({
   );
 
   React.useEffect(() => {
-    if (!focusedNodeExists) resetInvalidTanaZoom(editor);
+    if (!focusedNodeExists) editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
   }, [editor, focusedNodeExists]);
 
   const navigation = React.useMemo(
@@ -116,7 +122,7 @@ export function TanaWorkspace({
   );
 
   const breadcrumbNodeIds = React.useMemo(() => {
-    if (!focusedNodeId || !derived.index.nodesById.has(focusedNodeId)) {
+    if (!focusedNodeId || !index.nodesById.has(focusedNodeId)) {
       return [];
     }
 
@@ -129,23 +135,23 @@ export function TanaWorkspace({
       .flatMap((node) =>
         node && 'id' in node && typeof node.id === 'string' ? [node.id] : []
       );
-  }, [derived.index, editor, focusedNodeId]);
+  }, [editor, focusedNodeId, index]);
 
   const breadcrumbs = breadcrumbNodeIds.flatMap((nodeId) => {
-    const node = derived.index.nodesById.get(nodeId);
+    const node = index.nodesById.get(nodeId);
 
     return node ? [node] : [];
   });
 
   const activeView = activeViewId
-    ? derived.index.nodesById.get(activeViewId)
+    ? index.nodesById.get(activeViewId)
     : undefined;
-  const activeNodeId = activeViewId ?? focusedNodeId ?? derived.selectedNodeId;
+  const activeNodeId = activeViewId ?? focusedNodeId ?? selectedNodeId;
   const activeNode = activeNodeId
-    ? derived.index.nodesById.get(activeNodeId)
+    ? index.nodesById.get(activeNodeId)
     : undefined;
   const focusedSupertag = focusedNodeId
-    ? derived.index.nodesById.get(focusedNodeId)
+    ? index.nodesById.get(focusedNodeId)
     : undefined;
   const showSupertagInstances = !!focusedSupertag?.supertagDefinition;
   const pageTitle = activeNode?.text || '工作区';
@@ -211,7 +217,7 @@ export function TanaWorkspace({
         <main className="flex min-h-0 flex-1">
           <TanaSidebar
             activeNodeId={activeNodeId}
-            index={derived.index}
+            index={index}
             onNavigate={handleNavigate}
             onOpenView={handleOpenView}
             onWorkspaceRoot={zoomToWorkspaceRoot}
@@ -220,7 +226,7 @@ export function TanaWorkspace({
 
           {activeView?.viewDefinition ? (
             <TanaView
-              index={derived.index}
+              index={index}
               view={activeView}
               onBack={() => setActiveViewId(null)}
               onNavigate={handleNavigate}
@@ -228,7 +234,6 @@ export function TanaWorkspace({
           ) : showSupertagInstances && focusedSupertag ? (
             <SupertagInstances
               definition={focusedSupertag}
-              index={derived.index}
               onNavigate={handleNavigate}
             />
           ) : (
@@ -252,8 +257,7 @@ export function TanaWorkspace({
 
           <TanaInspector
             editor={editor}
-            index={derived.index}
-            selectedNodeId={activeViewId ?? derived.selectedNodeId}
+            selectedNodeId={activeViewId ?? selectedNodeId}
             onNavigate={handleNavigate}
           />
         </main>
@@ -264,13 +268,12 @@ export function TanaWorkspace({
 
 function SupertagInstances({
   definition,
-  index,
   onNavigate,
 }: {
   definition: TanaNode;
-  index: TanaIndex;
   onNavigate: (nodeId: NodeId) => void;
 }) {
+  const index = useTanaIndex();
   const instanceIds = index.nodesBySupertag.get(definition.id) ?? [];
 
   return (

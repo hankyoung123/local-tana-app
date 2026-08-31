@@ -8,13 +8,13 @@ import { TogglePlugin } from '@platejs/toggle/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { BlockSelectionKit } from '@/components/editor/plugins/block-selection-kit';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   canDropOnInteractableTanaNode,
   toggleTanaNodeCollapse,
 } from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex, getNodeReferenceCandidates } from './index';
-import { navigateToNode } from './navigation';
 import {
   getTanaAncestorPaths,
   getTanaNodeDescendantPaths,
@@ -26,17 +26,24 @@ import {
   isTanaNodeHidden,
   isTanaNodeInteractable,
 } from './outliner';
-import {
-  resetInvalidTanaZoom,
-  TanaZoomPlugin,
-  zoomToTanaNode,
-} from './zoom';
 
 const outliner: Value = [
   { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
   { children: [{ text: 'Child' }], id: 'child', indent: 1, type: 'p' },
   { children: [{ text: 'Sibling' }], id: 'sibling', type: 'p' },
 ];
+
+function navigateToNode(editor: ReturnType<typeof createPlateEditor>, nodeId: string) {
+  return editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
+}
+
+function zoomToTanaNode(editor: ReturnType<typeof createPlateEditor>, nodeId: string) {
+  return editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
+}
+
+function resetInvalidTanaZoom(editor: ReturnType<typeof createPlateEditor>) {
+  return editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
+}
 
 describe('Tana outliner behavior', () => {
   test('uses one NodeId predicate for every top-level block type', () => {

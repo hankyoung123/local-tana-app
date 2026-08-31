@@ -1,11 +1,16 @@
 import { ElementApi } from 'platejs';
 import type { NodeEntry } from 'platejs';
-import type { PlateEditor } from 'platejs/react';
+import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
-import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
-import { isFieldValueCompatible } from './fields';
-import { buildTanaIndex } from './index';
-import type { NodeId, TanaBlockElement } from './types';
+import {
+  isTanaNodeElement,
+  TANA_SUPERTAG_KEY,
+} from '@/lib/tana/constants';
+import { isFieldValueCompatible } from '@/lib/tana/fields';
+import { buildTanaIndex } from '@/lib/tana/index';
+import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+
+export const TANA_SUPERTAG_PLUGIN_KEY = 'tanaSupertag' as const;
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -17,32 +22,29 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
     : undefined;
 }
 
-function getSupertagDefinition(editor: PlateEditor, supertagId: NodeId) {
+function getDefinitionEntry(editor: PlateEditor, supertagId: NodeId) {
   const entry = getTanaNodeEntry(editor, supertagId);
 
   return entry?.[0].tanaSupertagDefinition ? entry : undefined;
 }
 
-function normalizeSupertagName(name: string) {
+function normalizeName(name: string) {
   return name.trim();
 }
 
 function isSelectionInNode(editor: PlateEditor, nodePath: number[]) {
   const { selection } = editor;
 
-  if (!selection) return false;
-
-  return [selection.anchor, selection.focus].every(
-    (point) => point.path[0] === nodePath[0]
+  return (
+    !!selection &&
+    [selection.anchor, selection.focus].every(
+      (point) => point.path[0] === nodePath[0]
+    )
   );
 }
 
-/**
- * Creates an ordinary Plate block marked as a Supertag definition. Plate's
- * NodeId plugin assigns its ID during the insert transform.
- */
-export function createSupertag(editor: PlateEditor, name: string) {
-  const normalizedName = normalizeSupertagName(name);
+function create(editor: PlateEditor, name: string): NodeId | undefined {
+  const normalizedName = normalizeName(name);
 
   if (!normalizedName) return;
 
@@ -75,17 +77,19 @@ export function createSupertag(editor: PlateEditor, name: string) {
     : undefined;
 }
 
-/**
- * Applies a definition relation once. Only explicit binding defaults are
- * instantiated, and existing instance values always win.
- */
-export function applySupertag(
-  editor: PlateEditor,
-  nodeId: NodeId,
-  supertagId: NodeId
-) {
+function define(editor: PlateEditor, nodeId: NodeId) {
+  const entry = getTanaNodeEntry(editor, nodeId);
+
+  if (!entry || entry[0].tanaSupertagDefinition) return false;
+
+  editor.tf.setNodes({ tanaSupertagDefinition: { fields: [] } }, { at: entry[1] });
+
+  return true;
+}
+
+function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const nodeEntry = getTanaNodeEntry(editor, nodeId);
-  const definitionEntry = getSupertagDefinition(editor, supertagId);
+  const definitionEntry = getDefinitionEntry(editor, supertagId);
 
   if (!nodeEntry || !definitionEntry) return false;
 
@@ -116,8 +120,7 @@ export function applySupertag(
     editor.tf.setNodes({ tanaFieldValues: nextFieldValues }, { at: nodePath });
   }
 
-  const selection = editor.selection;
-  const selectionIsInNode = !!selection && isSelectionInNode(editor, nodePath);
+  const selectionIsInNode = isSelectionInNode(editor, nodePath);
 
   editor.tf.insertNodes(
     {
@@ -126,10 +129,7 @@ export function applySupertag(
       type: TANA_SUPERTAG_KEY,
     },
     {
-      at:
-        selection && selectionIsInNode
-          ? selection
-          : editor.api.end(nodePath),
+      at: selectionIsInNode ? editor.selection! : editor.api.end(nodePath),
     }
   );
 
@@ -150,12 +150,7 @@ export function applySupertag(
   return true;
 }
 
-/** Removes only the inline type relation, preserving node fields and definition. */
-export function removeSupertag(
-  editor: PlateEditor,
-  nodeId: NodeId,
-  supertagId: NodeId
-) {
+function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const nodeEntry = getTanaNodeEntry(editor, nodeId);
 
   if (!nodeEntry) return false;
@@ -174,3 +169,17 @@ export function removeSupertag(
 
   return entries.length > 0;
 }
+
+/** Owns all document mutations for the existing Plate `#` Combobox workflow. */
+export const TanaSupertagPlugin = createPlatePlugin({
+  key: TANA_SUPERTAG_PLUGIN_KEY,
+}).extendEditorTransforms(({ editor }) => ({
+  supertag: {
+    apply: (nodeId: NodeId, supertagId: NodeId) =>
+      apply(editor, nodeId, supertagId),
+    create: (name: string) => create(editor, name),
+    define: (nodeId: NodeId) => define(editor, nodeId),
+    remove: (nodeId: NodeId, supertagId: NodeId) =>
+      remove(editor, nodeId, supertagId),
+  },
+}));

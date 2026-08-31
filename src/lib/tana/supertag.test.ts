@@ -5,11 +5,10 @@ import { KEYS, type TElement, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { isTanaNodeElement } from './constants';
 import { buildTanaIndex } from './index';
-import { navigateToNode } from './navigation';
-import { applySupertag, createSupertag, removeSupertag } from './supertag';
-import { TanaZoomPlugin } from './zoom';
 
 function createEditor(value: Value) {
   let nextId = 0;
@@ -30,6 +29,34 @@ function tagElements(node: TElement) {
     (child): child is TElement =>
       'type' in child && child.type === 'tana_supertag'
   );
+}
+
+function supertag(editor: ReturnType<typeof createEditor>) {
+  return editor.getTransforms(TanaSupertagPlugin).supertag;
+}
+
+function createSupertag(editor: ReturnType<typeof createEditor>, name: string) {
+  return supertag(editor).create(name);
+}
+
+function applySupertag(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  supertagId: string
+) {
+  return supertag(editor).apply(nodeId, supertagId);
+}
+
+function removeSupertag(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  supertagId: string
+) {
+  return supertag(editor).remove(nodeId, supertagId);
+}
+
+function navigateToNode(editor: ReturnType<typeof createEditor>, nodeId: string) {
+  return editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
 }
 
 describe('Tana supertag operations', () => {

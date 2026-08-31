@@ -5,7 +5,7 @@ import { TogglePlugin } from '@platejs/toggle/react';
 
 import { BlockSelection } from '@/components/ui/block-selection';
 import { isTanaNodeInteractable } from '@/lib/tana';
-import { TanaZoomPlugin } from '@/lib/tana/zoom';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 const EMPTY_OPEN_IDS = new Set<string>();
 

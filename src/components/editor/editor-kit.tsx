@@ -12,14 +12,13 @@ import { CursorOverlayKit } from '@/components/editor/plugins/cursor-overlay-kit
 import { DndKit } from '@/components/editor/plugins/dnd-kit';
 import { ExitBreakKit } from '@/components/editor/plugins/exit-break-kit';
 import { FieldKit } from '@/components/editor/plugins/field-kit';
-import { FixedToolbarKit } from '@/components/editor/plugins/fixed-toolbar-kit';
 import { FloatingToolbarKit } from '@/components/editor/plugins/floating-toolbar-kit';
 import { LinkKit } from '@/components/editor/plugins/link-kit';
 import { ListKit } from '@/components/editor/plugins/list-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
-import { TanaZoomPlugin } from '@/lib/tana/zoom';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 
 export const EditorKit = [
@@ -51,7 +50,6 @@ export const EditorKit = [
 
   // UI
   ...BlockPlaceholderKit,
-  ...FixedToolbarKit,
   ...FloatingToolbarKit,
 ];
 

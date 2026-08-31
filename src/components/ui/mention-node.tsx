@@ -8,7 +8,6 @@ import type { PlateElementProps } from 'platejs/react';
 import { IS_APPLE, KEYS } from 'platejs';
 import {
   PlateElement,
-  useEditorSelector,
   useFocused,
   useReadOnly,
   useSelected,
@@ -16,12 +15,13 @@ import {
 
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
+import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { useTanaNavigation } from '@/components/tana/tana-navigation-context';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
-  getNodeDisplayName,
-  getNodeReferenceCandidates,
-  navigateToNode,
-} from '@/lib/tana';
+  getNodeDisplayNameFromIndex,
+  getNodeReferenceCandidatesFromIndex,
+} from '@/lib/tana/index';
 
 import {
   InlineCombobox,
@@ -43,11 +43,9 @@ export function MentionElement(
   const mounted = useMounted();
   const readOnly = useReadOnly();
   const tanaNavigation = useTanaNavigation();
+  const index = useTanaIndex();
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
-  const displayName = useEditorSelector(
-    (editor) => getNodeDisplayName(editor.children, targetNodeId),
-    [targetNodeId]
-  );
+  const displayName = getNodeDisplayNameFromIndex(index, targetNodeId);
 
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -65,7 +63,7 @@ export function MentionElement(
       if (tanaNavigation) {
         tanaNavigation.navigateToNode(targetNodeId);
       } else {
-        navigateToNode(props.editor, targetNodeId);
+        props.editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
       }
     },
     [element.key, props.editor, tanaNavigation]
@@ -117,19 +115,7 @@ export function MentionInputElement(
 ) {
   const { editor, element } = props;
   const [search, setSearch] = React.useState('');
-  const candidates = useEditorSelector(
-    (currentEditor) => getNodeReferenceCandidates(currentEditor.children),
-    [],
-    {
-      equalityFn: (previous, next) =>
-        previous.length === next.length &&
-        previous.every(
-          (candidate, index) =>
-            candidate.id === next[index]?.id &&
-            candidate.text === next[index]?.text
-        ),
-    }
-  );
+  const candidates = getNodeReferenceCandidatesFromIndex(useTanaIndex());
 
   return (
     <PlateElement {...props} as="span">

@@ -5,16 +5,10 @@ import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
+import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { isTanaNodeElement } from './constants';
 import {
-  addAdHocField,
-  bindFieldToSupertag,
-  clearFieldValue,
-  completeAdHocFieldInput,
-  completeSupertagFieldTemplateInput,
-  createFieldDefinition,
-  createFieldOption,
-  deleteAdHocField,
   findFieldDefinitionExactMatch,
   getFieldDefinitionCandidates,
   getFieldValueCandidates,
@@ -28,12 +22,9 @@ import {
   isFieldSet,
   isSupertagFieldInputNode,
   prioritizeFieldDefinitionCandidates,
-  removeFieldOption,
-  setFieldValue,
 } from './fields';
 import { TANA_FIELD_INPUT_KEY } from './constants';
 import { buildTanaIndex } from './index';
-import { applySupertag } from './supertag';
 
 function createEditor(value: Value) {
   let nextId = 0;
@@ -47,6 +38,105 @@ function createEditor(value: Value) {
     plugins: EditorKit,
     value,
   });
+}
+
+function field(editor: ReturnType<typeof createEditor>) {
+  return editor.getTransforms(TanaFieldPlugin).field;
+}
+
+function supertag(editor: ReturnType<typeof createEditor>) {
+  return editor.getTransforms(TanaSupertagPlugin).supertag;
+}
+
+function addAdHocField(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  fieldId: string
+) {
+  return field(editor).addAdHoc(nodeId, fieldId);
+}
+
+function bindFieldToSupertag(
+  editor: ReturnType<typeof createEditor>,
+  supertagId: string,
+  fieldId: string
+) {
+  return field(editor).bind(supertagId, fieldId);
+}
+
+function clearFieldValue(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  fieldId: string
+) {
+  return field(editor).clearValue(nodeId, fieldId);
+}
+
+function completeAdHocFieldInput(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  choice: Parameters<ReturnType<typeof field>['completeAdHocInput']>[1]
+) {
+  return field(editor).completeAdHocInput(nodeId, choice);
+}
+
+function completeSupertagFieldTemplateInput(
+  editor: ReturnType<typeof createEditor>,
+  temporaryNodeId: string,
+  supertagId: string,
+  choice: Parameters<ReturnType<typeof field>['completeTemplateInput']>[2]
+) {
+  return field(editor).completeTemplateInput(temporaryNodeId, supertagId, choice);
+}
+
+function createFieldDefinition(
+  editor: ReturnType<typeof createEditor>,
+  name: string,
+  definition: Parameters<ReturnType<typeof field>['createDefinition']>[1],
+  parentNodeId?: string
+) {
+  return field(editor).createDefinition(name, definition, parentNodeId);
+}
+
+function createFieldOption(
+  editor: ReturnType<typeof createEditor>,
+  fieldId: string,
+  name: string
+) {
+  return field(editor).createOption(fieldId, name);
+}
+
+function deleteAdHocField(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  fieldId: string
+) {
+  return field(editor).deleteAdHoc(nodeId, fieldId);
+}
+
+function removeFieldOption(
+  editor: ReturnType<typeof createEditor>,
+  fieldId: string,
+  optionId: string
+) {
+  return field(editor).removeOption(fieldId, optionId);
+}
+
+function setFieldValue(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  fieldId: string,
+  value: Parameters<ReturnType<typeof field>['setValue']>[2]
+) {
+  return field(editor).setValue(nodeId, fieldId, value);
+}
+
+function applySupertag(
+  editor: ReturnType<typeof createEditor>,
+  nodeId: string,
+  supertagId: string
+) {
+  return supertag(editor).apply(nodeId, supertagId);
 }
 
 describe('Tana field nodes', () => {

@@ -23,21 +23,15 @@ import type {
   TanaNode,
 } from '@/lib/tana';
 import {
-  bindFieldToSupertag,
-  clearFieldValue,
-  createFieldDefinition,
-  createFieldOption,
-  deleteAdHocField,
   getFieldValueCandidates,
   getNodeSupertagIds,
   getSupertagFieldBindings,
   isFieldDefined,
   isAdHocField,
   isFieldValueCompatible,
-  removeFieldOption,
-  removeSupertag,
-  setFieldValue,
 } from '@/lib/tana';
+import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -56,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { TanaViewDefinitionEditor } from './tana-view-editor';
+import { useTanaIndex } from './tana-index-context';
 
 const EMPTY_VALUE = '__local_tana_empty__';
 
@@ -79,17 +74,18 @@ const fieldTypes: readonly FieldType[] = [
 
 type TanaInspectorProps = {
   editor: PlateEditor;
-  index: TanaIndex;
   onNavigate: (nodeId: NodeId) => void;
   selectedNodeId: NodeId | null;
 };
 
 export function TanaInspector({
   editor,
-  index,
   onNavigate,
   selectedNodeId,
 }: TanaInspectorProps) {
+  const index = useTanaIndex();
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const supertagTransforms = editor.getTransforms(TanaSupertagPlugin).supertag;
   const selectedNode = selectedNodeId
     ? index.nodesById.get(selectedNodeId)
     : undefined;
@@ -158,7 +154,7 @@ export function TanaInspector({
                   type="button"
                   aria-label={`移除 ${supertagId}`}
                   onClick={() =>
-                    removeSupertag(editor, selectedNode.id, supertagId)
+                    supertagTransforms.remove(selectedNode.id, supertagId)
                   }
                 >
                   <Trash2Icon className="size-3" />
@@ -202,14 +198,14 @@ export function TanaInspector({
                   label={field.text || field.id}
                   value={selectedNode.fieldValues?.[field.id]}
                   onChange={(value) =>
-                    setFieldValue(editor, selectedNode.id, field.id, value)
+                    fieldTransforms.setValue(selectedNode.id, field.id, value)
                   }
                   onClear={() =>
-                    clearFieldValue(editor, selectedNode.id, field.id)
+                    fieldTransforms.clearValue(selectedNode.id, field.id)
                   }
                   onRemove={
                     isDirectField
-                      ? () => deleteAdHocField(editor, selectedNode.id, field.id)
+                      ? () => fieldTransforms.deleteAdHoc(selectedNode.id, field.id)
                       : undefined
                   }
                 />
@@ -281,11 +277,12 @@ function AddFieldToTemplateAction({
   supertags: readonly TanaNode[];
   value?: FieldValueState;
 }) {
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const addToTemplate = (supertagId: NodeId) => {
-    if (!bindFieldToSupertag(editor, supertagId, fieldId)) return;
+    if (!fieldTransforms.bind(supertagId, fieldId)) return;
 
     // A binding already expresses Defined + Not Set. Keep real FieldValues.
-    if (value === null) deleteAdHocField(editor, nodeId, fieldId);
+    if (value === null) fieldTransforms.deleteAdHoc(nodeId, fieldId);
   };
 
   if (supertags.length === 0) return null;
@@ -507,6 +504,7 @@ function FieldDefinitionEditor({
   index: TanaIndex;
   node: TanaNode;
 }) {
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const definition = node.fieldDefinition!;
   const supertags = Array.from(index.nodesById.values()).filter(
     (candidate) => !!candidate.supertagDefinition
@@ -522,10 +520,7 @@ function FieldDefinitionEditor({
       : [];
 
   const updateDefinition = (nextDefinition: FieldDefinition) => {
-    editor.tf.setNodes(
-      { tanaFieldDefinition: nextDefinition },
-      { at: node.path }
-    );
+    fieldTransforms.updateDefinition(node.id, nextDefinition);
   };
 
   const updateType = (type: FieldType) => {
@@ -586,7 +581,7 @@ function FieldDefinitionEditor({
                   className="rounded p-0.5 text-muted-foreground hover:text-destructive"
                   type="button"
                   aria-label={`删除选项 ${option.text || option.id}`}
-                  onClick={() => removeFieldOption(editor, node.id, option.id)}
+                  onClick={() => fieldTransforms.removeOption(node.id, option.id)}
                 >
                   <Trash2Icon className="size-3" />
                 </button>
@@ -606,7 +601,7 @@ function FieldDefinitionEditor({
               variant="outline"
               disabled={!optionName.trim()}
               onClick={() => {
-                if (createFieldOption(editor, node.id, optionName)) {
+                if (fieldTransforms.createOption(node.id, optionName)) {
                   setOptionName('');
                 }
               }}
@@ -649,6 +644,8 @@ function SupertagDefinitionEditor({
   index: TanaIndex;
   node: TanaNode;
 }) {
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const supertagTransforms = editor.getTransforms(TanaSupertagPlugin).supertag;
   const [fieldName, setFieldName] = React.useState('');
   const [fieldType, setFieldType] = React.useState<FieldType>('plain');
   const [sourceSupertagId, setSourceSupertagId] = React.useState('');
@@ -664,12 +661,7 @@ function SupertagDefinitionEditor({
           className="w-full"
           size="sm"
           variant="outline"
-          onClick={() =>
-            editor.tf.setNodes(
-              { tanaSupertagDefinition: { fields: [] } },
-              { at: node.path }
-            )
-          }
+          onClick={() => supertagTransforms.define(node.id)}
         >
           <HashIcon />
           定义为超级标签
@@ -679,15 +671,6 @@ function SupertagDefinitionEditor({
   }
 
   const resolvedBindings = getSupertagFieldBindings(index, node.id);
-  const updateBindings = (
-    fields: NonNullable<TanaBlockElement['tanaSupertagDefinition']>['fields']
-  ) => {
-    editor.tf.setNodes(
-      { tanaSupertagDefinition: { fields } },
-      { at: node.path }
-    );
-  };
-
   const createAndBindField = () => {
     const name = fieldName.trim();
     const fieldDefinition = createDefinition(
@@ -697,28 +680,19 @@ function SupertagDefinitionEditor({
 
     if (!name || !fieldDefinition) return;
 
-    const fieldId = createFieldDefinition(
-      editor,
+    const fieldId = fieldTransforms.createDefinition(
       name,
       fieldDefinition,
       node.id
     );
 
-    if (fieldId) bindFieldToSupertag(editor, node.id, fieldId);
+    if (fieldId) fieldTransforms.bind(node.id, fieldId);
 
     setFieldName('');
   };
 
   const updateDefault = (fieldId: NodeId, defaultValue?: FieldValue) => {
-    updateBindings(
-      definition.fields.map((binding) =>
-        binding.fieldId !== fieldId
-          ? binding
-          : defaultValue === undefined
-            ? { fieldId }
-            : { defaultValue, fieldId }
-      )
-    );
+    fieldTransforms.setBindingDefault(node.id, fieldId, defaultValue);
   };
 
   return (
@@ -742,13 +716,7 @@ function SupertagDefinitionEditor({
                 className="rounded p-0.5 text-muted-foreground hover:text-destructive"
                 type="button"
                 aria-label={`移除字段绑定 ${field.text || field.id}`}
-                onClick={() =>
-                  updateBindings(
-                    definition.fields.filter(
-                      (candidate) => candidate.fieldId !== field.id
-                    )
-                  )
-                }
+                onClick={() => fieldTransforms.unbind(node.id, field.id)}
               >
                 <Trash2Icon className="size-3" />
               </button>

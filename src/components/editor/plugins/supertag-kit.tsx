@@ -15,6 +15,8 @@ import {
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana';
 
+import { TanaSupertagPlugin } from './tana-supertag-plugin';
+
 const SupertagInputPlugin = createPlatePlugin({
   editOnly: true,
   key: TANA_SUPERTAG_INPUT_KEY,
@@ -48,4 +50,8 @@ const SupertagPlugin = createPlatePlugin<
   .overrideEditor((context) => withTriggerCombobox(context as never))
   .withComponent(SupertagElement);
 
-export const SupertagKit = [SupertagPlugin, SupertagInputPlugin];
+export const SupertagKit = [
+  TanaSupertagPlugin,
+  SupertagPlugin,
+  SupertagInputPlugin,
+];
