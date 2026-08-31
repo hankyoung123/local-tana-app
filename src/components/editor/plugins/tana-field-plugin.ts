@@ -6,7 +6,7 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   findFieldDefinitionExactMatch,
   isAdHocFieldInputNode,
-  isFieldValueCompatible,
+  isFieldValueValid,
   isSupertagFieldInputNode,
   getSupertagFieldInputParentId,
 } from '@/lib/tana/fields';
@@ -82,7 +82,13 @@ function setValue(
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
 
   if (!nodeEntry || !fieldEntry?.[0].tanaFieldDefinition) return false;
-  if (!isFieldValueCompatible(fieldEntry[0].tanaFieldDefinition, value)) {
+  if (
+    !isFieldValueValid(
+      buildTanaIndex(editor.children),
+      fieldEntry[0].tanaFieldDefinition,
+      value
+    )
+  ) {
     return false;
   }
 
@@ -111,7 +117,13 @@ function applyDefault(
 
   if (!nodeEntry || !fieldEntry?.[0].tanaFieldDefinition) return false;
   if (hasDirectFieldValue(nodeEntry[0].tanaFieldValues, fieldId)) return false;
-  if (!isFieldValueCompatible(fieldEntry[0].tanaFieldDefinition, value)) {
+  if (
+    !isFieldValueValid(
+      buildTanaIndex(editor.children),
+      fieldEntry[0].tanaFieldDefinition,
+      value
+    )
+  ) {
     return false;
   }
 
@@ -327,6 +339,17 @@ function bind(
     return false;
   }
 
+  if (
+    defaultValue !== undefined &&
+    !isFieldValueValid(
+      buildTanaIndex(editor.children),
+      fieldEntry[0].tanaFieldDefinition,
+      defaultValue
+    )
+  ) {
+    return false;
+  }
+
   const definition = supertagEntry[0].tanaSupertagDefinition;
 
   if (definition.fields.some((binding) => binding.fieldId === fieldId)) {
@@ -375,9 +398,25 @@ function setBindingDefault(
   defaultValue: FieldValue | undefined
 ) {
   const entry = getTanaNodeEntry(editor, supertagId);
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = entry?.[0].tanaSupertagDefinition;
 
-  if (!entry || !definition?.fields.some((binding) => binding.fieldId === fieldId)) {
+  if (
+    !entry ||
+    !fieldEntry?.[0].tanaFieldDefinition ||
+    !definition?.fields.some((binding) => binding.fieldId === fieldId)
+  ) {
+    return false;
+  }
+
+  if (
+    defaultValue !== undefined &&
+    !isFieldValueValid(
+      buildTanaIndex(editor.children),
+      fieldEntry[0].tanaFieldDefinition,
+      defaultValue
+    )
+  ) {
     return false;
   }
 

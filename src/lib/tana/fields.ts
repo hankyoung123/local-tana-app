@@ -38,6 +38,31 @@ export function isFieldValueCompatible(
   return definition.type === value.type;
 }
 
+/** Validates both a FieldValue's type and its reference-like candidate. */
+export function isFieldValueValid(
+  index: TanaIndex,
+  definition: FieldDefinition,
+  value: FieldValue
+): boolean {
+  if (!isFieldValueCompatible(definition, value)) return false;
+
+  if (definition.type === 'options' && value.type === 'options') {
+    return (
+      definition.options.includes(value.value) && index.nodesById.has(value.value)
+    );
+  }
+
+  if (definition.type === 'from-supertag' && value.type === 'from-supertag') {
+    return (
+      definition.sourceSupertagId !== null &&
+      (index.nodesBySupertag.get(definition.sourceSupertagId)?.includes(value.value) ??
+        false)
+    );
+  }
+
+  return true;
+}
+
 function getTanaBlockAt(
   document: Value,
   path: Path

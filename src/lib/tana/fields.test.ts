@@ -7,7 +7,11 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
-import { isTanaNodeElement } from './constants';
+import {
+  isTanaNodeElement,
+  TANA_FIELD_INPUT_KEY,
+  TANA_SUPERTAG_KEY,
+} from './constants';
 import {
   findFieldDefinitionExactMatch,
   getFieldDefinitionCandidatesFromIndex,
@@ -23,7 +27,6 @@ import {
   isSupertagFieldInputNode,
   prioritizeFieldDefinitionCandidates,
 } from './fields';
-import { TANA_FIELD_INPUT_KEY } from './constants';
 import { buildTanaIndex } from './index';
 
 function createEditor(value: Value) {
@@ -247,6 +250,137 @@ describe('Tana field nodes', () => {
     );
     assert.equal(applySupertag(editor, 'task', 'project'), true);
     assert.equal(editor.children[2].tanaFieldValues, undefined);
+  });
+
+  test('rejects an Options value that is not a Field candidate', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { options: ['active'], type: 'options' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Inactive' }], id: 'inactive', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.equal(
+      setFieldValue(editor, 'task', 'status', {
+        type: 'options',
+        value: 'inactive',
+      }),
+      false
+    );
+    assert.equal(editor.children[3].tanaFieldValues, undefined);
+  });
+
+  test('rejects a From Supertag value that is not a source-tag instance', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Person' }],
+        id: 'person',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Owner' }],
+        id: 'owner',
+        tanaFieldDefinition: { sourceSupertagId: 'person', type: 'from-supertag' },
+        type: KEYS.p,
+      },
+      {
+        children: [
+          { text: 'Ada ' },
+          { children: [{ text: '' }], key: 'person', type: TANA_SUPERTAG_KEY },
+        ],
+        id: 'ada',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Grace' }], id: 'grace', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.equal(
+      setFieldValue(editor, 'task', 'owner', {
+        type: 'from-supertag',
+        value: 'grace',
+      }),
+      false
+    );
+    assert.equal(editor.children[4].tanaFieldValues, undefined);
+  });
+
+  test('rejects an Options binding default that is not a Field candidate', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { options: ['active'], type: 'options' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Inactive' }], id: 'inactive', type: KEYS.p },
+    ]);
+
+    assert.equal(
+      field(editor).bind('project', 'status', {
+        type: 'options',
+        value: 'inactive',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, { fields: [] });
+  });
+
+  test('rejects a From Supertag binding default that is not a source-tag instance', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Person' }],
+        id: 'person',
+        tanaSupertagDefinition: { fields: [] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Owner' }],
+        id: 'owner',
+        tanaFieldDefinition: { sourceSupertagId: 'person', type: 'from-supertag' },
+        type: KEYS.p,
+      },
+      {
+        children: [
+          { text: 'Ada ' },
+          { children: [{ text: '' }], key: 'person', type: TANA_SUPERTAG_KEY },
+        ],
+        id: 'ada',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Grace' }], id: 'grace', type: KEYS.p },
+    ]);
+
+    assert.equal(field(editor).bind('project', 'owner'), true);
+    assert.equal(
+      field(editor).setBindingDefault('project', 'owner', {
+        type: 'from-supertag',
+        value: 'grace',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
+      fields: [{ fieldId: 'owner' }],
+    });
   });
 
   test('preserves an existing instance value when a Field Definition type changes', () => {
