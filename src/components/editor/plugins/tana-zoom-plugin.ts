@@ -106,7 +106,7 @@ function zoomTo(editor: PlateEditor, targetNodeId: NodeId) {
   reveal(editor, targetNodeId);
   pruneBlockSelection(editor);
 
-  return navigate(editor, targetEntry[1]);
+  return true;
 }
 
 function zoomRoot(editor: PlateEditor) {

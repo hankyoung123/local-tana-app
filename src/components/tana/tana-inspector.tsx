@@ -74,19 +74,19 @@ const fieldTypes: readonly FieldType[] = [
 ];
 
 type TanaInspectorProps = {
+  activeNodeId: NodeId | null;
   editor: PlateEditor;
-  selectedNodeId: NodeId | null;
 };
 
 export function TanaInspector({
+  activeNodeId,
   editor,
-  selectedNodeId,
 }: TanaInspectorProps) {
   const index = useTanaIndex();
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const supertagTransforms = editor.getTransforms(TanaSupertagPlugin).supertag;
-  const selectedNode = selectedNodeId
-    ? index.nodesById.get(selectedNodeId)
+  const selectedNode = activeNodeId
+    ? index.nodesById.get(activeNodeId)
     : undefined;
 
   if (!selectedNode) {

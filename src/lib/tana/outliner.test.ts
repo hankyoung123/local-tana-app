@@ -40,7 +40,7 @@ const outliner: Value = [
 ];
 
 function navigateToNode(editor: ReturnType<typeof createPlateEditor>, nodeId: string) {
-  return editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
+  return editor.getApi(TanaZoomPlugin).zoom.focus(nodeId);
 }
 
 function zoomToTanaNode(editor: ReturnType<typeof createPlateEditor>, nodeId: string) {
@@ -407,7 +407,7 @@ describe('Tana outliner behavior', () => {
     });
   });
 
-  test('navigation reveals a collapsed reference target without changing it', () => {
+  test('separates Zoom identity from Plate focus navigation', () => {
     const editor = createPlateEditor({
       plugins: [TanaZoomPlugin, TogglePlugin],
       value: [
@@ -423,13 +423,17 @@ describe('Tana outliner behavior', () => {
       ],
     });
     const originalDocument = structuredClone(editor.children);
+    const selectionBeforeZoom = structuredClone(editor.selection);
 
-    assert.equal(navigateToNode(editor, 'c'), true);
+    assert.equal(zoomToTanaNode(editor, 'c'), true);
 
     const openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
 
     assert.equal(openIds.has('a'), true);
     assert.equal(openIds.has('b'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'c');
+    assert.deepEqual(editor.selection, selectionBeforeZoom);
+    assert.equal(navigateToNode(editor, 'c'), true);
     assert.deepEqual(editor.selection?.anchor.path, [2, 0]);
     assert.deepEqual(getTanaZoomRange(editor.children, 'c'), [[2]]);
     assert.deepEqual(editor.children, originalDocument);
@@ -497,6 +501,31 @@ describe('Tana outliner behavior', () => {
     editor.tf.removeNodes({ at: [1] });
 
     assert.equal(resetInvalidTanaZoom(editor), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
+  });
+
+  test('zooms out through Tana parents and returns to workspace root', () => {
+    const editor = createPlateEditor({
+      plugins: [TanaZoomPlugin, TogglePlugin],
+      value: [
+        { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+        { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
+        { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
+      ],
+    });
+    const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
+
+    assert.equal(zoom.to('c'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'c');
+    assert.equal(zoom.out(), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'b');
+    assert.equal(zoom.out(), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'a');
+    assert.equal(zoom.out(), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
+
+    assert.equal(zoom.to('b'), true);
+    assert.equal(zoom.root(), true);
     assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
   });
 

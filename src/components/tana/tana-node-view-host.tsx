@@ -3,11 +3,11 @@
 import { HashIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
-import { Editor, EditorContainer } from '@/components/ui/editor';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import type { NodeId, TanaNode } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
+import { OutlineNodeView } from './outline-node-view';
 import { TanaView } from './tana-view';
 
 export function TanaNodeViewHost({
@@ -30,26 +30,11 @@ export function TanaNodeViewHost({
     return <SupertagInstances definition={focusedNode} />;
   }
 
-  const activeNodeId = focusedNodeId ?? selectedNodeId;
-  const activeNode = activeNodeId ? index.nodesById.get(activeNodeId) : undefined;
-
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <div className="shrink-0 border-b border-[#e7ebe8] px-6 py-5 sm:px-[max(48px,calc(50%-390px))]">
-        <p className="mb-1 text-[#7b827d] text-xs">工作区</p>
-        <h1 className="font-semibold text-2xl text-[#202421] tracking-normal">
-          {activeNode?.text || '工作区'}
-        </h1>
-      </div>
-
-      <EditorContainer className="min-h-0 flex-1" variant="default">
-        <Editor
-          className="h-full px-8 pt-5 pb-40 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
-          placeholder="新建节点…"
-          variant="none"
-        />
-      </EditorContainer>
-    </section>
+    <OutlineNodeView
+      focusedNodeId={focusedNodeId}
+      selectedNodeId={selectedNodeId}
+    />
   );
 }
 

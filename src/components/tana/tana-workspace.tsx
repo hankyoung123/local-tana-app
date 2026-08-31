@@ -171,7 +171,7 @@ function TanaWorkspaceContent({
           selectedNodeId={selectedNodeId}
         />
 
-        <TanaInspector editor={editor} selectedNodeId={selectedNodeId} />
+        <TanaInspector activeNodeId={activeNodeId} editor={editor} />
       </main>
     </div>
   );
