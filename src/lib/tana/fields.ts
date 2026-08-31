@@ -306,7 +306,7 @@ export function getFieldValueCandidates(
   const candidateIds =
     definition.type === 'options'
       ? definition.options
-      : definition.type === 'from-supertag'
+      : definition.type === 'from-supertag' && definition.sourceSupertagId
         ? (index.nodesBySupertag.get(definition.sourceSupertagId) ?? [])
         : [];
 

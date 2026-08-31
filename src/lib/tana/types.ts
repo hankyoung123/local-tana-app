@@ -6,7 +6,7 @@ export type FieldId = NodeId;
 export type FieldDefinition =
   | { type: 'checkbox' }
   | { type: 'date' }
-  | { sourceSupertagId: NodeId; type: 'from-supertag' }
+  | { sourceSupertagId: NodeId | null; type: 'from-supertag' }
   | { type: 'number' }
   | { options: readonly NodeId[]; type: 'options' }
   | { type: 'plain' };

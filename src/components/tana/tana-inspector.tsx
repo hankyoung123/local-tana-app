@@ -530,11 +530,7 @@ function FieldDefinitionEditor({
     }
 
     if (type === 'from-supertag') {
-      const sourceSupertagId = supertags[0]?.id;
-
-      if (sourceSupertagId) {
-        updateDefinition({ sourceSupertagId, type });
-      }
+      updateDefinition({ sourceSupertagId: supertags[0]?.id ?? null, type });
 
       return;
     }
@@ -553,16 +549,12 @@ function FieldDefinitionEditor({
       >
         <SelectTrigger className="h-8 w-full text-xs">
           <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {fieldTypes.map((type) => (
-            <SelectItem
-              key={type}
-              disabled={type === 'from-supertag' && supertags.length === 0}
-              value={type}
-            >
-              {fieldTypeLabels[type]}
-            </SelectItem>
+          </SelectTrigger>
+          <SelectContent>
+            {fieldTypes.map((type) => (
+              <SelectItem key={type} value={type}>
+                {fieldTypeLabels[type]}
+              </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -614,15 +606,20 @@ function FieldDefinitionEditor({
 
       {definition.type === 'from-supertag' && (
         <Select
-          value={definition.sourceSupertagId}
+          value={definition.sourceSupertagId ?? EMPTY_VALUE}
           onValueChange={(sourceSupertagId) =>
-            updateDefinition({ sourceSupertagId, type: 'from-supertag' })
+            updateDefinition({
+              sourceSupertagId:
+                sourceSupertagId === EMPTY_VALUE ? null : sourceSupertagId,
+              type: 'from-supertag',
+            })
           }
         >
           <SelectTrigger className="mt-3 h-8 w-full text-xs">
-            <SelectValue placeholder="选择超级标签" />
+            <SelectValue placeholder="来源：未选择" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value={EMPTY_VALUE}>来源：未选择</SelectItem>
             {supertags.map((supertag) => (
               <SelectItem key={supertag.id} value={supertag.id}>
                 #{supertag.text || supertag.id}
@@ -678,7 +675,7 @@ function SupertagDefinitionEditor({
       sourceSupertagId || supertags[0]?.id
     );
 
-    if (!name || !fieldDefinition) return;
+    if (!name) return;
 
     const fieldId = fieldTransforms.createDefinition(
       name,
@@ -749,11 +746,7 @@ function SupertagDefinitionEditor({
           </SelectTrigger>
           <SelectContent>
             {fieldTypes.map((type) => (
-              <SelectItem
-                key={type}
-                disabled={type === 'from-supertag' && supertags.length === 0}
-                value={type}
-              >
+              <SelectItem key={type} value={type}>
                 {fieldTypeLabels[type]}
               </SelectItem>
             ))}
@@ -762,9 +755,10 @@ function SupertagDefinitionEditor({
         {fieldType === 'from-supertag' && (
           <Select value={sourceSupertagId} onValueChange={setSourceSupertagId}>
             <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="选择超级标签" />
+              <SelectValue placeholder="未选择" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={EMPTY_VALUE}>未选择</SelectItem>
               {supertags.map((supertag) => (
                 <SelectItem key={supertag.id} value={supertag.id}>
                   #{supertag.text || supertag.id}
@@ -791,10 +785,16 @@ function SupertagDefinitionEditor({
 function createDefinition(
   type: FieldType,
   sourceSupertagId: string | undefined
-): FieldDefinition | undefined {
+): FieldDefinition {
   if (type === 'options') return { options: [], type };
   if (type === 'from-supertag') {
-    return sourceSupertagId ? { sourceSupertagId, type } : undefined;
+    return {
+      sourceSupertagId:
+        sourceSupertagId && sourceSupertagId !== EMPTY_VALUE
+          ? sourceSupertagId
+          : null,
+      type,
+    };
   }
 
   return { type };

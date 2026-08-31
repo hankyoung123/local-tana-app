@@ -111,7 +111,7 @@ function hasValidSemanticData(element: TElement): boolean {
 
 function isFieldDefinition(value: unknown): value is {
   options?: string[];
-  sourceSupertagId?: string;
+  sourceSupertagId?: string | null;
   type: string;
 } {
   if (!value || typeof value !== 'object') return false;
@@ -141,8 +141,8 @@ function isFieldDefinition(value: unknown): value is {
 
   return (
     field.type !== 'from-supertag' ||
-    (typeof field.sourceSupertagId === 'string' &&
-      field.sourceSupertagId.length > 0)
+    field.sourceSupertagId === null ||
+    (typeof field.sourceSupertagId === 'string' && field.sourceSupertagId.length > 0)
   );
 }
 

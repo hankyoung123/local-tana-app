@@ -7,13 +7,36 @@ import {
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
 import type {
+  FieldBinding,
+  FieldValue,
   FieldValueState,
   NodeId,
   TanaBlockElement,
+  TanaQueryClause,
 } from '@/lib/tana/types';
 
 export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
 
+/**
+ * NodeId relations currently owned by integrity:
+ *
+ * inline
+ * - mention.key
+ * - supertag.key
+ *
+ * field
+ * - binding.fieldId
+ * - binding.defaultValue
+ * - options.options[]
+ * - from-supertag.sourceSupertagId
+ * - fieldValues keys
+ * - reference-like FieldValue.value
+ *
+ * view
+ * - query fieldId
+ * - query supertagId
+ * - query reference-like FieldValue.value
+ */
 type TanaNodeEntry = [TanaBlockElement, Path];
 type RelationElement = TElement & { key?: unknown };
 
@@ -78,6 +101,51 @@ function setFieldValues(
   }
 }
 
+function isReferenceLikeFieldValue(
+  value: FieldValue | undefined
+): value is Extract<FieldValue, { type: 'from-supertag' | 'options' }> {
+  return value?.type === 'from-supertag' || value?.type === 'options';
+}
+
+function pruneSupertagFieldBindings(
+  bindings: readonly FieldBinding[],
+  nodeIds: ReadonlySet<NodeId>
+): readonly FieldBinding[] {
+  return bindings.flatMap((binding) => {
+    if (!nodeIds.has(binding.fieldId)) return [];
+
+    if (
+      isReferenceLikeFieldValue(binding.defaultValue) &&
+      !nodeIds.has(binding.defaultValue.value)
+    ) {
+      return [{ fieldId: binding.fieldId }];
+    }
+
+    return [binding];
+  });
+}
+
+function isTanaQueryClauseValid(
+  clause: TanaQueryClause,
+  nodeIds: ReadonlySet<NodeId>
+): boolean {
+  switch (clause.kind) {
+    case 'field-defined':
+    case 'field-exists':
+      return nodeIds.has(clause.fieldId);
+    case 'field-equals':
+      return (
+        nodeIds.has(clause.fieldId) &&
+        (!isReferenceLikeFieldValue(clause.value) ||
+          nodeIds.has(clause.value.value))
+      );
+    case 'has-supertag':
+      return nodeIds.has(clause.supertagId);
+    case 'text-contains':
+      return true;
+  }
+}
+
 /**
  * Repairs one dangling semantic relation at a time. Returning after a repair
  * lets Plate's native normalization schedule the next pass with fresh paths.
@@ -97,9 +165,12 @@ function normalizeRelations(editor: PlateEditor): boolean {
 
     if (!definition) continue;
 
-    const fields = definition.fields.filter(({ fieldId }) => nodeIds.has(fieldId));
+    const fields = pruneSupertagFieldBindings(definition.fields, nodeIds);
 
-    if (fields.length !== definition.fields.length) {
+    if (
+      fields.length !== definition.fields.length ||
+      fields.some((field, index) => field !== definition.fields[index])
+    ) {
       editor.tf.setNodes(
         { tanaSupertagDefinition: { fields } },
         { at: path }
@@ -125,6 +196,26 @@ function normalizeRelations(editor: PlateEditor): boolean {
 
   for (const [node, path] of entries) {
     const definition = node.tanaFieldDefinition;
+
+    if (definition?.type === 'from-supertag') {
+      if (
+        definition.sourceSupertagId !== null &&
+        !nodeIds.has(definition.sourceSupertagId)
+      ) {
+        editor.tf.setNodes(
+          {
+            tanaFieldDefinition: {
+              sourceSupertagId: null,
+              type: 'from-supertag',
+            },
+          },
+          { at: path }
+        );
+        return true;
+      }
+
+      continue;
+    }
 
     if (definition?.type !== 'options') continue;
 
@@ -178,6 +269,21 @@ function normalizeRelations(editor: PlateEditor): boolean {
         });
         return true;
       }
+    }
+  }
+
+  for (const [node, path] of entries) {
+    const definition = node.tanaViewDefinition;
+
+    if (!definition) continue;
+
+    const clauses = definition.clauses.filter((clause) =>
+      isTanaQueryClauseValid(clause, nodeIds)
+    );
+
+    if (clauses.length !== definition.clauses.length) {
+      editor.tf.setNodes({ tanaViewDefinition: { clauses } }, { at: path });
+      return true;
     }
   }
 
