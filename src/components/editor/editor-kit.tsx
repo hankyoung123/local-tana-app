@@ -18,6 +18,7 @@ import { ListKit } from '@/components/editor/plugins/list-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
+import { TanaIntegrityPlugin } from '@/components/editor/plugins/tana-integrity-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 
@@ -32,6 +33,7 @@ export const EditorKit = [
   ...MentionKit,
   ...SupertagKit,
   ...FieldKit,
+  TanaIntegrityPlugin,
 
   // Marks
   ...BasicMarksKit,

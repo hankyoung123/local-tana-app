@@ -175,19 +175,11 @@ function getReferenceTargetByKey(element: TElement): NodeId | undefined {
   return typeof key === 'string' ? key : undefined;
 }
 
-export function getNodeDisplayName(document: Value, nodeId: NodeId): string {
-  return getNodeDisplayNameFromIndex(buildTanaIndex(document), nodeId);
-}
-
 export function getNodeDisplayNameFromIndex(
   index: TanaIndex,
   nodeId: NodeId
 ): string {
   return index.nodesById.get(nodeId)?.text ?? 'Unknown node';
-}
-
-export function getSupertagCandidates(document: Value): SupertagCandidate[] {
-  return getSupertagCandidatesFromIndex(buildTanaIndex(document));
 }
 
 export function getSupertagCandidatesFromIndex(
@@ -212,12 +204,6 @@ export function getNodeSupertagIds(
   return Array.from(index.nodesBySupertag.entries())
     .filter(([, nodeIds]) => nodeIds.includes(nodeId))
     .map(([supertagId]) => supertagId);
-}
-
-export function getNodeReferenceCandidates(
-  document: Value
-): NodeReferenceCandidate[] {
-  return getNodeReferenceCandidatesFromIndex(buildTanaIndex(document));
 }
 
 export function getNodeReferenceCandidatesFromIndex(

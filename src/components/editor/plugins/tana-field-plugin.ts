@@ -10,6 +10,7 @@ import {
   isSupertagFieldInputNode,
   getSupertagFieldInputParentId,
 } from '@/lib/tana/fields';
+import { buildTanaIndex } from '@/lib/tana/index';
 import {
   getTanaNodeDescendantPaths,
   getTanaNodePath,
@@ -90,6 +91,35 @@ function setValue(
       tanaFieldValues: {
         ...(nodeEntry[0].tanaFieldValues ?? {}),
         [fieldId]: value,
+      },
+    },
+    { at: nodeEntry[1] }
+  );
+
+  return true;
+}
+
+/** Writes a template default only into a missing direct Field key. */
+function applyDefault(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  value: FieldValue
+) {
+  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+
+  if (!nodeEntry || !fieldEntry?.[0].tanaFieldDefinition) return false;
+  if (hasDirectFieldValue(nodeEntry[0].tanaFieldValues, fieldId)) return false;
+  if (!isFieldValueCompatible(fieldEntry[0].tanaFieldDefinition, value)) {
+    return false;
+  }
+
+  editor.tf.setNodes(
+    {
+      tanaFieldValues: {
+        ...(nodeEntry[0].tanaFieldValues ?? {}),
+        [fieldId]: structuredClone(value),
       },
     },
     { at: nodeEntry[1] }
@@ -422,7 +452,7 @@ function completeAdHocInput(
   const fieldId =
     'fieldId' in choice
       ? choice.fieldId
-      : (findFieldDefinitionExactMatch(editor.children, choice.name)?.id ??
+      : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)?.id ??
         createDefinition(editor, choice.name, { type: 'plain' }));
   const fieldEntry = fieldId ? getTanaNodeEntry(editor, fieldId) : undefined;
 
@@ -439,6 +469,8 @@ export const TanaFieldPlugin = createPlatePlugin({
 }).extendEditorTransforms(({ editor }) => ({
   field: {
     addAdHoc: (nodeId: NodeId, fieldId: NodeId) => addAdHoc(editor, nodeId, fieldId),
+    applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
+      applyDefault(editor, nodeId, fieldId, value),
     bind: (
       supertagId: NodeId,
       fieldId: NodeId,

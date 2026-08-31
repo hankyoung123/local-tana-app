@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { useEditorSelector } from 'platejs/react';
+import { useEditorValue } from 'platejs/react';
 
 import { buildTanaIndex, type TanaIndex } from '@/lib/tana';
 
@@ -14,10 +14,8 @@ const TanaIndexContext = React.createContext<TanaIndex | null>(null);
  * of truth and every document change rebuilds this value in full.
  */
 export function TanaIndexProvider({ children }: React.PropsWithChildren) {
-  const index = useEditorSelector(
-    (editor) => buildTanaIndex(editor.children),
-    []
-  );
+  const value = useEditorValue();
+  const index = React.useMemo(() => buildTanaIndex(value), [value]);
 
   return (
     <TanaIndexContext.Provider value={index}>

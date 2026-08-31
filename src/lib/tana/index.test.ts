@@ -3,7 +3,10 @@ import { describe, test } from 'node:test';
 
 import type { Value } from 'platejs';
 
-import { buildTanaIndex, getNodeReferenceCandidates } from './index';
+import {
+  buildTanaIndex,
+  getNodeReferenceCandidatesFromIndex,
+} from './index';
 
 const document: Value = [
   {
@@ -65,7 +68,7 @@ describe('buildTanaIndex', () => {
   });
 
   test('uses Plate node IDs as mention candidate keys', () => {
-    assert.deepEqual(getNodeReferenceCandidates(document), [
+    assert.deepEqual(getNodeReferenceCandidatesFromIndex(buildTanaIndex(document)), [
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
     ]);

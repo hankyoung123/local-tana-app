@@ -6,9 +6,10 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
-import { isFieldValueCompatible } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+
+import { TanaFieldPlugin } from './tana-field-plugin';
 
 export const TANA_SUPERTAG_PLUGIN_KEY = 'tanaSupertag' as const;
 
@@ -97,28 +98,15 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
   if (index.nodesBySupertag.get(supertagId)?.includes(nodeId)) return false;
 
-  const [node, nodePath] = nodeEntry;
+  const [, nodePath] = nodeEntry;
   const bindings = definitionEntry[0].tanaSupertagDefinition!.fields;
-  const nextFieldValues = { ...(node.tanaFieldValues ?? {}) };
-  let hasNewDefault = false;
-
   bindings.forEach(({ defaultValue, fieldId }) => {
-    const fieldDefinition = index.nodesById.get(fieldId)?.fieldDefinition;
+    if (defaultValue === undefined) return;
 
-    if (
-      defaultValue !== undefined &&
-      fieldDefinition &&
-      isFieldValueCompatible(fieldDefinition, defaultValue) &&
-      nextFieldValues[fieldId] === undefined
-    ) {
-      nextFieldValues[fieldId] = structuredClone(defaultValue);
-      hasNewDefault = true;
-    }
+    editor
+      .getTransforms(TanaFieldPlugin)
+      .field.applyDefault(nodeId, fieldId, defaultValue);
   });
-
-  if (hasNewDefault) {
-    editor.tf.setNodes({ tanaFieldValues: nextFieldValues }, { at: nodePath });
-  }
 
   const selectionIsInNode = isSelectionInNode(editor, nodePath);
 

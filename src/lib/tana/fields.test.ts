@@ -10,7 +10,7 @@ import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-pl
 import { isTanaNodeElement } from './constants';
 import {
   findFieldDefinitionExactMatch,
-  getFieldDefinitionCandidates,
+  getFieldDefinitionCandidatesFromIndex,
   getFieldValueCandidates,
   getSupertagFieldBindings,
   hasFieldDefinitionExactMatch,
@@ -736,9 +736,10 @@ describe('Tana field nodes', () => {
         type: KEYS.p,
       },
     ]);
-    const candidates = getFieldDefinitionCandidates(editor.children);
+    const index = buildTanaIndex(editor.children);
+    const candidates = getFieldDefinitionCandidatesFromIndex(index);
     const prioritized = prioritizeFieldDefinitionCandidates(candidates, 'Priority');
-    const exact = findFieldDefinitionExactMatch(editor.children, 'Priority');
+    const exact = findFieldDefinitionExactMatch(index, 'Priority');
 
     assert.deepEqual(
       prioritized.map(({ id }) => id),
@@ -882,7 +883,7 @@ describe('Tana field nodes', () => {
     );
   });
 
-  test('creates and removes Options as ordinary child Nodes while storing their NodeIds', () => {
+  test('creates Options as ordinary child Nodes and clears values for removed options', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Status' }],
@@ -933,7 +934,7 @@ describe('Tana field nodes', () => {
     });
     assert.equal(editor.children.some((node) => node.id === optionId), false);
     assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.fieldValues, {
-      status: { type: 'options', value: optionId },
+      status: null,
     });
   });
 });

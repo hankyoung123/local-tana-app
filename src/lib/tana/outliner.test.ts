@@ -14,7 +14,10 @@ import {
   toggleTanaNodeCollapse,
 } from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from './constants';
-import { buildTanaIndex, getNodeReferenceCandidates } from './index';
+import {
+  buildTanaIndex,
+  getNodeReferenceCandidatesFromIndex,
+} from './index';
 import {
   getTanaAncestorPaths,
   getTanaNodeDescendantPaths,
@@ -281,6 +284,12 @@ describe('Tana outliner behavior', () => {
         type: KEYS.p,
       },
       { children: [{ text: 'Todo child' }], id: 'todo-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
     ];
     const editor = createPlateEditor({
       plugins: EditorKit,
@@ -531,6 +540,12 @@ describe('Tana outliner behavior', () => {
           id: 'task',
           type: KEYS.p,
         },
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { type: 'plain' },
+          type: KEYS.p,
+        },
       ],
     });
     const transitions = [
@@ -560,7 +575,7 @@ describe('Tana outliner behavior', () => {
         },
       ]);
       assert.equal(
-        getNodeReferenceCandidates(editor.children).some(
+        getNodeReferenceCandidatesFromIndex(buildTanaIndex(editor.children)).some(
           ({ id }) => id === 'project'
         ),
         true

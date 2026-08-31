@@ -2,7 +2,6 @@ import { ElementApi, TextApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
-import { buildTanaIndex } from './index';
 import {
   getTanaAncestorPaths,
   getTanaParentPath,
@@ -210,13 +209,6 @@ export function isFieldSet(node: TanaNode, fieldId: NodeId): boolean {
   return node.fieldValues?.[fieldId] != null;
 }
 
-/** Field candidates remain a direct read-only projection of the Plate document. */
-export function getFieldDefinitionCandidates(
-  document: Value
-): FieldDefinitionCandidate[] {
-  return getFieldDefinitionCandidatesFromIndex(buildTanaIndex(document));
-}
-
 export function getFieldDefinitionCandidatesFromIndex(
   index: TanaIndex
 ): FieldDefinitionCandidate[] {
@@ -276,14 +268,14 @@ export function hasFieldDefinitionExactMatch(
 }
 
 export function findFieldDefinitionExactMatch(
-  document: Value,
+  index: TanaIndex,
   name: string
 ): FieldDefinitionCandidate | undefined {
   const normalizedName = name.trim();
 
   if (!normalizedName) return;
 
-  return getFieldDefinitionCandidates(document).find((candidate) =>
+  return getFieldDefinitionCandidatesFromIndex(index).find((candidate) =>
     isFieldDefinitionNameExact(candidate, normalizedName)
   );
 }
