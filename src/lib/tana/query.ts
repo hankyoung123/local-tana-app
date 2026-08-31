@@ -5,7 +5,7 @@ import type {
   TanaNode,
   TanaQueryClause,
 } from './types';
-import { isFieldDefined } from './fields';
+import { isFieldDefined, isFieldValueValid } from './fields';
 
 export function getFieldDefinition(
   index: TanaIndex,
@@ -16,6 +16,27 @@ export function getFieldDefinition(
 
 export function getFieldDisplayName(index: TanaIndex, fieldId: FieldId): string {
   return index.nodesById.get(fieldId)?.text || fieldId;
+}
+
+/** Validates new v1 Query clauses against the current derived Tana Index. */
+export function isTanaQueryClauseValid(
+  index: TanaIndex,
+  clause: TanaQueryClause
+): boolean {
+  switch (clause.kind) {
+    case 'has-supertag':
+      return !!index.nodesById.get(clause.supertagId)?.supertagDefinition;
+    case 'field-defined':
+    case 'field-exists':
+      return !!getFieldDefinition(index, clause.fieldId);
+    case 'field-equals': {
+      const definition = getFieldDefinition(index, clause.fieldId);
+
+      return !!definition && isFieldValueValid(index, definition, clause.value);
+    }
+    case 'text-contains':
+      return clause.text.trim().length > 0;
+  }
 }
 
 export function describeTanaQueryClause(

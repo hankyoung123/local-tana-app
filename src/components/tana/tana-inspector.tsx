@@ -261,7 +261,7 @@ export function TanaInspector({
         editor={editor}
         index={index}
         node={selectedNode.node as TanaBlockElement}
-        path={selectedNode.path}
+        nodeId={selectedNode.id}
       />
     </aside>
   );

@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 
-import type { Path } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { ListFilterIcon, PlusIcon, Trash2Icon } from 'lucide-react';
@@ -10,10 +9,12 @@ import { ListFilterIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import type {
   FieldDefinition,
   FieldValue,
+  NodeId,
   TanaBlockElement,
   TanaIndex,
   TanaQueryClause,
 } from '@/lib/tana';
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { describeTanaQueryClause, getFieldValueCandidates } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,12 +32,12 @@ export function TanaViewDefinitionEditor({
   editor,
   index,
   node,
-  path,
+  nodeId,
 }: {
   editor: PlateEditor;
   index: TanaIndex;
   node: TanaBlockElement;
-  path: Path;
+  nodeId: NodeId;
 }) {
   const [kind, setKind] = React.useState<ClauseKind>('has-supertag');
   const [fieldId, setFieldId] = React.useState('');
@@ -61,12 +62,7 @@ export function TanaViewDefinitionEditor({
           className="w-full"
           size="sm"
           variant="outline"
-          onClick={() =>
-            editor.tf.setNodes(
-              { tanaViewDefinition: { clauses: [] } },
-              { at: path }
-            )
-          }
+          onClick={() => editor.getTransforms(TanaViewPlugin).view.define(nodeId)}
         >
           <ListFilterIcon />
           定义为视图
@@ -74,10 +70,6 @@ export function TanaViewDefinitionEditor({
       </div>
     );
   }
-
-  const updateClauses = (clauses: readonly TanaQueryClause[]) => {
-    editor.tf.setNodes({ tanaViewDefinition: { clauses } }, { at: path });
-  };
 
   const addClause = () => {
     let clause: TanaQueryClause | undefined;
@@ -96,7 +88,10 @@ export function TanaViewDefinitionEditor({
 
     if (!clause) return;
 
-    updateClauses([...definition.clauses, clause]);
+    if (!editor.getTransforms(TanaViewPlugin).view.addClause(nodeId, clause)) {
+      return;
+    }
+
     setRawValue('');
     setText('');
   };
@@ -112,7 +107,7 @@ export function TanaViewDefinitionEditor({
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           type="button"
           aria-label="移除视图定义"
-          onClick={() => editor.tf.unsetNodes('tanaViewDefinition', { at: path })}
+          onClick={() => editor.getTransforms(TanaViewPlugin).view.remove(nodeId)}
         >
           <Trash2Icon className="size-3.5" />
         </button>
@@ -132,9 +127,9 @@ export function TanaViewDefinitionEditor({
               type="button"
               aria-label={`移除筛选条件 ${indexInList + 1}`}
               onClick={() =>
-                updateClauses(
-                  definition.clauses.filter((_, index) => index !== indexInList)
-                )
+                editor
+                  .getTransforms(TanaViewPlugin)
+                  .view.removeClause(nodeId, indexInList)
               }
             >
               <Trash2Icon className="size-3" />

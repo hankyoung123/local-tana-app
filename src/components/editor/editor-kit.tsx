@@ -20,6 +20,7 @@ import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
 import { TanaIntegrityPlugin } from '@/components/editor/plugins/tana-integrity-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 
 export const EditorKit = [
@@ -33,6 +34,7 @@ export const EditorKit = [
   ...MentionKit,
   ...SupertagKit,
   ...FieldKit,
+  TanaViewPlugin,
   TanaIntegrityPlugin,
 
   // Marks

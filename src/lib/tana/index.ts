@@ -213,3 +213,32 @@ export function getNodeReferenceCandidatesFromIndex(
     .filter(({ text }) => text.length > 0)
     .map(({ id, text }) => ({ id, text }));
 }
+
+/** Performs transient document-order node search without writing any state. */
+export function searchTanaNodes(
+  index: TanaIndex,
+  query: string,
+  limit = 20
+): TanaNode[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  if (!normalizedQuery || limit <= 0) return [];
+
+  const exact: TanaNode[] = [];
+  const prefix: TanaNode[] = [];
+  const contains: TanaNode[] = [];
+
+  for (const node of index.nodesById.values()) {
+    const text = node.text.toLocaleLowerCase();
+
+    if (text === normalizedQuery) {
+      exact.push(node);
+    } else if (text.startsWith(normalizedQuery)) {
+      prefix.push(node);
+    } else if (text.includes(normalizedQuery)) {
+      contains.push(node);
+    }
+  }
+
+  return [...exact, ...prefix, ...contains].slice(0, limit);
+}

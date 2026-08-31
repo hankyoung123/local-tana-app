@@ -4,7 +4,11 @@ import { describe, test } from 'node:test';
 import type { Value } from 'platejs';
 
 import { buildTanaIndex } from './index';
-import { describeTanaQueryClause, runTanaQuery } from './query';
+import {
+  describeTanaQueryClause,
+  isTanaQueryClauseValid,
+  runTanaQuery,
+} from './query';
 
 const document: Value = [
   {
@@ -144,6 +148,51 @@ describe('runTanaQuery', () => {
         value: { type: 'options', value: 'active' },
       }),
       'Status 等于 active'
+    );
+  });
+
+  test('validates new clauses against existing Tana definitions', () => {
+    assert.equal(
+      isTanaQueryClauseValid(index, {
+        kind: 'has-supertag',
+        supertagId: 'project-tag',
+      }),
+      true
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, {
+        kind: 'has-supertag',
+        supertagId: 'alpha',
+      }),
+      false
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, { fieldId: 'estimate', kind: 'field-exists' }),
+      true
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, { fieldId: 'alpha', kind: 'field-defined' }),
+      false
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, {
+        fieldId: 'status',
+        kind: 'field-equals',
+        value: { type: 'options', value: 'done' },
+      }),
+      true
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, {
+        fieldId: 'status',
+        kind: 'field-equals',
+        value: { type: 'options', value: 'alpha' },
+      }),
+      false
+    );
+    assert.equal(
+      isTanaQueryClauseValid(index, { kind: 'text-contains', text: '  ' }),
+      false
     );
   });
 });

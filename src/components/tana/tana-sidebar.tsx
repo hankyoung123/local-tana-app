@@ -5,7 +5,7 @@ import * as React from 'react';
 import { HashIcon, HomeIcon, ListFilterIcon, SearchIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
-import type { NodeId, TanaIndex } from '@/lib/tana';
+import { searchTanaNodes, type NodeId, type TanaIndex } from '@/lib/tana';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -23,14 +23,8 @@ export function TanaSidebar({
 }: TanaSidebarProps) {
   const editor = useEditorRef();
   const [search, setSearch] = React.useState('');
-  const normalizedSearch = search.trim().toLocaleLowerCase();
-  const results = normalizedSearch
-    ? Array.from(index.nodesById.values())
-        .filter(({ text }) =>
-          text.toLocaleLowerCase().includes(normalizedSearch)
-        )
-        .slice(0, 20)
-    : [];
+  const hasSearchQuery = search.trim().length > 0;
+  const results = searchTanaNodes(index, search);
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ supertagDefinition }) => !!supertagDefinition
   );
@@ -54,7 +48,7 @@ export function TanaSidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {normalizedSearch ? (
+        {hasSearchQuery ? (
           <SidebarSection title="搜索结果">
             {results.length === 0 ? (
               <p className="px-2 py-2 text-muted-foreground text-xs">

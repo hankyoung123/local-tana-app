@@ -6,6 +6,7 @@ import type { Value } from 'platejs';
 import {
   buildTanaIndex,
   getNodeReferenceCandidatesFromIndex,
+  searchTanaNodes,
 } from './index';
 
 const document: Value = [
@@ -117,5 +118,33 @@ describe('buildTanaIndex', () => {
     assert.equal(index.nodesById.has('cell'), false);
     assert.equal(index.nodesById.has('nested'), false);
     assert.equal(index.nodesById.has('image'), true);
+  });
+
+  test('searches by exact, prefix, then contains in document order', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Project' }], id: 'exact', type: 'p' },
+      { children: [{ text: 'Project brief' }], id: 'prefix-first', type: 'p' },
+      { children: [{ text: 'Project plan' }], id: 'prefix-second', type: 'p' },
+      {
+        children: [{ text: 'Archived project notes' }],
+        id: 'contains-first',
+        type: 'p',
+      },
+      {
+        children: [{ text: 'Another project' }],
+        id: 'contains-second',
+        type: 'p',
+      },
+    ]);
+
+    assert.deepEqual(
+      searchTanaNodes(index, ' project ').map(({ id }) => id),
+      ['exact', 'prefix-first', 'prefix-second', 'contains-first', 'contains-second']
+    );
+    assert.deepEqual(searchTanaNodes(index, '   '), []);
+    assert.deepEqual(
+      searchTanaNodes(index, 'project', 2).map(({ id }) => id),
+      ['exact', 'prefix-first']
+    );
   });
 });
