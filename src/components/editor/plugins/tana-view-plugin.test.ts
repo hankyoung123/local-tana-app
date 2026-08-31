@@ -82,6 +82,34 @@ describe('Tana view mutations', () => {
     assert.equal(editor.children[0].tanaViewDefinition, undefined);
   });
 
+  test('composes a View with a Supertag Definition without changing either Node semantic', () => {
+    const editor = createEditor(value);
+    const supertagDefinition = structuredClone(
+      editor.children[1].tanaSupertagDefinition
+    );
+
+    assert.equal(view(editor).define('project'), true);
+    assert.equal(editor.children[1].id, 'project');
+    assert.deepEqual(editor.children[1].tanaSupertagDefinition, supertagDefinition);
+    assert.deepEqual(editor.children[1].tanaViewDefinition, { clauses: [] });
+    assert.equal(view(editor).remove('project'), true);
+    assert.equal(editor.children[1].tanaViewDefinition, undefined);
+    assert.deepEqual(editor.children[1].tanaSupertagDefinition, supertagDefinition);
+  });
+
+  test('composes a View with a Field Definition without changing either Node semantic', () => {
+    const editor = createEditor(value);
+    const fieldDefinition = structuredClone(editor.children[3].tanaFieldDefinition);
+
+    assert.equal(view(editor).define('status'), true);
+    assert.equal(editor.children[3].id, 'status');
+    assert.deepEqual(editor.children[3].tanaFieldDefinition, fieldDefinition);
+    assert.deepEqual(editor.children[3].tanaViewDefinition, { clauses: [] });
+    assert.equal(view(editor).remove('status'), true);
+    assert.equal(editor.children[3].tanaViewDefinition, undefined);
+    assert.deepEqual(editor.children[3].tanaFieldDefinition, fieldDefinition);
+  });
+
   test('rejects invalid NodeId relations when adding clauses', () => {
     const editor = createEditor(value);
     const transforms = view(editor);

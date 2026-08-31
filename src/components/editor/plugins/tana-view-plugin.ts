@@ -22,12 +22,7 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function define(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (
-    !entry ||
-    entry[0].tanaViewDefinition ||
-    entry[0].tanaFieldDefinition ||
-    entry[0].tanaSupertagDefinition
-  ) {
+  if (!entry || entry[0].tanaViewDefinition) {
     return false;
   }
 
