@@ -3,6 +3,7 @@ import type { NodeEntry } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { getTanaParentPath } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 export const TANA_PRESENTATION_PLUGIN_KEY = 'tanaPresentation' as const;
@@ -24,18 +25,26 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function setFieldVisible(
   editor: PlateEditor,
   nodeId: NodeId,
-  fieldKey: string,
+  fieldNodeId: NodeId,
   visible: boolean
 ) {
   const entry = getTanaNodeEntry(editor, nodeId);
-  const normalizedFieldKey = fieldKey.trim();
+  const fieldEntry = getTanaNodeEntry(editor, fieldNodeId);
+  const normalizedFieldNodeId = fieldNodeId.trim();
 
-  if (!entry || !normalizedFieldKey) return false;
+  if (
+    !entry ||
+    !fieldEntry?.[0].tanaFieldId ||
+    !normalizedFieldNodeId ||
+    getTanaParentPath(editor.children, fieldEntry[1])?.[0] !== entry[1][0]
+  ) {
+    return false;
+  }
 
-  const hidden = new Set(entry[0].tanaPresentation?.hiddenFieldKeys ?? []);
+  const hidden = new Set(entry[0].tanaPresentation?.hiddenFieldNodeIds ?? []);
 
-  if (visible) hidden.delete(normalizedFieldKey);
-  else hidden.add(normalizedFieldKey);
+  if (visible) hidden.delete(normalizedFieldNodeId);
+  else hidden.add(normalizedFieldNodeId);
 
   if (hidden.size === 0) {
     if (!entry[0].tanaPresentation) return false;
@@ -44,18 +53,21 @@ function setFieldVisible(
     return true;
   }
 
-  const nextHiddenFieldKeys = [...hidden];
-  const currentHiddenFieldKeys = entry[0].tanaPresentation?.hiddenFieldKeys ?? [];
+  const nextHiddenFieldNodeIds = [...hidden];
+  const currentHiddenFieldNodeIds =
+    entry[0].tanaPresentation?.hiddenFieldNodeIds ?? [];
 
   if (
-    currentHiddenFieldKeys.length === nextHiddenFieldKeys.length &&
-    currentHiddenFieldKeys.every((key, index) => key === nextHiddenFieldKeys[index])
+    currentHiddenFieldNodeIds.length === nextHiddenFieldNodeIds.length &&
+    currentHiddenFieldNodeIds.every(
+      (key, index) => key === nextHiddenFieldNodeIds[index]
+    )
   ) {
     return false;
   }
 
   editor.tf.setNodes(
-    { tanaPresentation: { hiddenFieldKeys: nextHiddenFieldKeys } },
+    { tanaPresentation: { hiddenFieldNodeIds: nextHiddenFieldNodeIds } },
     { at: entry[1] }
   );
 
@@ -67,7 +79,7 @@ export const TanaPresentationPlugin = createPlatePlugin({
   key: TANA_PRESENTATION_PLUGIN_KEY,
 }).extendEditorTransforms(({ editor }) => ({
   presentation: {
-    setFieldVisible: (nodeId: NodeId, fieldKey: string, visible: boolean) =>
-      setFieldVisible(editor, nodeId, fieldKey, visible),
+    setFieldVisible: (nodeId: NodeId, fieldNodeId: NodeId, visible: boolean) =>
+      setFieldVisible(editor, nodeId, fieldNodeId, visible),
   },
 }));

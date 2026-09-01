@@ -21,9 +21,6 @@ export type FieldValue =
   | { type: 'options'; value: NodeId }
   | { type: 'plain'; value: string };
 
-/** A present `null` key means a Node directly defines an unset Field. */
-export type FieldValueState = FieldValue | null;
-
 export type FieldBinding = {
   defaultValue?: FieldValue;
   fieldId: FieldId;
@@ -45,7 +42,7 @@ export type TanaViewDefinition = {
  * semantics stored on the same Plate Node.
  */
 export type TanaPresentation = {
-  hiddenFieldKeys?: readonly string[];
+  hiddenFieldNodeIds?: readonly NodeId[];
 };
 
 export type SupertagDefinition = {
@@ -54,7 +51,13 @@ export type SupertagDefinition = {
 
 export type TanaBlockElement = TElement & {
   tanaFieldDefinition?: FieldDefinition;
-  tanaFieldValues?: Readonly<Record<FieldId, FieldValueState>>;
+  /** A Field occurrence is still an ordinary top-level Tana Node. */
+  tanaFieldId?: FieldId;
+  /**
+   * A Field value is also an ordinary Node. This small marker preserves the
+   * value's original type when a Field Definition later changes type.
+   */
+  tanaFieldValueType?: FieldType;
   tanaPresentation?: TanaPresentation;
   tanaSupertagDefinition?: SupertagDefinition;
   tanaViewDefinition?: TanaViewDefinition;
@@ -65,11 +68,24 @@ export type TanaNode = {
   node: TElement;
   path: Path;
   text: string;
-  fieldValues?: Readonly<Record<FieldId, FieldValueState>>;
   fieldDefinition?: FieldDefinition;
   presentation?: TanaPresentation;
   supertagDefinition?: SupertagDefinition;
   viewDefinition?: TanaViewDefinition;
+};
+
+/**
+ * Read-only index entry for one Field occurrence Node. The Field Node and its
+ * optional value child are ordinary Plate/Tana Nodes in the document.
+ */
+export type TanaFieldNode = {
+  fieldId: FieldId;
+  id: NodeId;
+  node: TanaBlockElement;
+  parentNodeId: NodeId;
+  path: Path;
+  value?: FieldValue;
+  valueNodeId?: NodeId;
 };
 
 export type ReferenceRelation = {
@@ -80,7 +96,10 @@ export type ReferenceRelation = {
 
 export type TanaIndex = {
   backlinks: ReadonlyMap<NodeId, readonly ReferenceRelation[]>;
-  fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValueState>>;
+  fieldNodesById: ReadonlyMap<NodeId, TanaFieldNode>;
+  fieldNodesByParent: ReadonlyMap<NodeId, readonly TanaFieldNode[]>;
+  /** Derived only from Field Nodes; never persisted on the parent document Node. */
+  fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValue>>;
   nodesById: ReadonlyMap<NodeId, TanaNode>;
   nodesBySupertag: ReadonlyMap<string, readonly NodeId[]>;
 };

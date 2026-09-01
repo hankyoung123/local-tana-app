@@ -7,31 +7,18 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+
+import { isTanaNodeElement } from './constants';
 import {
-  isTanaNodeElement,
-  TANA_FIELD_INPUT_KEY,
-  TANA_SUPERTAG_KEY,
-} from './constants';
-import {
-  findFieldDefinitionExactMatch,
-  getFieldDefinitionCandidatesFromIndex,
   getNodeFieldDescriptors,
-  getFieldValueCandidates,
-  getSupertagFieldBindings,
-  hasFieldDefinitionExactMatch,
   isAdHocFieldInputNode,
-  isAdHocField,
   isFieldDefined,
-  isFieldDefinedBySupertag,
-  isFieldValueCompatible,
   isFieldSet,
+  isFieldValueCompatible,
   isSupertagFieldInputNode,
-  prioritizeFieldDefinitionCandidates,
-  TANA_SYSTEM_FIELD_KEYS,
 } from './fields';
 import { buildTanaIndex } from './index';
 
-// Plate Navigation schedules browser scrolling; Bun's Node test runtime has no rAF.
 globalThis.requestAnimationFrame ??= () => 0;
 
 function createEditor(value: Value) {
@@ -52,103 +39,117 @@ function field(editor: ReturnType<typeof createEditor>) {
   return editor.getTransforms(TanaFieldPlugin).field;
 }
 
-function supertag(editor: ReturnType<typeof createEditor>) {
-  return editor.getTransforms(TanaSupertagPlugin).supertag;
-}
+describe('Field occurrence Nodes', () => {
+  test('materializes a normal Field Node and a typed value child without a parent map', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+    ]);
 
-function addAdHocField(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  fieldId: string
-) {
-  return field(editor).addAdHoc(nodeId, fieldId);
-}
+    const occurrenceId = field(editor).materialize('task', 'estimate');
+    const index = buildTanaIndex(editor.children);
+    const occurrence = occurrenceId
+      ? index.fieldNodesById.get(occurrenceId)
+      : undefined;
 
-function bindFieldToSupertag(
-  editor: ReturnType<typeof createEditor>,
-  supertagId: string,
-  fieldId: string
-) {
-  return field(editor).bind(supertagId, fieldId);
-}
+    assert.ok(occurrenceId);
+    assert.equal(occurrence?.fieldId, 'estimate');
+    assert.equal(occurrence?.parentNodeId, 'task');
+    assert.ok(occurrence?.valueNodeId);
+    assert.deepEqual(
+      Object.keys(editor.children[0]).filter((key) => key.endsWith('Values')),
+      []
+    );
+    assert.equal(isFieldDefined(index, 'task', 'estimate'), true);
+    assert.equal(isFieldSet(index, 'task', 'estimate'), false);
+  });
 
-function clearFieldValue(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  fieldId: string
-) {
-  return field(editor).clearValue(nodeId, fieldId);
-}
+  test('writes and clears Field values on the value child while preserving its NodeId', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p,
+      },
+    ]);
 
-function completeAdHocFieldInput(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  choice: Parameters<ReturnType<typeof field>['completeAdHocInput']>[1]
-) {
-  return field(editor).completeAdHocInput(nodeId, choice);
-}
+    field(editor).materialize('task', 'estimate');
+    const before = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0];
 
-function completeSupertagFieldTemplateInput(
-  editor: ReturnType<typeof createEditor>,
-  temporaryNodeId: string,
-  supertagId: string,
-  choice: Parameters<ReturnType<typeof field>['completeTemplateInput']>[2]
-) {
-  return field(editor).completeTemplateInput(temporaryNodeId, supertagId, choice);
-}
+    assert.equal(
+      field(editor).setValue('task', 'estimate', { type: 'number', value: 8 }),
+      true
+    );
+    assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
+      ['estimate', { type: 'number', value: 8 }],
+    ]));
+    assert.equal(field(editor).clearValue('task', 'estimate'), true);
 
-function createFieldDefinition(
-  editor: ReturnType<typeof createEditor>,
-  name: string,
-  definition: Parameters<ReturnType<typeof field>['createDefinition']>[1],
-  parentNodeId?: string
-) {
-  return field(editor).createDefinition(name, definition, parentNodeId);
-}
+    const after = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0];
 
-function createFieldOption(
-  editor: ReturnType<typeof createEditor>,
-  fieldId: string,
-  name: string
-) {
-  return field(editor).createOption(fieldId, name);
-}
+    assert.equal(after.valueNodeId, before.valueNodeId);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldValues.get('task')?.has('estimate') ??
+        false,
+      false
+    );
+  });
 
-function deleteAdHocField(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  fieldId: string
-) {
-  return field(editor).deleteAdHoc(nodeId, fieldId);
-}
+  test('rejects invalid Field writes without changing the document', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { options: ['active'], type: 'options' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Other' }], id: 'other', type: KEYS.p },
+    ]);
 
-function removeFieldOption(
-  editor: ReturnType<typeof createEditor>,
-  fieldId: string,
-  optionId: string
-) {
-  return field(editor).removeOption(fieldId, optionId);
-}
+    field(editor).materialize('task', 'status');
+    const before = structuredClone(editor.children);
 
-function setFieldValue(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  fieldId: string,
-  value: Parameters<ReturnType<typeof field>['setValue']>[2]
-) {
-  return field(editor).setValue(nodeId, fieldId, value);
-}
+    assert.equal(
+      field(editor).setValue('task', 'status', {
+        type: 'options',
+        value: 'other',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children, before);
+  });
 
-function applySupertag(
-  editor: ReturnType<typeof createEditor>,
-  nodeId: string,
-  supertagId: string
-) {
-  return supertag(editor).apply(nodeId, supertagId);
-}
+  test('uses the transient blank child itself as the ad-hoc Field occurrence', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'temporary', indent: 1, type: KEYS.p },
+    ]);
 
-describe('Tana field nodes', () => {
-  test('uses the Plate NodeId for a Field Definition and Supertag binding', () => {
+    assert.equal(isAdHocFieldInputNode(editor.children, [2]), true);
+    assert.equal(
+      field(editor).completeAdHocInput('temporary', { fieldId: 'priority' }),
+      'priority'
+    );
+
+    const occurrence = editor.children.find((node) => node.id === 'temporary');
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(occurrence?.tanaFieldId, 'priority');
+    assert.equal(index.fieldNodesById.get('temporary')?.parentNodeId, 'task');
+    assert.ok(index.fieldNodesById.get('temporary')?.valueNodeId);
+  });
+
+  test('creates template Field Definitions under the Supertag and never treats them as transient inputs', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -156,998 +157,76 @@ describe('Tana field nodes', () => {
         tanaSupertagDefinition: { fields: [] },
         type: KEYS.p,
       },
+      { children: [{ text: '' }], id: 'template-input', indent: 1, type: KEYS.p },
     ]);
 
-    const fieldId = createFieldDefinition(editor, 'Summary', { type: 'plain' });
-
-    assert.equal(fieldId, 'node-1');
-    assert.equal(editor.children[1].id, fieldId);
-    assert.deepEqual(editor.children[1].tanaFieldDefinition, { type: 'plain' });
-    assert.equal(bindFieldToSupertag(editor, 'project', fieldId!), true);
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId }],
+    assert.equal(isSupertagFieldInputNode(editor.children, [1]), true);
+    const fieldId = field(editor).completeTemplateInput('template-input', 'project', {
+      name: 'Priority',
+      type: 'create',
     });
+    const definition = fieldId
+      ? buildTanaIndex(editor.children).nodesById.get(fieldId)
+      : undefined;
+
+    assert.ok(fieldId);
+    assert.equal(definition?.fieldDefinition?.type, 'plain');
+    assert.equal(definition?.node.indent, 1);
+    assert.equal(editor.children.some((node) => node.id === 'template-input'), false);
+    assert.equal(isSupertagFieldInputNode(editor.children, definition?.path ?? [0]), false);
   });
 
-  test('resolves field names from the current Field Definition node text', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'owner' }] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Owner' }],
-        id: 'owner',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-    ]);
-
-    assert.equal(
-      getSupertagFieldBindings(buildTanaIndex(editor.children), 'project')[0]
-        ?.field.text,
-      'Owner'
-    );
-
-    editor.tf.select([1, 0], { edge: 'end' });
-    editor.tf.insertText(' name');
-
-    assert.equal(
-      getSupertagFieldBindings(buildTanaIndex(editor.children), 'project')[0]
-        ?.field.text,
-      'Owner name'
-    );
-  });
-
-  test('keeps a binding without an explicit default unset when applied', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'priority' }] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-
-    assert.equal(applySupertag(editor, 'task', 'project'), true);
-    assert.equal(editor.children[2].tanaFieldValues, undefined);
-  });
-
-  test('does not instantiate a default whose type conflicts with its Field Definition', () => {
+  test('materializes every bound Field when applying a Supertag and keeps Field labels dynamic', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project',
         tanaSupertagDefinition: {
           fields: [
-            {
-              defaultValue: { type: 'plain', value: 'not a number' },
-              fieldId: 'estimate',
-            },
+            { defaultValue: { type: 'plain', value: 'Untitled' }, fieldId: 'title' },
+            { fieldId: 'estimate' },
           ],
         },
         type: KEYS.p,
       },
-      {
-        children: [{ text: 'Estimate' }],
-        id: 'estimate',
-        tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
+      { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
     ]);
 
     assert.equal(
-      isFieldValueCompatible(
-        { type: 'number' },
-        { type: 'plain', value: 'not a number' }
-      ),
-      false
-    );
-    assert.equal(applySupertag(editor, 'task', 'project'), true);
-    assert.equal(editor.children[2].tanaFieldValues, undefined);
-  });
-
-  test('rejects an Options value that is not a Field candidate', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Status' }],
-        id: 'status',
-        tanaFieldDefinition: { options: ['active'], type: 'options' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
-      { children: [{ text: 'Inactive' }], id: 'inactive', type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-
-    assert.equal(
-      setFieldValue(editor, 'task', 'status', {
-        type: 'options',
-        value: 'inactive',
-      }),
-      false
-    );
-    assert.equal(editor.children[3].tanaFieldValues, undefined);
-  });
-
-  test('rejects a From Supertag value that is not a source-tag instance', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Person' }],
-        id: 'person',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Owner' }],
-        id: 'owner',
-        tanaFieldDefinition: { sourceSupertagId: 'person', type: 'from-supertag' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Ada ' },
-          { children: [{ text: '' }], key: 'person', type: TANA_SUPERTAG_KEY },
-        ],
-        id: 'ada',
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Grace' }], id: 'grace', type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-
-    assert.equal(
-      setFieldValue(editor, 'task', 'owner', {
-        type: 'from-supertag',
-        value: 'grace',
-      }),
-      false
-    );
-    assert.equal(editor.children[4].tanaFieldValues, undefined);
-  });
-
-  test('rejects an Options binding default that is not a Field candidate', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Status' }],
-        id: 'status',
-        tanaFieldDefinition: { options: ['active'], type: 'options' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
-      { children: [{ text: 'Inactive' }], id: 'inactive', type: KEYS.p },
-    ]);
-
-    assert.equal(
-      field(editor).bind('project', 'status', {
-        type: 'options',
-        value: 'inactive',
-      }),
-      false
-    );
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, { fields: [] });
-  });
-
-  test('rejects a From Supertag binding default that is not a source-tag instance', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Person' }],
-        id: 'person',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Owner' }],
-        id: 'owner',
-        tanaFieldDefinition: { sourceSupertagId: 'person', type: 'from-supertag' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Ada ' },
-          { children: [{ text: '' }], key: 'person', type: TANA_SUPERTAG_KEY },
-        ],
-        id: 'ada',
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Grace' }], id: 'grace', type: KEYS.p },
-    ]);
-
-    assert.equal(field(editor).bind('project', 'owner'), true);
-    assert.equal(
-      field(editor).setBindingDefault('project', 'owner', {
-        type: 'from-supertag',
-        value: 'grace',
-      }),
-      false
-    );
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId: 'owner' }],
-    });
-  });
-
-  test('preserves an existing instance value when a Field Definition type changes', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Task' }],
-        id: 'task',
-        tanaFieldValues: {
-          priority: { type: 'plain', value: 'High' },
-        },
-        type: KEYS.p,
-      },
-    ]);
-
-    editor.tf.setNodes(
-      { tanaFieldDefinition: { type: 'number' } },
-      { at: [0] }
-    );
-
-    assert.deepEqual(editor.children[1].tanaFieldValues, {
-      priority: { type: 'plain', value: 'High' },
-    });
-    assert.equal(
-      isFieldValueCompatible(
-        { type: 'number' },
-        { type: 'plain', value: 'High' }
-      ),
-      false
-    );
-  });
-
-  test('creates a bound Field Definition at the end of its parent subtree', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Summary' }],
-        id: 'summary',
-        indent: 1,
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Outside Project' }],
-        id: 'outside',
-        type: KEYS.p,
-      },
-    ]);
-
-    const fieldId = createFieldDefinition(
-      editor,
-      'Priority',
-      { type: 'number' },
-      'project'
-    );
-
-    assert.equal(fieldId, 'node-1');
-    assert.equal(editor.children[2].id, fieldId);
-    assert.equal(editor.children[2].indent, 1);
-    assert.deepEqual(editor.children[2].tanaFieldDefinition, { type: 'number' });
-    assert.equal(editor.children[3].id, 'outside');
-    assert.equal(bindFieldToSupertag(editor, 'project', fieldId!), true);
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId }],
-    });
-  });
-
-  test('triggers the shared Plate Field Combobox only from valid template or normal Nodes', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
-      {
-        children: [{ text: '' }],
-        id: 'field',
-        indent: 1,
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'option', indent: 2, type: KEYS.p },
-      { children: [{ text: '' }], id: 'outside', type: KEYS.p },
-    ]);
-
-    assert.equal(isSupertagFieldInputNode(editor.children, [1]), true);
-    assert.equal(isAdHocFieldInputNode(editor.children, [1]), false);
-    assert.equal(isSupertagFieldInputNode(editor.children, [2]), false);
-    assert.equal(isAdHocFieldInputNode(editor.children, [2]), false);
-    assert.equal(isSupertagFieldInputNode(editor.children, [3]), false);
-    assert.equal(isAdHocFieldInputNode(editor.children, [3]), false);
-    assert.equal(isSupertagFieldInputNode(editor.children, [4]), false);
-    assert.equal(isAdHocFieldInputNode(editor.children, [4]), true);
-
-    editor.tf.select([1, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    assert.equal(
-      editor.children[1].children.some(
-        (child) => child.type === TANA_FIELD_INPUT_KEY
-      ),
+      editor.getTransforms(TanaSupertagPlugin).supertag.apply('task', 'project'),
       true
     );
-
-    editor.tf.select([2, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    assert.equal(editor.children[2].children[0].text, '>');
-
-    editor.tf.select([3, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    assert.equal(editor.children[3].children[0].text, '>');
-
-    editor.tf.select([4, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    assert.equal(
-      editor.children[4].children.some(
-        (child) => child.type === TANA_FIELD_INPUT_KEY
-      ),
-      true
-    );
-  });
-
-  test('derives Field Defined and Set separately from bindings and direct keys', () => {
-    const index = buildTanaIndex([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'priority' }] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Missing' }], id: 'missing', type: KEYS.p },
-      {
-        children: [{ text: 'Direct empty' }],
-        id: 'direct-empty',
-        tanaFieldValues: { priority: null },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Direct value' }],
-        id: 'direct-value',
-        tanaFieldValues: { priority: { type: 'plain', value: 'High' } },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Tagged' },
-          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
-        ],
-        id: 'tagged',
-        type: KEYS.p,
-      },
-    ]);
-
-    assert.equal(isFieldDefined(index, 'missing', 'priority'), false);
-    assert.equal(isFieldSet(index.nodesById.get('missing')!, 'priority'), false);
-    assert.equal(isFieldDefined(index, 'direct-empty', 'priority'), true);
-    assert.equal(isFieldSet(index.nodesById.get('direct-empty')!, 'priority'), false);
-    assert.equal(isFieldDefined(index, 'direct-value', 'priority'), true);
-    assert.equal(isFieldSet(index.nodesById.get('direct-value')!, 'priority'), true);
-    assert.equal(isFieldDefined(index, 'tagged', 'priority'), true);
-    assert.equal(isFieldSet(index.nodesById.get('tagged')!, 'priority'), false);
-  });
-
-  test('adds, sets, clears, and deletes only direct Field keys', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-
-    assert.equal(addAdHocField(editor, 'task', 'priority'), true);
-    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
-    assert.equal(addAdHocField(editor, 'task', 'priority'), false);
-    assert.equal(
-      setFieldValue(editor, 'task', 'priority', {
-        type: 'plain',
-        value: 'High',
-      }),
-      true
-    );
-    assert.deepEqual(editor.children[1].tanaFieldValues, {
-      priority: { type: 'plain', value: 'High' },
-    });
-    assert.equal(clearFieldValue(editor, 'task', 'priority'), true);
-    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
-    assert.equal(deleteAdHocField(editor, 'task', 'priority'), true);
-    assert.equal(editor.children[1].tanaFieldValues, undefined);
-    assert.equal(isFieldDefined(buildTanaIndex(editor.children), 'task', 'priority'), false);
-  });
-
-  test('rejects new values without a compatible Field Definition', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Estimate' }],
-        id: 'estimate',
-        tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-    ]);
-    const before = structuredClone(editor.children);
-
-    assert.equal(
-      setFieldValue(editor, 'task', 'missing-definition', {
-        type: 'plain',
-        value: 'No field',
-      }),
-      false
-    );
-    assert.deepEqual(editor.children, before);
-
-    assert.equal(
-      setFieldValue(editor, 'task', 'estimate', {
-        type: 'plain',
-        value: 'Wrong type',
-      }),
-      false
-    );
-    assert.deepEqual(editor.children, before);
-  });
-
-  test('keeps a template Field defined after deleting its direct value', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'priority' }] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Task' },
-          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
-        ],
-        id: 'task',
-        tanaFieldValues: { priority: { type: 'plain', value: 'High' } },
-        type: KEYS.p,
-      },
-    ]);
-
-    assert.equal(deleteAdHocField(editor, 'task', 'priority'), true);
 
     const index = buildTanaIndex(editor.children);
+    const fields = index.fieldNodesByParent.get('task') ?? [];
+    const descriptors = getNodeFieldDescriptors(index, 'task');
 
-    assert.equal(index.nodesById.get('task')?.fieldValues, undefined);
-    assert.equal(isFieldDefined(index, 'task', 'priority'), true);
-    assert.equal(isFieldSet(index.nodesById.get('task')!, 'priority'), false);
+    assert.deepEqual(fields.map(({ fieldId }) => fieldId), ['title', 'estimate']);
+    assert.deepEqual(index.fieldValues.get('task'), new Map([
+      ['title', { type: 'plain', value: 'Untitled' }],
+    ]));
+    assert.deepEqual(
+      descriptors.filter((descriptor) => descriptor.source !== 'system').map(
+        ({ fieldNodeId, key, label }) => ({ fieldNodeId, key, label })
+      ),
+      fields.map((fieldNode) => ({
+        fieldNodeId: fieldNode.id,
+        key: fieldNode.id,
+        label: index.nodesById.get(fieldNode.fieldId)?.text,
+      }))
+    );
   });
 
-  test('binds an ad-hoc Field to one applied Supertag and removes only a redundant null', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Task' }],
-        id: 'task-tag',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Plan launch ' },
-          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
-          { text: ' ' },
-          { children: [{ text: '' }], key: 'task-tag', type: 'tana_supertag' },
-        ],
-        id: 'plan',
-        tanaFieldValues: { priority: null },
-        type: KEYS.p,
-      },
-    ]);
-
-    const before = buildTanaIndex(editor.children);
-
-    assert.equal(isAdHocField(before, 'plan', 'priority'), true);
-    assert.equal(isFieldDefinedBySupertag(before, 'plan', 'priority'), false);
-    assert.equal(bindFieldToSupertag(editor, 'project', 'priority'), true);
-    assert.equal(deleteAdHocField(editor, 'plan', 'priority'), true);
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId: 'priority' }],
-    });
-    assert.deepEqual(editor.children[1].tanaSupertagDefinition, { fields: [] });
-    assert.equal(editor.children[3].tanaFieldValues, undefined);
-
-    const after = buildTanaIndex(editor.children);
-
-    assert.equal(isFieldDefinedBySupertag(after, 'plan', 'priority'), true);
-    assert.equal(isAdHocField(after, 'plan', 'priority'), false);
-  });
-
-  test('keeps a real ad-hoc value when the Field becomes a template binding', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Plan launch ' },
-          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
-        ],
-        id: 'plan',
-        tanaFieldValues: { priority: { type: 'plain', value: 'High' } },
-        type: KEYS.p,
-      },
-    ]);
-
-    assert.equal(bindFieldToSupertag(editor, 'project', 'priority'), true);
-    assert.deepEqual(editor.children[2].tanaFieldValues, {
-      priority: { type: 'plain', value: 'High' },
-    });
+  test('keeps compatibility a pure type check', () => {
     assert.equal(
-      isAdHocField(buildTanaIndex(editor.children), 'plan', 'priority'),
+      isFieldValueCompatible({ type: 'number' }, { type: 'plain', value: '1' }),
       false
     );
-  });
-
-  test('adds an existing Field to a normal Node through the shared > workflow', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'task', type: KEYS.p },
-    ]);
-
-    editor.tf.select([1, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    const input = Array.from(
-      editor.api.nodes({
-        at: [1],
-        match: (node) => node.type === TANA_FIELD_INPUT_KEY,
-      })
-    )[0];
-
-    assert.ok(input);
-    editor.tf.removeNodes({ at: input![1] });
     assert.equal(
-      completeAdHocFieldInput(editor, 'task', { fieldId: 'priority' }),
-      'priority'
-    );
-    assert.deepEqual(editor.children[1].tanaFieldValues, { priority: null });
-    assert.equal(
-      editor.children.filter((node) => node.tanaFieldDefinition).length,
-      1
-    );
-  });
-
-  test('creates a plain Field only when the normal > workflow has no exact match', () => {
-    const editor = createEditor([
-      { children: [{ text: '' }], id: 'task', type: KEYS.p },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-    ]);
-
-    assert.equal(
-      completeAdHocFieldInput(editor, 'task', {
-        name: 'Priority',
-        type: 'create',
-      }),
-      'priority'
-    );
-    assert.deepEqual(editor.children[0].tanaFieldValues, { priority: null });
-    assert.equal(
-      editor.children.filter((node) => node.tanaFieldDefinition).length,
-      1
-    );
-
-    const newEditor = createEditor([
-      { children: [{ text: '' }], id: 'task', type: KEYS.p },
-    ]);
-    const fieldId = completeAdHocFieldInput(newEditor, 'task', {
-      name: 'Status',
-      type: 'create',
-    });
-
-    assert.equal(fieldId, 'node-1');
-    assert.deepEqual(newEditor.children[0].tanaFieldValues, {
-      [fieldId!]: null,
-    });
-    assert.deepEqual(newEditor.children[1].tanaFieldDefinition, { type: 'plain' });
-  });
-
-  test('removes an escaped Field Combobox input without changing its temporary Node', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
-    ]);
-    const before = structuredClone(editor.children);
-
-    editor.tf.select([1, 0], { edge: 'end' });
-    editor.tf.insertText('>');
-
-    const input = Array.from(
-      editor.api.nodes({
-        at: [1],
-        match: (node) => node.type === TANA_FIELD_INPUT_KEY,
-      })
-    )[0];
-
-    assert.ok(input);
-    editor.tf.removeNodes({ at: input![1] });
-
-    assert.deepEqual(editor.children, before);
-  });
-
-  test('prioritizes an exact Field Definition and does not offer a duplicate creation', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
-      {
-        children: [{ text: 'High Priority' }],
-        id: 'high-priority',
-        tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Priority' }],
-        id: 'priority',
-        tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
-    ]);
-    const index = buildTanaIndex(editor.children);
-    const candidates = getFieldDefinitionCandidatesFromIndex(index);
-    const prioritized = prioritizeFieldDefinitionCandidates(candidates, 'Priority');
-    const exact = findFieldDefinitionExactMatch(index, 'Priority');
-
-    assert.deepEqual(
-      prioritized.map(({ id }) => id),
-      ['priority', 'high-priority']
-    );
-    assert.equal(hasFieldDefinitionExactMatch(candidates, 'Priority'), true);
-    assert.equal(exact?.id, 'priority');
-    assert.equal(
-      completeSupertagFieldTemplateInput(editor, 'template', 'project', {
-        fieldId: exact!.id,
-      }),
-      'priority'
-    );
-    assert.equal(
-      editor.children.filter((node) => node.tanaFieldDefinition).length,
-      2
-    );
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId: 'priority' }],
-    });
-    assert.equal(editor.children.some((node) => node.id === 'template'), false);
-    assert.equal(editor.api.block()?.[0].id, 'project');
-  });
-
-  test('does not mutate a non-transient node when completing a Field input', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: '' }],
-        id: 'field',
-        indent: 1,
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-    ]);
-    const before = structuredClone(editor.children);
-
-    assert.equal(
-      completeSupertagFieldTemplateInput(editor, 'field', 'project', {
-        name: 'New field',
-        type: 'create',
-      }),
-      undefined
-    );
-    assert.deepEqual(editor.children, before);
-  });
-
-  test('creates a plain Field Definition in the Supertag subtree and binds it', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Summary' }],
-        id: 'summary',
-        indent: 1,
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      { children: [{ text: '' }], id: 'template', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Outside' }], id: 'outside', type: KEYS.p },
-    ]);
-
-    const fieldId = completeSupertagFieldTemplateInput(
-      editor,
-      'template',
-      'project',
-      { name: 'Priority', type: 'create' }
-    );
-
-    assert.equal(fieldId, 'node-1');
-    assert.deepEqual(editor.children[2], {
-      children: [{ text: 'Priority' }],
-      id: fieldId,
-      indent: 1,
-      tanaFieldDefinition: { type: 'plain' },
-      type: KEYS.p,
-    });
-    assert.equal(editor.children[3].id, 'outside');
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId }],
-    });
-    assert.equal(editor.children.some((node) => node.id === 'template'), false);
-    assert.equal(editor.api.block()?.[0].id, 'project');
-  });
-
-  test('derives From Supertag candidates only from the source tag instances', () => {
-    const index = buildTanaIndex([
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Person' }],
-        id: 'person',
-        tanaSupertagDefinition: { fields: [] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Owner' }],
-        id: 'owner',
-        tanaFieldDefinition: {
-          sourceSupertagId: 'person',
-          type: 'from-supertag',
-        },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Ada ' },
-          { children: [{ text: '' }], key: 'person', type: 'tana_supertag' },
-        ],
-        id: 'ada',
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Build ' },
-          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
-        ],
-        id: 'build',
-        type: KEYS.p,
-      },
-    ]);
-
-    const owner = index.nodesById.get('owner')!.fieldDefinition!;
-
-    assert.deepEqual(
-      getFieldValueCandidates(index, owner).map(({ id }) => id),
-      ['ada']
-    );
-  });
-
-  test('creates Options as ordinary child Nodes and clears values for removed options', () => {
-    const editor = createEditor([
-      {
-        children: [{ text: 'Status' }],
-        id: 'status',
-        tanaFieldDefinition: { options: [], type: 'options' },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-      { children: [{ text: 'Outside' }], id: 'outside', type: KEYS.p },
-    ]);
-
-    const optionId = createFieldOption(editor, 'status', 'Active');
-
-    assert.equal(optionId, 'node-1');
-    assert.deepEqual(editor.children[0].tanaFieldDefinition, {
-      options: [optionId],
-      type: 'options',
-    });
-    assert.deepEqual(editor.children[1], {
-      children: [{ text: 'Active' }],
-      id: optionId,
-      indent: 1,
-      type: KEYS.p,
-    });
-    assert.equal(editor.children[3].id, 'outside');
-    const index = buildTanaIndex(editor.children);
-    const statusDefinition = index.nodesById.get('status')?.fieldDefinition;
-
-    assert.ok(statusDefinition && statusDefinition.type === 'options');
-    assert.deepEqual(
-      getFieldValueCandidates(index, statusDefinition).map((node) => node.id),
-      [optionId]
-    );
-    assert.equal(
-      setFieldValue(editor, 'task', 'status', {
-        type: 'options',
-        value: optionId!,
-      }),
+      isFieldValueCompatible({ type: 'number' }, { type: 'number', value: 1 }),
       true
     );
-    assert.deepEqual(editor.children[2].tanaFieldValues, {
-      status: { type: 'options', value: optionId },
-    });
-    assert.equal(removeFieldOption(editor, 'status', optionId!), true);
-    assert.deepEqual(editor.children[0].tanaFieldDefinition, {
-      options: [],
-      type: 'options',
-    });
-    assert.equal(editor.children.some((node) => node.id === optionId), false);
-    assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.fieldValues, {
-      status: null,
-    });
-  });
-
-  test('derives system, Supertag, and direct Field display data without copying values', () => {
-    const document: Value = [
-      {
-        children: [{ text: 'Project' }],
-        id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'status' }] },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Status' }],
-        id: 'status',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Risk' }],
-        id: 'risk',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [
-          { text: 'Ship it ' },
-          { children: [{ text: '' }], key: 'project', type: TANA_SUPERTAG_KEY },
-        ],
-        id: 'task',
-        tanaFieldValues: {
-          risk: null,
-          status: { type: 'plain', value: '进行中' },
-        },
-        tanaPresentation: { hiddenFieldKeys: ['status'] },
-        type: KEYS.p,
-      },
-      { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
-    ];
-    const before = structuredClone(document);
-    const descriptors = getNodeFieldDescriptors(buildTanaIndex(document), 'task');
-    const status = descriptors.find(({ key }) => key === 'status');
-    const risk = descriptors.find(({ key }) => key === 'risk');
-    const parent = descriptors.find(
-      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.parent
-    );
-    const children = descriptors.find(
-      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.children
-    );
-    const tags = descriptors.find(
-      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.supertags
-    );
-
-    assert.deepEqual(status, {
-      definition: { type: 'plain' },
-      fieldId: 'status',
-      key: 'status',
-      label: 'Status',
-      source: 'supertag',
-      supertagIds: ['project'],
-      value: { type: 'plain', value: '进行中' },
-      visible: false,
-    });
-    assert.deepEqual(risk, {
-      definition: { type: 'plain' },
-      fieldId: 'risk',
-      key: 'risk',
-      label: 'Risk',
-      source: 'custom',
-      value: null,
-      visible: true,
-    });
-    assert.equal(parent?.systemValue, '工作区');
-    assert.equal(children?.systemValue, 'Child');
-    assert.equal(tags?.systemValue, '#Project');
-    assert.deepEqual(document, before);
   });
 });

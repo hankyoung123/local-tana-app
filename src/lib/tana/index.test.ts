@@ -32,9 +32,6 @@ const document: Value = [
         type: 'tana_supertag',
       },
     ],
-    tanaFieldValues: {
-      status: { type: 'options', value: 'active' },
-    },
     type: 'p',
   },
 ];
@@ -62,9 +59,7 @@ describe('buildTanaIndex', () => {
       },
     ]);
     assert.deepEqual(index.nodesBySupertag.get('project'), ['task']);
-    assert.deepEqual(index.fieldValues.get('task'), new Map([
-      ['status', { type: 'options', value: 'active' }],
-    ]));
+    assert.equal(index.fieldValues.has('task'), false);
     assert.deepEqual(document, before);
   });
 
@@ -73,6 +68,51 @@ describe('buildTanaIndex', () => {
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
     ]);
+  });
+
+  test('derives Field values exclusively from occurrence and value Nodes', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: 'p' },
+      { children: [{ text: 'Active' }], id: 'active', type: 'p' },
+      { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+      { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: 'p' },
+      {
+        children: [{ children: [{ text: '' }], key: 'active', type: 'mention' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'options',
+        type: 'p',
+      },
+    ]);
+
+    assert.deepEqual(index.fieldValues.get('task'), new Map([
+      ['status', { type: 'options', value: 'active' }],
+    ]));
+    assert.deepEqual(index.fieldNodesByParent.get('task')?.map((field) => ({
+      fieldId: field.fieldId,
+      id: field.id,
+      valueNodeId: field.valueNodeId,
+    })), [{ fieldId: 'status', id: 'task-status', valueNodeId: 'task-status-value' }]);
+  });
+
+  test('keeps an invalid reference-shaped value as an unset Field', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: 'p' },
+      { children: [{ text: 'Active' }], id: 'active', type: 'p' },
+      { children: [{ text: 'Other' }], id: 'other', type: 'p' },
+      { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+      { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: 'p' },
+      {
+        children: [{ children: [{ text: '' }], key: 'other', type: 'mention' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'options',
+        type: 'p',
+      },
+    ]);
+
+    assert.equal(index.fieldValues.get('task')?.has('status') ?? false, false);
+    assert.equal(index.fieldNodesById.get('task-status')?.value, undefined);
   });
 
   test('derives reference and supertag names from the current target node', () => {

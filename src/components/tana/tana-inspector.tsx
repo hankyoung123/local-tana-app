@@ -183,9 +183,15 @@ function PresentationFieldRow({
       <button
         className="opacity-0 text-[#7b827d] text-[11px] transition-opacity hover:text-[#202421] focus:opacity-100 group-hover:opacity-100"
         type="button"
-        onClick={() =>
-          presentation.setFieldVisible(nodeId, descriptor.key, !descriptor.visible)
-        }
+        onClick={() => {
+          if (!descriptor.fieldNodeId) return;
+
+          presentation.setFieldVisible(
+            nodeId,
+            descriptor.fieldNodeId,
+            !descriptor.visible
+          );
+        }}
       >
         {descriptor.visible ? '隐藏' : '显示'}
       </button>
@@ -210,7 +216,7 @@ function AddCustomField({ nodeId }: { nodeId: NodeId }) {
   const addField = () => {
     const fieldId = fieldTransforms.createDefinition(name, createDefinition());
 
-    if (!fieldId || !fieldTransforms.addAdHoc(nodeId, fieldId)) return;
+    if (!fieldId || !fieldTransforms.materialize(nodeId, fieldId)) return;
 
     setName('');
     setType('plain');

@@ -43,26 +43,38 @@ const document: Value = [
         type: 'tana_supertag',
       },
     ],
-    tanaFieldValues: {
-      estimate: { type: 'number', value: 3 },
-      status: { type: 'options', value: 'active' },
-    },
+    type: 'p',
+  },
+  { children: [{ text: '' }], id: 'alpha-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },
+  { children: [{ text: '3' }], id: 'alpha-estimate-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
+  { children: [{ text: '' }], id: 'alpha-status', indent: 1, tanaFieldId: 'status', type: 'p' },
+  {
+    children: [{ children: [{ text: '' }], key: 'active', type: 'mention' }],
+    id: 'alpha-status-value',
+    indent: 2,
+    tanaFieldValueType: 'options',
     type: 'p',
   },
   {
     id: 'beta',
     children: [{ text: 'Beta notes' }],
-    tanaFieldValues: {
-      status: { type: 'options', value: 'done' },
-    },
+    type: 'p',
+  },
+  { children: [{ text: '' }], id: 'beta-status', indent: 1, tanaFieldId: 'status', type: 'p' },
+  {
+    children: [{ children: [{ text: '' }], key: 'done', type: 'mention' }],
+    id: 'beta-status-value',
+    indent: 2,
+    tanaFieldValueType: 'options',
     type: 'p',
   },
   {
     id: 'gamma',
     children: [{ text: 'Gamma notes' }],
-    tanaFieldValues: { estimate: null },
     type: 'p',
   },
+  { children: [{ text: '' }], id: 'gamma-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },
+  { children: [{ text: '' }], id: 'gamma-estimate-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
 ];
 
 const index = buildTanaIndex(document);

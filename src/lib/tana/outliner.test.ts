@@ -138,7 +138,6 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'B' }],
         id: 'b',
         indent: 1,
-        tanaFieldValues: { priority: { type: 'number', value: 1 } },
         type: KEYS.blockquote,
       },
       { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
@@ -238,9 +237,7 @@ describe('Tana outliner behavior', () => {
     );
     assert.deepEqual(editor.children, originalDocument);
     assert.equal(editor.children[1].id, 'b');
-    assert.deepEqual(editor.children[1].tanaFieldValues, {
-      priority: { type: 'number', value: 1 },
-    });
+    assert.equal('tanaFieldId' in editor.children[1], false);
   });
 
   test('derives hierarchy for every presentation without changing node types', () => {
@@ -274,7 +271,7 @@ describe('Tana outliner behavior', () => {
       {
         children: [{ text: 'Heading parent' }],
         id: 'heading',
-        tanaFieldValues: { status: { type: 'plain', value: 'Active' } },
+        tanaViewDefinition: { clauses: [] },
         type: KEYS.h1,
       },
       { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
@@ -315,9 +312,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(editor.children[0].type, KEYS.blockquote);
     assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
     assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
-    assert.deepEqual(editor.children[0].tanaFieldValues, {
-      status: { type: 'plain', value: 'Active' },
-    });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { clauses: [] });
 
     const beforeCollapse = structuredClone(editor.children);
 
@@ -353,7 +348,6 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'B' }],
         id: 'b',
         indent: 1,
-        tanaFieldValues: { status: { type: 'plain', value: 'Active' } },
         type: KEYS.blockquote,
       },
       { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
@@ -402,9 +396,7 @@ describe('Tana outliner behavior', () => {
     assert.deepEqual(zoomOutliner, originalDocument);
     assert.equal(zoomOutliner[1].id, 'b');
     assert.equal(zoomOutliner[1].indent, 1);
-    assert.deepEqual(zoomOutliner[1].tanaFieldValues, {
-      status: { type: 'plain', value: 'Active' },
-    });
+    assert.equal('tanaFieldId' in zoomOutliner[1], false);
   });
 
   test('separates Zoom identity from Plate focus navigation', () => {
@@ -417,7 +409,6 @@ describe('Tana outliner behavior', () => {
           children: [{ text: 'C' }],
           id: 'c',
           indent: 2,
-          tanaFieldValues: { effort: { type: 'number', value: 3 } },
           type: KEYS.blockquote,
         },
       ],
@@ -438,9 +429,7 @@ describe('Tana outliner behavior', () => {
     assert.deepEqual(getTanaZoomRange(editor.children, 'c'), [[2]]);
     assert.deepEqual(editor.children, originalDocument);
     assert.equal(editor.children[2].id, 'c');
-    assert.deepEqual(editor.children[2].tanaFieldValues, {
-      effort: { type: 'number', value: 3 },
-    });
+    assert.equal('tanaFieldId' in editor.children[2], false);
   });
 
   test('uses the Zoom plugin state for block selection and DnD eligibility', () => {
@@ -555,9 +544,20 @@ describe('Tana outliner behavior', () => {
             },
           ],
           id: 'project',
-          tanaFieldValues: {
-            status: { type: 'plain', value: 'Active' },
-          },
+          type: KEYS.p,
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-status',
+          indent: 1,
+          tanaFieldId: 'status',
+          type: KEYS.p,
+        },
+        {
+          children: [{ text: 'Active' }],
+          id: 'project-status-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
           type: KEYS.p,
         },
         {
@@ -601,7 +601,7 @@ describe('Tana outliner behavior', () => {
       assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project']);
       assert.deepEqual(index.backlinks.get('project'), [
         {
-          path: [2, 1],
+          path: [4, 1],
           sourceNodeId: 'task',
           targetNodeId: 'project',
         },

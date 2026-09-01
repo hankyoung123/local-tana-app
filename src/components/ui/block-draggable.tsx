@@ -27,7 +27,7 @@ import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { TanaNodeFields } from '@/components/tana/tana-node-fields';
+import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
   Tooltip,
   TooltipContent,
@@ -259,20 +259,68 @@ function Draggable({
 
       <div
         ref={nodeRef}
-        className="slate-blockWrapper flow-root"
+        className={cn(
+          'slate-blockWrapper relative flow-root',
+          typeof (element as TElement & { tanaFieldId?: unknown }).tanaFieldId ===
+            'string' && 'tana-fieldOccurrence',
+          typeof (
+            element as TElement & { tanaFieldValueType?: unknown }
+          ).tanaFieldValueType === 'string' && 'tana-fieldValue'
+        )}
         onContextMenu={(event) =>
           editor
             .getApi(BlockSelectionPlugin)
             .blockSelection.addOnContextMenu({ element, event })
         }
       >
+        <TanaFieldNodeLabel fieldId={(element as TElement & { tanaFieldId?: unknown }).tanaFieldId} />
+        <TanaFieldValuePlaceholder nodeId={element.id} />
         <MemoizedChildren>{children}</MemoizedChildren>
-        {isFocusedNode && typeof element.id === 'string' && (
-          <TanaNodeFields nodeId={element.id} />
-        )}
         <DropLine />
       </div>
     </div>
+  );
+}
+
+/** Field occurrence labels are derived from the Field Definition Node. */
+function TanaFieldNodeLabel({ fieldId }: { fieldId: unknown }) {
+  const index = useTanaIndex();
+
+  if (typeof fieldId !== 'string') return null;
+
+  const field = index.nodesById.get(fieldId);
+
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute top-0 left-0 z-10 max-w-[45%] truncate pt-0.5 text-[#527664] text-sm"
+      contentEditable={false}
+    >
+      {field?.text || '未命名字段'}
+    </span>
+  );
+}
+
+/** Empty value Nodes remain editable Plate Nodes while showing their state. */
+function TanaFieldValuePlaceholder({ nodeId }: { nodeId: unknown }) {
+  const index = useTanaIndex();
+
+  if (typeof nodeId !== 'string') return null;
+
+  const fieldNode = Array.from(index.fieldNodesById.values()).find(
+    (candidate) => candidate.valueNodeId === nodeId
+  );
+
+  if (!fieldNode || fieldNode.value) return null;
+
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute top-0 left-0 z-10 pt-0.5 text-[#9aa19d] text-sm"
+      contentEditable={false}
+    >
+      未设置
+    </span>
   );
 }
 

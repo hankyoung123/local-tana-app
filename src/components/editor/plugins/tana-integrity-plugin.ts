@@ -6,10 +6,10 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
+import { getTanaNodeDescendantPaths, getTanaParentPath } from '@/lib/tana/outliner';
 import type {
   FieldBinding,
   FieldValue,
-  FieldValueState,
   NodeId,
   TanaBlockElement,
   TanaQueryClause,
@@ -25,12 +25,13 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * - supertag.key
  *
  * field
+ * - field occurrence.tanaFieldId
+ * - presentation.hiddenFieldNodeIds
  * - binding.fieldId
  * - binding.defaultValue
  * - options.options[]
  * - from-supertag.sourceSupertagId
- * - fieldValues keys
- * - reference-like FieldValue.value
+ * - value-node mention.key
  *
  * view
  * - query fieldId
@@ -89,22 +90,57 @@ function findDanglingInlineRelation(
   }
 }
 
-function setFieldValues(
-  editor: PlateEditor,
-  path: Path,
-  fieldValues: Readonly<Record<NodeId, FieldValueState>>
-) {
-  if (Object.keys(fieldValues).length === 0) {
-    editor.tf.unsetNodes('tanaFieldValues', { at: path });
-  } else {
-    editor.tf.setNodes({ tanaFieldValues: fieldValues }, { at: path });
-  }
-}
-
 function isReferenceLikeFieldValue(
   value: FieldValue | undefined
 ): value is Extract<FieldValue, { type: 'from-supertag' | 'options' }> {
   return value?.type === 'from-supertag' || value?.type === 'options';
+}
+
+function removeNodeSubtree(editor: PlateEditor, path: Path) {
+  getTanaNodeDescendantPaths(editor.children, path)
+    .reverse()
+    .forEach((descendantPath) => editor.tf.removeNodes({ at: descendantPath }));
+  editor.tf.removeNodes({ at: path });
+}
+
+function pruneHiddenFieldNodeIds(
+  editor: PlateEditor,
+  node: TanaBlockElement,
+  path: Path,
+  nodeIds: ReadonlySet<NodeId>
+) {
+  const hiddenFieldNodeIds = node.tanaPresentation?.hiddenFieldNodeIds;
+
+  if (!hiddenFieldNodeIds) return false;
+
+  const nextIds = hiddenFieldNodeIds.filter((fieldNodeId) => {
+    if (!nodeIds.has(fieldNodeId)) return false;
+
+    const fieldPath = editor.children.findIndex(
+      (candidate) => ElementApi.isElement(candidate) && candidate.id === fieldNodeId
+    );
+    const fieldNode = fieldPath >= 0 ? editor.children[fieldPath] : undefined;
+
+    return (
+      fieldPath >= 0 &&
+      ElementApi.isElement(fieldNode) &&
+      !!(fieldNode as TanaBlockElement).tanaFieldId &&
+      getTanaParentPath(editor.children, [fieldPath])?.[0] === path[0]
+    );
+  });
+
+  if (nextIds.length === hiddenFieldNodeIds.length) return false;
+
+  if (nextIds.length === 0) {
+    editor.tf.unsetNodes('tanaPresentation', { at: path });
+  } else {
+    editor.tf.setNodes(
+      { tanaPresentation: { hiddenFieldNodeIds: nextIds } },
+      { at: path }
+    );
+  }
+
+  return true;
 }
 
 function pruneSupertagFieldBindings(
@@ -180,18 +216,10 @@ function normalizeRelations(editor: PlateEditor): boolean {
   }
 
   for (const [node, path] of entries) {
-    if (!node.tanaFieldValues) continue;
+    if (!node.tanaFieldId || nodeIds.has(node.tanaFieldId)) continue;
 
-    const fieldValues = Object.fromEntries(
-      Object.entries(node.tanaFieldValues).filter(([fieldId]) =>
-        nodeIds.has(fieldId)
-      )
-    ) as Readonly<Record<NodeId, FieldValueState>>;
-
-    if (Object.keys(fieldValues).length !== Object.keys(node.tanaFieldValues).length) {
-      setFieldValues(editor, path, fieldValues);
-      return true;
-    }
+    removeNodeSubtree(editor, path);
+    return true;
   }
 
   for (const [node, path] of entries) {
@@ -230,46 +258,8 @@ function normalizeRelations(editor: PlateEditor): boolean {
     }
   }
 
-  const fieldDefinitions = new Map(
-    entries.flatMap(([node]) =>
-      typeof node.id === 'string' && node.tanaFieldDefinition
-        ? [[node.id, node.tanaFieldDefinition] as const]
-        : []
-    )
-  );
-
   for (const [node, path] of entries) {
-    if (!node.tanaFieldValues) continue;
-
-    for (const [fieldId, value] of Object.entries(node.tanaFieldValues)) {
-      const definition = fieldDefinitions.get(fieldId);
-
-      if (
-        value !== null &&
-        definition?.type === 'options' &&
-        value.type === 'options' &&
-        !nodeIds.has(value.value)
-      ) {
-        setFieldValues(editor, path, {
-          ...node.tanaFieldValues,
-          [fieldId]: null,
-        });
-        return true;
-      }
-
-      if (
-        value !== null &&
-        definition?.type === 'from-supertag' &&
-        value.type === 'from-supertag' &&
-        !nodeIds.has(value.value)
-      ) {
-        setFieldValues(editor, path, {
-          ...node.tanaFieldValues,
-          [fieldId]: null,
-        });
-        return true;
-      }
-    }
+    if (pruneHiddenFieldNodeIds(editor, node, path, nodeIds)) return true;
   }
 
   for (const [node, path] of entries) {

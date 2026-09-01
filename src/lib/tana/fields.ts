@@ -11,7 +11,6 @@ import type {
   FieldBinding,
   FieldDefinition,
   FieldValue,
-  FieldValueState,
   NodeId,
   TanaBlockElement,
   TanaIndex,
@@ -50,12 +49,13 @@ export type TanaSystemFieldKey =
 export type TanaFieldDescriptor = {
   definition?: FieldDefinition;
   fieldId?: NodeId;
+  /** The real Field occurrence Node that presentation can show or hide. */
+  fieldNodeId?: NodeId;
   key: NodeId | TanaSystemFieldKey;
   label: string;
   source: 'custom' | 'supertag' | 'system';
   supertagIds?: readonly NodeId[];
   systemValue?: string;
-  value?: FieldValueState;
   visible: boolean;
 };
 
@@ -128,6 +128,7 @@ function getDirectSupertagDefinitionParent(
 function isFieldWorkflowSpecialNode(node: TanaBlockElement): boolean {
   return (
     node.tanaFieldDefinition !== undefined ||
+    node.tanaFieldId !== undefined ||
     node.tanaSupertagDefinition !== undefined ||
     node.tanaViewDefinition !== undefined
   );
@@ -160,8 +161,9 @@ export function isSupertagFieldInputNode(
   return (
     getTanaElementText(tanaNode) === '' &&
     tanaNode.tanaFieldDefinition === undefined &&
+    tanaNode.tanaFieldId === undefined &&
     tanaNode.tanaSupertagDefinition === undefined &&
-    tanaNode.tanaFieldValues === undefined &&
+    tanaNode.tanaFieldValueType === undefined &&
     tanaNode.tanaViewDefinition === undefined &&
     !!getDirectSupertagDefinitionParent(document, path)
   );
@@ -181,7 +183,8 @@ export function isAdHocFieldInputNode(
     !!tanaNode &&
     getTanaElementText(tanaNode) === '' &&
     !isFieldWorkflowSpecialNode(tanaNode) &&
-    !hasFieldWorkflowDefinitionAncestor(document, path)
+    !hasFieldWorkflowDefinitionAncestor(document, path) &&
+    !!getTanaParentPath(document, path)
   );
 }
 
@@ -197,27 +200,18 @@ export function getSupertagFieldInputParentId(
   return typeof parent?.id === 'string' ? parent.id : undefined;
 }
 
-function hasDirectFieldValue(
-  fieldValues: Readonly<Record<NodeId, FieldValueState>> | undefined,
-  fieldId: NodeId
-): boolean {
-  return (
-    !!fieldValues && Object.prototype.hasOwnProperty.call(fieldValues, fieldId)
-  );
-}
-
-/** A field is defined by either a Supertag binding or a direct value key. */
+/** A Field is defined only when its occurrence Node exists under this Node. */
 export function isFieldDefined(
   index: TanaIndex,
   nodeId: NodeId,
   fieldId: NodeId
 ): boolean {
-  const node = index.nodesById.get(nodeId);
-
-  if (!node) return false;
-  if (hasDirectFieldValue(node.fieldValues, fieldId)) return true;
-
-  return isFieldDefinedBySupertag(index, nodeId, fieldId);
+  return (
+    index.nodesById.has(nodeId) &&
+    (index.fieldNodesByParent.get(nodeId)?.some(
+      (fieldNode) => fieldNode.fieldId === fieldId
+    ) ?? false)
+  );
 }
 
 /** True only when an applied Supertag binds this Field for the current Node. */
@@ -240,27 +234,27 @@ export function isFieldDefinedBySupertag(
 }
 
 /**
- * A direct Field key is ad-hoc only when no applied Supertag also supplies the
- * same binding. Values remain stored directly for template Fields, but those
- * keys do not make the Field ad-hoc.
+ * A Field occurrence is ad-hoc only when no applied Supertag supplies the
+ * same Field binding. The occurrence itself remains a normal Plate Node.
  */
 export function isAdHocField(
   index: TanaIndex,
   nodeId: NodeId,
   fieldId: NodeId
 ): boolean {
-  const node = index.nodesById.get(nodeId);
-
   return (
-    !!node &&
-    hasDirectFieldValue(node.fieldValues, fieldId) &&
+    isFieldDefined(index, nodeId, fieldId) &&
     !isFieldDefinedBySupertag(index, nodeId, fieldId)
   );
 }
 
-/** A Field is set only when its direct document value is non-null. */
-export function isFieldSet(node: TanaNode, fieldId: NodeId): boolean {
-  return node.fieldValues?.[fieldId] != null;
+/** A Field is set only when its value is derivable from its value child Node. */
+export function isFieldSet(
+  index: TanaIndex,
+  nodeId: NodeId,
+  fieldId: NodeId
+): boolean {
+  return index.fieldValues.get(nodeId)?.has(fieldId) ?? false;
 }
 
 export function getFieldDefinitionCandidatesFromIndex(
@@ -422,12 +416,14 @@ export function getNodeFieldDescriptors(
 
   if (!node) return [];
 
-  const hiddenFieldKeys = new Set(node.presentation?.hiddenFieldKeys ?? []);
+  const hiddenFieldNodeIds = new Set(node.presentation?.hiddenFieldNodeIds ?? []);
   const withVisibility = <T extends Omit<TanaFieldDescriptor, 'visible'>>(
     descriptor: T
   ): TanaFieldDescriptor => ({
     ...descriptor,
-    visible: !hiddenFieldKeys.has(descriptor.key),
+    visible:
+      descriptor.fieldNodeId === undefined ||
+      !hiddenFieldNodeIds.has(descriptor.fieldNodeId),
   });
   const nodes = Array.from(index.nodesById.values());
   const nodeIndex = nodes.findIndex((candidate) => candidate.id === nodeId);
@@ -471,54 +467,35 @@ export function getNodeFieldDescriptors(
       systemValue: `${index.backlinks.get(nodeId)?.length ?? 0} 个`,
     }),
   ];
-  const supertagFields = new Map<NodeId, TanaFieldDescriptor>();
+  const fieldNodes = index.fieldNodesByParent.get(nodeId) ?? [];
 
-  supertagIds.forEach((supertagId) => {
-    getSupertagFieldBindings(index, supertagId).forEach(({ definition, field }) => {
-      const existing = supertagFields.get(field.id);
+  const semanticFields = fieldNodes.flatMap((fieldNode) => {
+    const field = index.nodesById.get(fieldNode.fieldId);
 
-      if (existing) {
-        supertagFields.set(field.id, {
-          ...existing,
-          supertagIds: [...(existing.supertagIds ?? []), supertagId],
-        });
+    if (!field?.fieldDefinition) return [];
 
-        return;
-      }
+    const matchingSupertagIds = supertagIds.filter((supertagId) =>
+      index.nodesById
+        .get(supertagId)
+        ?.supertagDefinition?.fields.some(
+          (binding) => binding.fieldId === fieldNode.fieldId
+        )
+    );
 
-      supertagFields.set(
-        field.id,
-        withVisibility({
-          definition,
-          fieldId: field.id,
-          key: field.id,
-          label: field.text || '未命名字段',
-          source: 'supertag',
-          supertagIds: [supertagId],
-          value: node.fieldValues?.[field.id],
-        })
-      );
-    });
+    return [
+      withVisibility({
+        definition: field.fieldDefinition,
+        fieldId: field.id,
+        fieldNodeId: fieldNode.id,
+        key: fieldNode.id,
+        label: field.text || '未命名字段',
+        source: matchingSupertagIds.length > 0 ? 'supertag' : 'custom',
+        ...(matchingSupertagIds.length > 0
+          ? { supertagIds: matchingSupertagIds }
+          : {}),
+      }),
+    ];
   });
 
-  const custom = Object.keys(node.fieldValues ?? {}).flatMap((fieldId) => {
-    if (!isAdHocField(index, nodeId, fieldId)) return [];
-
-    const field = index.nodesById.get(fieldId);
-
-    return field?.fieldDefinition
-      ? [
-          withVisibility({
-            definition: field.fieldDefinition,
-            fieldId,
-            key: fieldId,
-            label: field.text || '未命名字段',
-            source: 'custom',
-            value: node.fieldValues?.[fieldId],
-          }),
-        ]
-      : [];
-  });
-
-  return [...system, ...supertagFields.values(), ...custom];
+  return [...system, ...semanticFields];
 }

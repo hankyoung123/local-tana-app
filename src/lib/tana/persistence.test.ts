@@ -35,9 +35,9 @@ describe('Plate document persistence', () => {
     assert.equal(
       isValidTanaDocument([
         {
-          children: [{ text: 'Unset field' }],
-          id: 'unset-field',
-          tanaFieldValues: { priority: null },
+          children: [{ text: '' }],
+          id: 'field-occurrence',
+          tanaFieldId: 'priority',
           type: 'p',
         },
       ]),
@@ -48,7 +48,7 @@ describe('Plate document persistence', () => {
         {
           children: [{ text: 'Visible field preference' }],
           id: 'presentation',
-          tanaPresentation: { hiddenFieldKeys: ['status'] },
+          tanaPresentation: { hiddenFieldNodeIds: ['status-occurrence'] },
           type: 'p',
         },
       ]),
@@ -59,7 +59,9 @@ describe('Plate document persistence', () => {
         {
           children: [{ text: 'Duplicate field preference' }],
           id: 'invalid-presentation',
-          tanaPresentation: { hiddenFieldKeys: ['status', 'status'] },
+          tanaPresentation: {
+            hiddenFieldNodeIds: ['status-occurrence', 'status-occurrence'],
+          },
           type: 'p',
         },
       ]),

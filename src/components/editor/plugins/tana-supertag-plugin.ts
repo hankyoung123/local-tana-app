@@ -101,11 +101,12 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const [, nodePath] = nodeEntry;
   const bindings = definitionEntry[0].tanaSupertagDefinition!.fields;
   bindings.forEach(({ defaultValue, fieldId }) => {
-    if (defaultValue === undefined) return;
+    const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
-    editor
-      .getTransforms(TanaFieldPlugin)
-      .field.applyDefault(nodeId, fieldId, defaultValue);
+    fieldTransforms.materialize(nodeId, fieldId, defaultValue);
+    if (defaultValue !== undefined) {
+      fieldTransforms.applyDefault(nodeId, fieldId, defaultValue);
+    }
   });
 
   const selectionIsInNode = isSelectionInNode(editor, nodePath);

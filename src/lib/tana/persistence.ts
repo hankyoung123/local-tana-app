@@ -54,28 +54,25 @@ function isElement(value: Descendant): value is TElement {
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaFieldDefinition?: unknown;
-    tanaFieldValues?: unknown;
+    tanaFieldId?: unknown;
+    tanaFieldValueType?: unknown;
     tanaPresentation?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaViewDefinition?: unknown;
   };
 
-  if (semantic.tanaFieldValues !== undefined) {
-    if (
-      !semantic.tanaFieldValues ||
-      typeof semantic.tanaFieldValues !== 'object'
-    ) {
-      return false;
-    }
+  if (
+    semantic.tanaFieldId !== undefined &&
+    (typeof semantic.tanaFieldId !== 'string' || semantic.tanaFieldId.length === 0)
+  ) {
+    return false;
+  }
 
-    if (
-      !Object.entries(semantic.tanaFieldValues).every(
-        ([fieldId, fieldValue]) =>
-          fieldId.length > 0 && (fieldValue === null || isFieldValue(fieldValue))
-      )
-    ) {
-      return false;
-    }
+  if (
+    semantic.tanaFieldValueType !== undefined &&
+    !isFieldType(semantic.tanaFieldValueType)
+  ) {
+    return false;
   }
 
   if (
@@ -87,19 +84,20 @@ function hasValidSemanticData(element: TElement): boolean {
 
   if (semantic.tanaPresentation !== undefined) {
     const presentation = semantic.tanaPresentation as {
-      hiddenFieldKeys?: unknown;
+      hiddenFieldNodeIds?: unknown;
     };
 
     if (
       !presentation ||
       typeof presentation !== 'object' ||
-      (presentation.hiddenFieldKeys !== undefined &&
-        (!Array.isArray(presentation.hiddenFieldKeys) ||
-          !presentation.hiddenFieldKeys.every(
-            (fieldKey) => typeof fieldKey === 'string' && fieldKey.length > 0
+      (presentation.hiddenFieldNodeIds !== undefined &&
+        (!Array.isArray(presentation.hiddenFieldNodeIds) ||
+          !presentation.hiddenFieldNodeIds.every(
+            (fieldNodeId) =>
+              typeof fieldNodeId === 'string' && fieldNodeId.length > 0
           ) ||
-          new Set(presentation.hiddenFieldKeys).size !==
-            presentation.hiddenFieldKeys.length))
+          new Set(presentation.hiddenFieldNodeIds).size !==
+            presentation.hiddenFieldNodeIds.length))
     ) {
       return false;
     }
@@ -138,14 +136,7 @@ function isFieldDefinition(value: unknown): value is {
   if (!value || typeof value !== 'object') return false;
 
   const field = value as Record<string, unknown>;
-  const validType = [
-    'checkbox',
-    'date',
-    'from-supertag',
-    'number',
-    'options',
-    'plain',
-  ].includes(field.type as string);
+  const validType = isFieldType(field.type);
 
   if (!validType) {
     return false;
@@ -165,6 +156,17 @@ function isFieldDefinition(value: unknown): value is {
     field.sourceSupertagId === null ||
     (typeof field.sourceSupertagId === 'string' && field.sourceSupertagId.length > 0)
   );
+}
+
+function isFieldType(value: unknown): value is string {
+  return [
+    'checkbox',
+    'date',
+    'from-supertag',
+    'number',
+    'options',
+    'plain',
+  ].includes(value as string);
 }
 
 function isFieldBinding(value: unknown): value is {
@@ -223,14 +225,16 @@ export function isValidTanaDocument(value: unknown): value is Value {
     const semantic = descendant as TElement & {
       key?: unknown;
       tanaFieldDefinition?: unknown;
-      tanaFieldValues?: unknown;
+      tanaFieldId?: unknown;
+      tanaFieldValueType?: unknown;
       tanaPresentation?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
       semantic.tanaFieldDefinition !== undefined ||
-      semantic.tanaFieldValues !== undefined ||
+      semantic.tanaFieldId !== undefined ||
+      semantic.tanaFieldValueType !== undefined ||
       semantic.tanaPresentation !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaViewDefinition !== undefined;

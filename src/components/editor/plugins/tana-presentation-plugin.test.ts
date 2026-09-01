@@ -5,6 +5,7 @@ import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
+import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana/index';
 
@@ -18,48 +19,46 @@ function createEditor(value: Value) {
   });
 }
 
-describe('Tana field presentation', () => {
-  test('hides and restores a Field row without changing any Field semantics', () => {
+describe('Tana Field presentation', () => {
+  test('hides a real Field occurrence by its NodeId without changing value Nodes', () => {
     const editor = createEditor([
-      {
-        children: [{ text: 'Status' }],
-        id: 'status',
-        tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
-      {
-        children: [{ text: 'Task' }],
-        id: 'task',
-        tanaFieldValues: { status: { type: 'plain', value: '进行中' } },
-        type: KEYS.p,
-      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
     ]);
-    const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
-    const fieldValues = structuredClone(editor.children[1].tanaFieldValues);
+    const fields = editor.getTransforms(TanaFieldPlugin).field;
 
-    assert.equal(presentation.setFieldVisible('task', 'status', false), true);
-    assert.deepEqual(editor.children[1].tanaPresentation, {
-      hiddenFieldKeys: ['status'],
+    const fieldNodeId = fields.materialize('task', 'status')!;
+    fields.setValue('task', 'status', { type: 'plain', value: '进行中' });
+    const valueNodeId = buildTanaIndex(editor.children).fieldNodesById.get(fieldNodeId)
+      ?.valueNodeId;
+    const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
+
+    assert.equal(presentation.setFieldVisible('task', fieldNodeId, false), true);
+    assert.deepEqual(editor.children[0].tanaPresentation, {
+      hiddenFieldNodeIds: [fieldNodeId],
     });
-    assert.deepEqual(editor.children[1].tanaFieldValues, fieldValues);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesById.get(fieldNodeId)?.valueNodeId,
+      valueNodeId
+    );
     assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
       ['status', { type: 'plain', value: '进行中' }],
     ]));
 
-    assert.equal(presentation.setFieldVisible('task', 'status', true), true);
-    assert.equal(editor.children[1].tanaPresentation, undefined);
-    assert.deepEqual(editor.children[1].tanaFieldValues, fieldValues);
+    assert.equal(presentation.setFieldVisible('task', fieldNodeId, true), true);
+    assert.equal(editor.children[0].tanaPresentation, undefined);
   });
 
-  test('does not create presentation metadata for an already visible Field', () => {
+  test('rejects a non-Field Node as a presentation target', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Other' }], id: 'other', type: KEYS.p },
     ]);
 
     assert.equal(
       editor
         .getTransforms(TanaPresentationPlugin)
-        .presentation.setFieldVisible('task', 'status', true),
+        .presentation.setFieldVisible('task', 'other', false),
       false
     );
     assert.equal(editor.children[0].tanaPresentation, undefined);
