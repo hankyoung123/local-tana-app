@@ -43,6 +43,28 @@ describe('Plate document persistence', () => {
       ]),
       true
     );
+    assert.equal(
+      isValidTanaDocument([
+        {
+          children: [{ text: 'Visible field preference' }],
+          id: 'presentation',
+          tanaPresentation: { hiddenFieldKeys: ['status'] },
+          type: 'p',
+        },
+      ]),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument([
+        {
+          children: [{ text: 'Duplicate field preference' }],
+          id: 'invalid-presentation',
+          tanaPresentation: { hiddenFieldKeys: ['status', 'status'] },
+          type: 'p',
+        },
+      ]),
+      false
+    );
   });
 
   test('migrates copied reference names to key-only semantic nodes', () => {

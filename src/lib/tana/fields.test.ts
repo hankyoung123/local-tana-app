@@ -15,6 +15,7 @@ import {
 import {
   findFieldDefinitionExactMatch,
   getFieldDefinitionCandidatesFromIndex,
+  getNodeFieldDescriptors,
   getFieldValueCandidates,
   getSupertagFieldBindings,
   hasFieldDefinitionExactMatch,
@@ -26,6 +27,7 @@ import {
   isFieldSet,
   isSupertagFieldInputNode,
   prioritizeFieldDefinitionCandidates,
+  TANA_SYSTEM_FIELD_KEYS,
 } from './fields';
 import { buildTanaIndex } from './index';
 
@@ -1073,5 +1075,79 @@ describe('Tana field nodes', () => {
     assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.fieldValues, {
       status: null,
     });
+  });
+
+  test('derives system, Supertag, and direct Field display data without copying values', () => {
+    const document: Value = [
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { fields: [{ fieldId: 'status' }] },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Risk' }],
+        id: 'risk',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [
+          { text: 'Ship it ' },
+          { children: [{ text: '' }], key: 'project', type: TANA_SUPERTAG_KEY },
+        ],
+        id: 'task',
+        tanaFieldValues: {
+          risk: null,
+          status: { type: 'plain', value: '进行中' },
+        },
+        tanaPresentation: { hiddenFieldKeys: ['status'] },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
+    ];
+    const before = structuredClone(document);
+    const descriptors = getNodeFieldDescriptors(buildTanaIndex(document), 'task');
+    const status = descriptors.find(({ key }) => key === 'status');
+    const risk = descriptors.find(({ key }) => key === 'risk');
+    const parent = descriptors.find(
+      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.parent
+    );
+    const children = descriptors.find(
+      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.children
+    );
+    const tags = descriptors.find(
+      ({ key }) => key === TANA_SYSTEM_FIELD_KEYS.supertags
+    );
+
+    assert.deepEqual(status, {
+      definition: { type: 'plain' },
+      fieldId: 'status',
+      key: 'status',
+      label: 'Status',
+      source: 'supertag',
+      supertagIds: ['project'],
+      value: { type: 'plain', value: '进行中' },
+      visible: false,
+    });
+    assert.deepEqual(risk, {
+      definition: { type: 'plain' },
+      fieldId: 'risk',
+      key: 'risk',
+      label: 'Risk',
+      source: 'custom',
+      value: null,
+      visible: true,
+    });
+    assert.equal(parent?.systemValue, '工作区');
+    assert.equal(children?.systemValue, 'Child');
+    assert.equal(tags?.systemValue, '#Project');
+    assert.deepEqual(document, before);
   });
 });

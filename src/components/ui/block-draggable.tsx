@@ -27,6 +27,7 @@ import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaNodeFields } from '@/components/tana/tana-node-fields';
 import {
   Tooltip,
   TooltipContent,
@@ -84,6 +85,9 @@ function TanaDraggableNode({
     <Draggable
       {...props}
       hasChildren={hasChildren}
+      isFocusedNode={
+        typeof props.element.id === 'string' && props.element.id === focusedNodeId
+      }
       openIds={openIds}
       tanaPath={tanaPath}
     />
@@ -135,11 +139,13 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 
 function Draggable({
   hasChildren,
+  isFocusedNode,
   openIds,
   tanaPath,
   ...props
 }: PlateElementProps & {
   hasChildren: boolean;
+  isFocusedNode: boolean;
   openIds: ReadonlySet<string>;
   tanaPath: Path;
 }) {
@@ -191,6 +197,7 @@ function Draggable({
       className={cn(
         'relative',
         isDragging && 'opacity-50',
+        isFocusedNode && 'tana-focusedNode',
         getPluginByType(editor, element.type)?.node.isContainer
           ? 'group/container'
           : 'group'
@@ -260,6 +267,9 @@ function Draggable({
         }
       >
         <MemoizedChildren>{children}</MemoizedChildren>
+        {isFocusedNode && typeof element.id === 'string' && (
+          <TanaNodeFields nodeId={element.id} />
+        )}
         <DropLine />
       </div>
     </div>

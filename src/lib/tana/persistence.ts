@@ -55,6 +55,7 @@ function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaFieldDefinition?: unknown;
     tanaFieldValues?: unknown;
+    tanaPresentation?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaViewDefinition?: unknown;
   };
@@ -82,6 +83,26 @@ function hasValidSemanticData(element: TElement): boolean {
     !isFieldDefinition(semantic.tanaFieldDefinition)
   ) {
     return false;
+  }
+
+  if (semantic.tanaPresentation !== undefined) {
+    const presentation = semantic.tanaPresentation as {
+      hiddenFieldKeys?: unknown;
+    };
+
+    if (
+      !presentation ||
+      typeof presentation !== 'object' ||
+      (presentation.hiddenFieldKeys !== undefined &&
+        (!Array.isArray(presentation.hiddenFieldKeys) ||
+          !presentation.hiddenFieldKeys.every(
+            (fieldKey) => typeof fieldKey === 'string' && fieldKey.length > 0
+          ) ||
+          new Set(presentation.hiddenFieldKeys).size !==
+            presentation.hiddenFieldKeys.length))
+    ) {
+      return false;
+    }
   }
 
   if (semantic.tanaSupertagDefinition !== undefined) {
@@ -203,12 +224,14 @@ export function isValidTanaDocument(value: unknown): value is Value {
       key?: unknown;
       tanaFieldDefinition?: unknown;
       tanaFieldValues?: unknown;
+      tanaPresentation?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
       semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldValues !== undefined ||
+      semantic.tanaPresentation !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaViewDefinition !== undefined;
 

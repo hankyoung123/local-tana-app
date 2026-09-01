@@ -40,6 +40,14 @@ export type TanaViewDefinition = {
   clauses: readonly TanaQueryClause[];
 };
 
+/**
+ * Per-Node presentation preferences. These never replace or alter the Field
+ * semantics stored on the same Plate Node.
+ */
+export type TanaPresentation = {
+  hiddenFieldKeys?: readonly string[];
+};
+
 export type SupertagDefinition = {
   fields: readonly FieldBinding[];
 };
@@ -47,6 +55,7 @@ export type SupertagDefinition = {
 export type TanaBlockElement = TElement & {
   tanaFieldDefinition?: FieldDefinition;
   tanaFieldValues?: Readonly<Record<FieldId, FieldValueState>>;
+  tanaPresentation?: TanaPresentation;
   tanaSupertagDefinition?: SupertagDefinition;
   tanaViewDefinition?: TanaViewDefinition;
 };
@@ -58,6 +67,7 @@ export type TanaNode = {
   text: string;
   fieldValues?: Readonly<Record<FieldId, FieldValueState>>;
   fieldDefinition?: FieldDefinition;
+  presentation?: TanaPresentation;
   supertagDefinition?: SupertagDefinition;
   viewDefinition?: TanaViewDefinition;
 };

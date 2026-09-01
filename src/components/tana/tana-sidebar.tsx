@@ -1,30 +1,28 @@
 'use client';
 
-import * as React from 'react';
-
-import { HashIcon, HomeIcon, ListFilterIcon, SearchIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
-import { searchTanaNodes, type NodeId, type TanaIndex } from '@/lib/tana';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { Input } from '@/components/ui/input';
+import type { NodeId, TanaIndex } from '@/lib/tana';
 import { cn } from '@/lib/utils';
 
 type TanaSidebarProps = {
   activeNodeId: NodeId | null;
+  collapsed: boolean;
   index: TanaIndex;
+  onCollapsedChange: (collapsed: boolean) => void;
   workspaceRootActive: boolean;
 };
 
+/** Quiet text navigation. Global search deliberately lives in the main shell. */
 export function TanaSidebar({
   activeNodeId,
+  collapsed,
   index,
+  onCollapsedChange,
   workspaceRootActive,
 }: TanaSidebarProps) {
   const editor = useEditorRef();
-  const [search, setSearch] = React.useState('');
-  const hasSearchQuery = search.trim().length > 0;
-  const results = searchTanaNodes(index, search);
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ supertagDefinition }) => !!supertagDefinition
   );
@@ -32,98 +30,78 @@ export function TanaSidebar({
     ({ viewDefinition }) => !!viewDefinition
   );
 
+  if (collapsed) {
+    return (
+      <aside className="flex h-full w-10 shrink-0 justify-center border-r border-[#e6ebe8] bg-[#fafbfa] pt-3">
+        <button
+          aria-label="展开导航"
+          className="h-7 w-7 text-[#7b827d] text-sm hover:text-[#202421]"
+          type="button"
+          onClick={() => onCollapsedChange(false)}
+        >
+          ›
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-[#e2e7e4] bg-[#f7f9f8] lg:flex">
-      <div className="p-3">
-        <label className="relative block">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-8 bg-white pl-8 text-xs shadow-none"
-            value={search}
-            aria-label="搜索节点"
-            placeholder="搜索节点"
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-[#e6ebe8] bg-[#fafbfa]">
+      <div className="flex h-11 items-center justify-between px-4">
+        <span className="font-medium text-[13px]">导航</span>
+        <button
+          className="text-[#7b827d] text-xs hover:text-[#202421]"
+          type="button"
+          onClick={() => onCollapsedChange(true)}
+        >
+          收起
+        </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {hasSearchQuery ? (
-          <SidebarSection title="搜索结果">
-            {results.length === 0 ? (
-              <p className="px-2 py-2 text-muted-foreground text-xs">
-                没有匹配的节点
-              </p>
-            ) : (
-              results.map((node) => (
-                <SidebarButton
-                  key={node.id}
-                  onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
-                >
-                  <SearchIcon />
-                  <span className="truncate">{node.text}</span>
-                </SidebarButton>
-              ))
-            )}
-          </SidebarSection>
-        ) : (
-          <>
-            <SidebarSection title="工作区">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+        <SidebarSection title="工作区">
+          <SidebarButton
+            active={workspaceRootActive}
+            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
+          >
+            工作区
+          </SidebarButton>
+        </SidebarSection>
+
+        <SidebarSection title="超级标签">
+          {supertags.length === 0 ? (
+            <p className="px-2 py-1 text-[#8b938d] text-xs">暂无超级标签</p>
+          ) : (
+            supertags.map((node) => (
               <SidebarButton
-                active={workspaceRootActive}
-                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
+                key={node.id}
+                active={activeNodeId === node.id}
+                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
               >
-                <HomeIcon />
-                <span className="truncate">工作区</span>
+                <span className="truncate">#{node.text || '未命名超级标签'}</span>
+                <span className="ml-auto text-[#8b938d] text-[10px] tabular-nums">
+                  {index.nodesBySupertag.get(node.id)?.length ?? 0}
+                </span>
               </SidebarButton>
-            </SidebarSection>
+            ))
+          )}
+        </SidebarSection>
 
-            <SidebarSection title="超级标签">
-              {supertags.length === 0 ? (
-                <p className="px-2 py-2 text-muted-foreground text-xs">
-                  选择一个节点以定义超级标签
-                </p>
-              ) : (
-                supertags.map((node) => (
-                  <SidebarButton
-                    key={node.id}
-                    active={activeNodeId === node.id}
-                    onClick={() =>
-                      editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
-                    }
-                  >
-                    <HashIcon />
-                    <span className="truncate">{node.text}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
-                      {index.nodesBySupertag.get(node.id)?.length ?? 0}
-                    </span>
-                  </SidebarButton>
-                ))
-              )}
-            </SidebarSection>
-
-            <SidebarSection title="视图">
-              {views.length === 0 ? (
-                <p className="px-2 py-2 text-muted-foreground text-xs">
-                  将节点定义为视图
-                </p>
-              ) : (
-                views.map((view) => (
-                  <SidebarButton
-                    key={view.id}
-                    active={activeNodeId === view.id}
-                    onClick={() =>
-                      editor.getTransforms(TanaZoomPlugin).zoom.to(view.id)
-                    }
-                  >
-                    <ListFilterIcon />
-                    <span className="truncate">{view.text}</span>
-                  </SidebarButton>
-                ))
-              )}
-            </SidebarSection>
-          </>
-        )}
+        <SidebarSection title="视图">
+          {views.length === 0 ? (
+            <p className="px-2 py-1 text-[#8b938d] text-xs">暂无视图</p>
+          ) : (
+            views.map((view) => (
+              <SidebarButton
+                key={view.id}
+                active={activeNodeId === view.id}
+                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(view.id)}
+              >
+                <span className="truncate">{view.text || '未命名视图'}</span>
+              </SidebarButton>
+            ))
+          )}
+        </SidebarSection>
       </div>
     </aside>
   );
@@ -138,7 +116,7 @@ function SidebarSection({
 }) {
   return (
     <section className="mb-5">
-      <h2 className="px-2 py-1.5 font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
+      <h2 className="px-2 py-1.5 font-medium text-[#8b938d] text-[10px] uppercase tracking-[0.1em]">
         {title}
       </h2>
       <div className="space-y-0.5">{children}</div>
@@ -155,8 +133,8 @@ function SidebarButton({
   return (
     <button
       className={cn(
-        'flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-xs hover:bg-[#e9efec] [&_svg]:size-3.5 [&_svg]:shrink-0',
-        active && 'bg-[#e6eee9] font-medium text-[#1f6f52]',
+        'flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-[#edf2ef]',
+        active && 'bg-[#e7efe9] font-medium text-[#2c604b]',
         className
       )}
       type="button"

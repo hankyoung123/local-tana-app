@@ -2,39 +2,9 @@
 
 import * as React from 'react';
 
-import type { PlateEditor } from 'platejs/react';
-
-import {
-  ArrowUpRightIcon,
-  HashIcon,
-  PlusIcon,
-  TagIcon,
-  Trash2Icon,
-} from 'lucide-react';
-
-import type {
-  FieldDefinition,
-  FieldType,
-  FieldValue,
-  FieldValueState,
-  NodeId,
-  TanaBlockElement,
-  TanaIndex,
-  TanaNode,
-} from '@/lib/tana';
-import {
-  getFieldValueCandidates,
-  getNodeSupertagIds,
-  getSupertagFieldBindings,
-  isFieldDefined,
-  isAdHocField,
-  isFieldValueCompatible,
-} from '@/lib/tana';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
-import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
-import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -44,16 +14,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  getNodeFieldDescriptors,
+  type FieldDefinition,
+  type FieldType,
+  type NodeId,
+  type TanaFieldDescriptor,
+} from '@/lib/tana';
+import { useEditorRef } from 'platejs/react';
 
-import { TanaViewDefinitionEditor } from './tana-view-editor';
 import { useTanaIndex } from './tana-index-context';
-
-const EMPTY_VALUE = '__local_tana_empty__';
 
 const fieldTypeLabels: Record<FieldType, string> = {
   checkbox: '复选框',
@@ -73,272 +42,107 @@ const fieldTypes: readonly FieldType[] = [
   'from-supertag',
 ];
 
-type TanaInspectorProps = {
-  activeNodeId: NodeId | null;
-  editor: PlateEditor;
-};
-
-export function TanaInspector({
-  activeNodeId,
-  editor,
-}: TanaInspectorProps) {
+/**
+ * The Fields Panel owns only field source, body visibility, and direct field
+ * creation. Field Values remain editable where the Node content is rendered.
+ */
+export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null }) {
   const index = useTanaIndex();
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const supertagTransforms = editor.getTransforms(TanaSupertagPlugin).supertag;
-  const selectedNode = activeNodeId
-    ? index.nodesById.get(activeNodeId)
-    : undefined;
+  const node = activeNodeId ? index.nodesById.get(activeNodeId) : undefined;
 
-  if (!selectedNode) {
+  if (!node) {
     return (
-      <aside className="hidden h-full w-72 shrink-0 border-l bg-[#fafbfa] p-5 xl:block">
-        <p className="text-muted-foreground text-xs">
-          选择一个节点以查看它的 Tana 语义。
-        </p>
+      <aside className="h-full w-72 shrink-0 border-l border-[#e6ebe8] bg-[#fbfcfb] p-5">
+        <h2 className="font-medium text-sm">字段</h2>
+        <p className="mt-3 text-[#7b827d] text-xs">选择一个节点以查看字段。</p>
       </aside>
     );
   }
 
-  const supertagIds = getNodeSupertagIds(index, selectedNode.id);
-  const appliedSupertags = supertagIds.flatMap((supertagId) => {
-    const supertag = index.nodesById.get(supertagId);
+  const descriptors = getNodeFieldDescriptors(index, node.id);
+  const systemFields = descriptors.filter(({ source }) => source === 'system');
+  const customFields = descriptors.filter(({ source }) => source === 'custom');
+  const supertagGroups = new Map<NodeId, TanaFieldDescriptor[]>();
 
-    return supertag?.supertagDefinition ? [supertag] : [];
-  });
-  const fieldBindings = supertagIds.flatMap((supertagId) =>
-    getSupertagFieldBindings(index, supertagId)
-  );
-  const definedFields = Array.from(
-    new Set([
-      ...fieldBindings.map(({ field }) => field.id),
-      ...Object.keys(selectedNode.fieldValues ?? {}),
-    ])
-  ).flatMap((fieldId) => {
-    const field = index.nodesById.get(fieldId);
+  descriptors
+    .filter(({ source }) => source === 'supertag')
+    .forEach((descriptor) => {
+      const supertagId = descriptor.supertagIds?.[0];
 
-    return field?.fieldDefinition &&
-      isFieldDefined(index, selectedNode.id, fieldId)
-      ? [field]
-      : [];
-  });
-  const backlinks = index.backlinks.get(selectedNode.id) ?? [];
+      if (!supertagId) return;
+
+      supertagGroups.set(supertagId, [
+        ...(supertagGroups.get(supertagId) ?? []),
+        descriptor,
+      ]);
+    });
 
   return (
-    <aside className="hidden h-full w-72 shrink-0 overflow-y-auto border-l bg-[#fafbfa] xl:block">
-      <div className="border-b p-5">
-        <p className="mb-1 text-[10px] text-muted-foreground uppercase tracking-[0.12em]">
-          检查器
-        </p>
-        <h2 className="truncate font-semibold text-sm">{selectedNode.text}</h2>
-        <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-          {selectedNode.id}
-        </p>
+    <aside className="h-full w-72 shrink-0 overflow-y-auto border-l border-[#e6ebe8] bg-[#fbfcfb]">
+      <div className="flex items-baseline justify-between px-5 pt-5 pb-4">
+        <h2 className="font-medium text-sm">字段</h2>
+        <span className="text-[#8b938d] text-[11px]">{node.text || '未命名节点'}</span>
       </div>
 
-      <InspectorSection icon={<HashIcon />} title="超级标签">
-        {supertagIds.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            在节点中输入 # 即可应用超级标签。
-          </p>
+      <FieldSection title="系统字段">
+        {systemFields.map((field) => (
+          <SystemFieldRow key={field.key} descriptor={field} />
+        ))}
+      </FieldSection>
+
+      <FieldSection title="标签字段">
+        {supertagGroups.size === 0 ? (
+          <p className="text-[#7b827d] text-xs">当前节点没有标签字段。</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {supertagIds.map((supertagId) => (
-              <span
-                key={supertagId}
-                className="inline-flex items-center rounded bg-emerald-50 pl-2 text-emerald-800 text-xs"
-              >
-                #{index.nodesById.get(supertagId)?.text ?? supertagId}
-                <button
-                  className="ml-1 rounded p-1 hover:bg-emerald-100"
-                  type="button"
-                  aria-label={`移除 ${supertagId}`}
-                  onClick={() =>
-                    supertagTransforms.remove(selectedNode.id, supertagId)
-                  }
-                >
-                  <Trash2Icon className="size-3" />
-                </button>
-              </span>
+          Array.from(supertagGroups.entries()).map(([supertagId, fields]) => (
+            <div key={supertagId} className="mb-3 last:mb-0">
+              <p className="mb-1.5 text-[#3b6d58] text-xs">
+                #{index.nodesById.get(supertagId)?.text || '未命名超级标签'}
+              </p>
+              <div className="space-y-0.5">
+                {fields.map((field) => (
+                  <PresentationFieldRow
+                    key={field.key}
+                    descriptor={field}
+                    nodeId={node.id}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </FieldSection>
+
+      <FieldSection title="自定义字段">
+        {customFields.length === 0 ? (
+          <p className="mb-2 text-[#7b827d] text-xs">暂无自定义字段。</p>
+        ) : (
+          <div className="mb-3 space-y-0.5">
+            {customFields.map((field) => (
+              <PresentationFieldRow
+                key={field.key}
+                descriptor={field}
+                nodeId={node.id}
+              />
             ))}
           </div>
         )}
-      </InspectorSection>
-
-      <InspectorSection icon={<TagIcon />} title="字段">
-        {definedFields.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
-            在空节点中输入 &gt; 即可直接添加字段。
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {definedFields.map((field) => {
-              const isDirectField = isAdHocField(
-                index,
-                selectedNode.id,
-                field.id
-              );
-
-              return (
-                <FieldControl
-                  key={field.id}
-                  addToTemplate={
-                    isDirectField ? (
-                      <AddFieldToTemplateAction
-                        editor={editor}
-                        fieldId={field.id}
-                        nodeId={selectedNode.id}
-                        supertags={appliedSupertags}
-                        value={selectedNode.fieldValues?.[field.id]}
-                      />
-                    ) : undefined
-                  }
-                  definition={field.fieldDefinition!}
-                  index={index}
-                  label={field.text || field.id}
-                  value={selectedNode.fieldValues?.[field.id]}
-                  onChange={(value) =>
-                    fieldTransforms.setValue(selectedNode.id, field.id, value)
-                  }
-                  onClear={() =>
-                    fieldTransforms.clearValue(selectedNode.id, field.id)
-                  }
-                  onRemove={
-                    isDirectField
-                      ? () => fieldTransforms.deleteAdHoc(selectedNode.id, field.id)
-                      : undefined
-                  }
-                />
-              );
-            })}
-          </div>
-        )}
-      </InspectorSection>
-
-      {selectedNode.fieldDefinition && (
-        <FieldDefinitionEditor
-          editor={editor}
-          index={index}
-          node={selectedNode}
-        />
-      )}
-
-      <InspectorSection icon={<ArrowUpRightIcon />} title="反向引用">
-        {backlinks.length === 0 ? (
-          <p className="text-muted-foreground text-xs">暂无引用。</p>
-        ) : (
-          <div className="space-y-1">
-            {backlinks.map((backlink, indexInList) => {
-              const sourceNode = index.nodesById.get(backlink.sourceNodeId);
-
-              return (
-                <button
-                  key={`${backlink.sourceNodeId}:${indexInList}`}
-                  className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
-                  type="button"
-                  onClick={() =>
-                    editor
-                      .getTransforms(TanaZoomPlugin)
-                      .zoom.to(backlink.sourceNodeId)
-                  }
-                >
-                  <ArrowUpRightIcon className="mt-0.5 size-3 shrink-0" />
-                  <span className="line-clamp-2">
-                    {sourceNode?.text ?? backlink.sourceNodeId}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </InspectorSection>
-
-      <SupertagDefinitionEditor
-        editor={editor}
-        index={index}
-        node={selectedNode}
-      />
-      <TanaViewDefinitionEditor
-        editor={editor}
-        index={index}
-        node={selectedNode.node as TanaBlockElement}
-        nodeId={selectedNode.id}
-      />
+        <AddCustomField nodeId={node.id} />
+      </FieldSection>
     </aside>
   );
 }
 
-function AddFieldToTemplateAction({
-  editor,
-  fieldId,
-  nodeId,
-  supertags,
-  value,
-}: {
-  editor: PlateEditor;
-  fieldId: NodeId;
-  nodeId: NodeId;
-  supertags: readonly TanaNode[];
-  value?: FieldValueState;
-}) {
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const addToTemplate = (supertagId: NodeId) => {
-    if (!fieldTransforms.bind(supertagId, fieldId)) return;
-
-    // A binding already expresses Defined + Not Set. Keep real FieldValues.
-    if (value === null) fieldTransforms.deleteAdHoc(nodeId, fieldId);
-  };
-
-  if (supertags.length === 0) return null;
-
-  if (supertags.length === 1) {
-    return (
-      <button
-        className="text-[10px] text-muted-foreground hover:text-foreground"
-        type="button"
-        onClick={() => addToTemplate(supertags[0].id)}
-      >
-        添加到模板
-      </button>
-    );
-  }
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className="text-[10px] text-muted-foreground hover:text-foreground"
-          type="button"
-        >
-          添加到模板
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {supertags.map((supertag) => (
-          <DropdownMenuItem
-            key={supertag.id}
-            onSelect={() => addToTemplate(supertag.id)}
-          >
-            #{supertag.text || supertag.id}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function InspectorSection({
+function FieldSection({
   children,
-  icon,
   title,
 }: {
   children: React.ReactNode;
-  icon: React.ReactNode;
   title: string;
 }) {
   return (
-    <section className="border-b p-5">
-      <h3 className="mb-3 flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em] [&_svg]:size-3.5">
-        {icon}
+    <section className="border-t border-[#edf0ee] px-5 py-4">
+      <h3 className="mb-2.5 font-medium text-[#7b827d] text-[10px] uppercase tracking-[0.1em]">
         {title}
       </h3>
       {children}
@@ -346,459 +150,124 @@ function InspectorSection({
   );
 }
 
-function FieldControl({
-  addToTemplate,
-  definition,
-  index,
-  label,
-  onChange,
-  onClear,
-  onRemove,
-  value,
-}: {
-  addToTemplate?: React.ReactNode;
-  definition: FieldDefinition;
-  index: TanaIndex;
-  label: string;
-  onChange: (value: FieldValue) => void;
-  onClear: () => void;
-  onRemove?: () => void;
-  value?: FieldValueState;
-}) {
-  const compatibleValue =
-    value && isFieldValueCompatible(definition, value) ? value : undefined;
-  const clearButton = compatibleValue ? (
-    <button
-      className="text-[10px] text-muted-foreground hover:text-foreground"
-      type="button"
-      onClick={onClear}
-    >
-      清除
-    </button>
-  ) : null;
-  const removeButton = onRemove ? (
-    <button
-      className="text-muted-foreground hover:text-destructive"
-      type="button"
-      aria-label={`移除字段 ${label}`}
-      onClick={onRemove}
-    >
-      <Trash2Icon className="size-3" />
-    </button>
-  ) : null;
-  const actions = (
-    <span className="flex items-center gap-2">
-      {addToTemplate}
-      {clearButton}
-      {removeButton}
-    </span>
-  );
-  const labelElement = (
-    <span className="mb-1.5 block font-medium text-[11px] text-muted-foreground">
-      {label}
-    </span>
-  );
-
-  if (definition.type === 'checkbox') {
-    return (
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span>{label}</span>
-        <div className="flex items-center gap-2">
-          {actions}
-          <Checkbox
-            checked={compatibleValue?.type === 'checkbox' ? compatibleValue.value : false}
-            onCheckedChange={(checked) =>
-              onChange({ type: 'checkbox', value: checked === true })
-            }
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (
-    definition.type === 'options' ||
-    definition.type === 'from-supertag'
-  ) {
-    const currentValue =
-      compatibleValue?.type === definition.type
-        ? compatibleValue.value
-        : EMPTY_VALUE;
-    const options = getFieldValueCandidates(index, definition).map((node) => ({
-      label: node.text || node.id,
-      value: node.id,
-    }));
-
-    return (
-      <label className="block">
-        <span className="flex items-center justify-between">
-          {labelElement}
-          {actions}
-        </span>
-        <Select
-          value={currentValue}
-          onValueChange={(nextValue) => {
-            if (nextValue === EMPTY_VALUE) return onClear();
-
-            onChange({ type: definition.type, value: nextValue });
-          }}
-        >
-          <SelectTrigger className="h-8 w-full text-xs">
-            <SelectValue placeholder="未设置" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={EMPTY_VALUE}>未设置</SelectItem>
-            {options.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </label>
-    );
-  }
-
-  const currentValue =
-    compatibleValue?.type === definition.type ? compatibleValue.value : '';
-
+function SystemFieldRow({ descriptor }: { descriptor: TanaFieldDescriptor }) {
   return (
-    <label className="block">
-      <span className="flex items-center justify-between">
-          {labelElement}
-          {actions}
-      </span>
-      <Input
-        className="h-8 text-xs"
-        type={
-          definition.type === 'number'
-            ? 'number'
-            : definition.type === 'date'
-              ? 'date'
-              : 'text'
-        }
-        value={currentValue}
-        onChange={(event) => {
-          if (event.target.value === '') return onClear();
-
-          if (definition.type === 'number') {
-            const numericValue = event.target.valueAsNumber;
-
-            if (!Number.isNaN(numericValue)) {
-              onChange({ type: 'number', value: numericValue });
-            }
-
-            return;
-          }
-
-          onChange({ type: definition.type, value: event.target.value });
-        }}
-      />
-    </label>
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 py-1 text-xs">
+      <span className="text-[#7b827d]">{descriptor.label}</span>
+      <span className="truncate text-[#4c534e]">{descriptor.systemValue}</span>
+    </div>
   );
 }
 
-function FieldDefinitionEditor({
-  editor,
-  index,
-  node,
+function PresentationFieldRow({
+  descriptor,
+  nodeId,
 }: {
-  editor: PlateEditor;
-  index: TanaIndex;
-  node: TanaNode;
+  descriptor: TanaFieldDescriptor;
+  nodeId: NodeId;
 }) {
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const definition = node.fieldDefinition!;
-  const supertags = Array.from(index.nodesById.values()).filter(
-    (candidate) => !!candidate.supertagDefinition
-  );
-  const [optionName, setOptionName] = React.useState('');
-  const optionNodes =
-    definition.type === 'options'
-      ? definition.options.flatMap((optionId) => {
-          const option = index.nodesById.get(optionId);
-
-          return option ? [option] : [];
-        })
-      : [];
-
-  const updateDefinition = (nextDefinition: FieldDefinition) => {
-    fieldTransforms.updateDefinition(node.id, nextDefinition);
-  };
-
-  const updateType = (type: FieldType) => {
-    if (type === 'options') {
-      updateDefinition({ options: [], type });
-      return;
-    }
-
-    if (type === 'from-supertag') {
-      updateDefinition({ sourceSupertagId: supertags[0]?.id ?? null, type });
-
-      return;
-    }
-
-    updateDefinition({ type });
-  };
+  const editor = useEditorRef();
+  const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
 
   return (
-    <InspectorSection icon={<TagIcon />} title="字段定义">
-      <p className="mb-3 text-muted-foreground text-xs">
-        字段名称直接编辑当前节点文本；该节点 ID 就是字段 ID。
-      </p>
-      <Select
-        value={definition.type}
-        onValueChange={(value) => updateType(value as FieldType)}
+    <div className="group flex min-h-7 items-center gap-2 rounded px-1.5 text-xs hover:bg-[#f1f5f2]">
+      <span
+        className={
+          descriptor.visible
+            ? 'min-w-0 flex-1 truncate'
+            : 'min-w-0 flex-1 truncate text-[#9aa19d] line-through'
+        }
       >
-        <SelectTrigger className="h-8 w-full text-xs">
+        {descriptor.label}
+      </span>
+      <button
+        className="opacity-0 text-[#7b827d] text-[11px] transition-opacity hover:text-[#202421] focus:opacity-100 group-hover:opacity-100"
+        type="button"
+        onClick={() =>
+          presentation.setFieldVisible(nodeId, descriptor.key, !descriptor.visible)
+        }
+      >
+        {descriptor.visible ? '隐藏' : '显示'}
+      </button>
+    </div>
+  );
+}
+
+function AddCustomField({ nodeId }: { nodeId: NodeId }) {
+  const editor = useEditorRef();
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const [isAdding, setIsAdding] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [type, setType] = React.useState<FieldType>('plain');
+
+  const createDefinition = (): FieldDefinition => {
+    if (type === 'options') return { options: [], type };
+    if (type === 'from-supertag') return { sourceSupertagId: null, type };
+
+    return { type };
+  };
+
+  const addField = () => {
+    const fieldId = fieldTransforms.createDefinition(name, createDefinition());
+
+    if (!fieldId || !fieldTransforms.addAdHoc(nodeId, fieldId)) return;
+
+    setName('');
+    setType('plain');
+    setIsAdding(false);
+  };
+
+  if (!isAdding) {
+    return (
+      <button
+        className="text-[#527664] text-xs hover:text-[#1f6f52]"
+        type="button"
+        onClick={() => setIsAdding(true)}
+      >
+        + 添加自定义字段
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 pt-1">
+      <Input
+        autoFocus
+        className="h-8 bg-white text-xs shadow-none"
+        placeholder="字段名称"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+      />
+      <Select value={type} onValueChange={(value) => setType(value as FieldType)}>
+        <SelectTrigger className="h-8 bg-white text-xs shadow-none">
           <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {fieldTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {fieldTypeLabels[type]}
-              </SelectItem>
+        </SelectTrigger>
+        <SelectContent>
+          {fieldTypes.map((fieldType) => (
+            <SelectItem key={fieldType} value={fieldType}>
+              {fieldTypeLabels[fieldType]}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
-
-      {definition.type === 'options' && (
-        <div className="mt-3 space-y-2">
-          <p className="text-[11px] text-muted-foreground">选项节点</p>
-          {optionNodes.map((option) => {
-            return (
-              <div
-                key={option.id}
-                className="flex items-center justify-between gap-3 text-xs"
-              >
-                <span className="min-w-0 truncate">{option.text || option.id}</span>
-                <button
-                  className="rounded p-0.5 text-muted-foreground hover:text-destructive"
-                  type="button"
-                  aria-label={`删除选项 ${option.text || option.id}`}
-                  onClick={() => fieldTransforms.removeOption(node.id, option.id)}
-                >
-                  <Trash2Icon className="size-3" />
-                </button>
-              </div>
-            );
-          })}
-          <div className="flex gap-2">
-            <Input
-              className="h-8 text-xs"
-              value={optionName}
-              placeholder="新选项"
-              onChange={(event) => setOptionName(event.target.value)}
-            />
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              disabled={!optionName.trim()}
-              onClick={() => {
-                if (fieldTransforms.createOption(node.id, optionName)) {
-                  setOptionName('');
-                }
-              }}
-            >
-              添加
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {definition.type === 'from-supertag' && (
-        <Select
-          value={definition.sourceSupertagId ?? EMPTY_VALUE}
-          onValueChange={(sourceSupertagId) =>
-            updateDefinition({
-              sourceSupertagId:
-                sourceSupertagId === EMPTY_VALUE ? null : sourceSupertagId,
-              type: 'from-supertag',
-            })
-          }
-        >
-          <SelectTrigger className="mt-3 h-8 w-full text-xs">
-            <SelectValue placeholder="来源：未选择" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={EMPTY_VALUE}>来源：未选择</SelectItem>
-            {supertags.map((supertag) => (
-              <SelectItem key={supertag.id} value={supertag.id}>
-                #{supertag.text || supertag.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-    </InspectorSection>
-  );
-}
-
-function SupertagDefinitionEditor({
-  editor,
-  index,
-  node,
-}: {
-  editor: PlateEditor;
-  index: TanaIndex;
-  node: TanaNode;
-}) {
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const supertagTransforms = editor.getTransforms(TanaSupertagPlugin).supertag;
-  const [fieldName, setFieldName] = React.useState('');
-  const [fieldType, setFieldType] = React.useState<FieldType>('plain');
-  const [sourceSupertagId, setSourceSupertagId] = React.useState('');
-  const definition = node.supertagDefinition;
-  const supertags = Array.from(index.nodesById.values()).filter(
-    (candidate) => !!candidate.supertagDefinition && candidate.id !== node.id
-  );
-
-  if (!definition) {
-    return (
-      <div className="p-5">
+      <div className="flex items-center gap-2">
         <Button
-          className="w-full"
+          className="h-7 px-2 text-xs"
+          disabled={!name.trim()}
           size="sm"
-          variant="outline"
-          onClick={() => supertagTransforms.define(node.id)}
+          type="button"
+          onClick={addField}
         >
-          <HashIcon />
-          定义为超级标签
+          添加
         </Button>
-      </div>
-    );
-  }
-
-  const resolvedBindings = getSupertagFieldBindings(index, node.id);
-  const createAndBindField = () => {
-    const name = fieldName.trim();
-    const fieldDefinition = createDefinition(
-      fieldType,
-      sourceSupertagId || supertags[0]?.id
-    );
-
-    if (!name) return;
-
-    const fieldId = fieldTransforms.createDefinition(
-      name,
-      fieldDefinition,
-      node.id
-    );
-
-    if (fieldId) fieldTransforms.bind(node.id, fieldId);
-
-    setFieldName('');
-  };
-
-  const updateDefault = (fieldId: NodeId, defaultValue?: FieldValue) => {
-    fieldTransforms.setBindingDefault(node.id, fieldId, defaultValue);
-  };
-
-  return (
-    <section className="p-5">
-      <div className="mb-3">
-        <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
-          <HashIcon className="size-3.5" />
-          超级标签定义
-        </h3>
-      </div>
-
-      <div className="mb-4 space-y-3">
-        {resolvedBindings.map(({ binding, definition: fieldDefinition, field }) => (
-          <div key={field.id} className="rounded bg-white p-2">
-            <div className="mb-2 flex items-center gap-2 text-xs">
-              <span className="min-w-0 flex-1 truncate">{field.text || field.id}</span>
-              <span className="text-[10px] text-muted-foreground">
-                {fieldTypeLabels[fieldDefinition.type]}
-              </span>
-              <button
-                className="rounded p-0.5 text-muted-foreground hover:text-destructive"
-                type="button"
-                aria-label={`移除字段绑定 ${field.text || field.id}`}
-                onClick={() => fieldTransforms.unbind(node.id, field.id)}
-              >
-                <Trash2Icon className="size-3" />
-              </button>
-            </div>
-            <FieldControl
-              definition={fieldDefinition}
-              index={index}
-              label="默认值"
-              value={binding.defaultValue}
-              onChange={(value) => updateDefault(field.id, value)}
-              onClear={() => updateDefault(field.id)}
-            />
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-2 border-t pt-3">
-        <Input
-          className="h-8 text-xs"
-          value={fieldName}
-          placeholder="字段名称"
-          onChange={(event) => setFieldName(event.target.value)}
-        />
-        <Select
-          value={fieldType}
-          onValueChange={(value) => setFieldType(value as FieldType)}
+        <button
+          className="text-[#7b827d] text-xs hover:text-[#202421]"
+          type="button"
+          onClick={() => setIsAdding(false)}
         >
-          <SelectTrigger className="h-8 w-full text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {fieldTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {fieldTypeLabels[type]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {fieldType === 'from-supertag' && (
-          <Select value={sourceSupertagId} onValueChange={setSourceSupertagId}>
-            <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="未选择" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={EMPTY_VALUE}>未选择</SelectItem>
-              {supertags.map((supertag) => (
-                <SelectItem key={supertag.id} value={supertag.id}>
-                  #{supertag.text || supertag.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Button
-          className="w-full"
-          disabled={!fieldName.trim()}
-          size="sm"
-          variant="outline"
-          onClick={createAndBindField}
-        >
-          <PlusIcon />
-          创建并绑定字段
-        </Button>
+          取消
+        </button>
       </div>
-    </section>
+    </div>
   );
-}
-
-function createDefinition(
-  type: FieldType,
-  sourceSupertagId: string | undefined
-): FieldDefinition {
-  if (type === 'options') return { options: [], type };
-  if (type === 'from-supertag') {
-    return {
-      sourceSupertagId:
-        sourceSupertagId && sourceSupertagId !== EMPTY_VALUE
-          ? sourceSupertagId
-          : null,
-      type,
-    };
-  }
-
-  return { type };
 }

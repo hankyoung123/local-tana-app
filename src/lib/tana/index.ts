@@ -61,6 +61,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
       id: descendant.id,
       node: descendant,
       path,
+      presentation: tanaNode.tanaPresentation,
       supertagDefinition: tanaNode.tanaSupertagDefinition,
       text: '',
       viewDefinition: tanaNode.tanaViewDefinition,

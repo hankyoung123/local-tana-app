@@ -91,3 +91,17 @@
     letter-spacing: 0;
   }
 }
+
+/* The focused Plate Node is the page title; no duplicated heading is rendered. */
+.tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] {
+  margin-top: 0;
+  color: #202421;
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.tana-nodeFields [data-radix-select-trigger] svg {
+  color: #9aa19d;
+}
