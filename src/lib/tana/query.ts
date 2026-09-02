@@ -30,9 +30,7 @@ export function isTanaQueryClauseValid(
     case 'field-exists':
       return !!getFieldDefinition(index, clause.fieldId);
     case 'field-equals': {
-      const definition = getFieldDefinition(index, clause.fieldId);
-
-      return !!definition && isFieldValueValid(index, definition, clause.value);
+      return isFieldValueValid(index, clause.fieldId, clause.value);
     }
     case 'text-contains':
       return clause.text.trim().length > 0;

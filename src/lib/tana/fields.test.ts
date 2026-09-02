@@ -16,6 +16,7 @@ import {
   isFieldSet,
   isFieldValueCompatible,
   isSupertagFieldInputNode,
+  getFieldValueCandidates,
 } from './fields';
 import { buildTanaIndex } from './index';
 
@@ -108,10 +109,10 @@ describe('Field occurrence Nodes', () => {
       {
         children: [{ text: 'Status' }],
         id: 'status',
-        tanaFieldDefinition: { options: ['active'], type: 'options' },
+        tanaFieldDefinition: { type: 'options' },
         type: KEYS.p,
       },
-      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
       { children: [{ text: 'Other' }], id: 'other', type: KEYS.p },
     ]);
 
@@ -126,6 +127,49 @@ describe('Field occurrence Nodes', () => {
       false
     );
     assert.deepEqual(editor.children, before);
+  });
+
+  test('derives Options candidates from ordered direct child Nodes', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Todo' }], id: 'todo', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Doing' }], id: 'doing', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.deepEqual(
+      getFieldValueCandidates(buildTanaIndex(editor.children), 'status').map(({ id }) => id),
+      ['todo', 'doing']
+    );
+    const doneId = field(editor).createOption('status', 'Done');
+    assert.ok(doneId);
+    assert.deepEqual(
+      getFieldValueCandidates(buildTanaIndex(editor.children), 'status').map(({ id }) => id),
+      ['todo', 'doing', doneId]
+    );
+    assert.equal(field(editor).removeOption('status', 'todo'), true);
+    assert.deepEqual(
+      getFieldValueCandidates(buildTanaIndex(editor.children), 'status').map(({ id }) => id),
+      ['doing', doneId]
+    );
+    assert.deepEqual(editor.children[0].tanaFieldDefinition, { type: 'options' });
+  });
+
+  test('refuses to materialize a Field below Field or Value structure', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    const occurrenceId = field(editor).materialize('task', 'priority');
+    assert.ok(occurrenceId);
+    const valueNodeId = buildTanaIndex(editor.children).fieldNodesById.get(occurrenceId)
+      ?.valueNodeId;
+    assert.ok(valueNodeId);
+
+    assert.equal(field(editor).materialize('priority', 'priority'), undefined);
+    assert.equal(field(editor).materialize(occurrenceId, 'priority'), undefined);
+    assert.equal(field(editor).materialize(valueNodeId, 'priority'), undefined);
   });
 
   test('uses the transient blank child itself as the ad-hoc Field occurrence', () => {

@@ -80,7 +80,7 @@ export const initialDocument = normalizeStaticValue([
   {
     id: 'field-status',
     children: [{ text: '状态' }],
-    tanaFieldDefinition: { options: ['option-planned', 'option-active', 'option-completed'], type: 'options' },
+    tanaFieldDefinition: { type: 'options' },
     type: 'p',
   },
   { id: 'option-planned', children: [{ text: '计划中' }], indent: 1, type: 'p' },

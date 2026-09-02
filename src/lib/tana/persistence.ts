@@ -71,8 +71,8 @@ function hasValidSemanticData(element: TElement): boolean {
     return false;
   }
 
-  // Field-as-Node is a schema break. The old parent value map is never valid
-  // in v4 and is reset rather than migrated.
+  // Field-as-Node is a schema break. Parent value maps and the previous
+  // options array are never valid in v4 and are reset rather than migrated.
   if (semantic.tanaFieldValues !== undefined) return false;
 
   if (
@@ -130,7 +130,6 @@ function hasValidSemanticData(element: TElement): boolean {
 }
 
 function isFieldDefinition(value: unknown): value is {
-  options?: string[];
   sourceSupertagId?: string | null;
   type: string;
 } {
@@ -144,12 +143,7 @@ function isFieldDefinition(value: unknown): value is {
   }
 
   if (field.type === 'options') {
-    return (
-      Array.isArray(field.options) &&
-      field.options.every(
-        (option) => typeof option === 'string' && option.length > 0
-      )
-    );
+    return Object.keys(field).length === 1;
   }
 
   return (
@@ -332,16 +326,22 @@ export function usesSQLitePersistence() {
   return isTauri();
 }
 
-function hasLegacyFieldValues(value: unknown): boolean {
+function hasObsoleteFieldMetadata(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
 
-  if (Array.isArray(value)) return value.some(hasLegacyFieldValues);
+  if (Array.isArray(value)) return value.some(hasObsoleteFieldMetadata);
 
   const record = value as Record<string, unknown>;
+  const fieldDefinition = record.tanaFieldDefinition;
+  const hasLegacyOptions =
+    !!fieldDefinition &&
+    typeof fieldDefinition === 'object' &&
+    Object.hasOwn(fieldDefinition as object, 'options');
 
   return (
     Object.hasOwn(record, 'tanaFieldValues') ||
-    Object.values(record).some(hasLegacyFieldValues)
+    hasLegacyOptions ||
+    Object.values(record).some(hasObsoleteFieldMetadata)
   );
 }
 
@@ -378,7 +378,7 @@ export async function loadPlateDocument(fallback: Value): Promise<Value> {
   }
 
   if (!isValidTanaDocument(parsed)) {
-    if (hasLegacyFieldValues(parsed)) {
+    if (hasObsoleteFieldMetadata(parsed)) {
       await savePlateDocument(fallback);
 
       return structuredClone(fallback);

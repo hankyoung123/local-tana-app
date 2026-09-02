@@ -47,11 +47,11 @@ const value: Value = [
   {
     children: [{ text: 'Status' }],
     id: 'status',
-    tanaFieldDefinition: { options: ['active'], type: 'options' },
+    tanaFieldDefinition: { type: 'options' },
     type: KEYS.p,
   },
-  { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
-  { children: [{ text: 'Inactive' }], id: 'inactive', type: KEYS.p },
+  { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
+  { children: [{ text: 'Inactive' }], id: 'inactive', indent: 1, type: KEYS.p },
   {
     children: [{ text: 'Owner' }],
     id: 'owner',
@@ -127,7 +127,7 @@ describe('Tana view mutations', () => {
       transforms.addClause('view', {
         fieldId: 'status',
         kind: 'field-equals',
-        value: { type: 'options', value: 'inactive' },
+        value: { type: 'options', value: 'grace' },
       }),
       false
     );

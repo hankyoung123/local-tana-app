@@ -1,6 +1,6 @@
 import type { Descendant, Path, TElement, Value } from 'platejs';
 
-import { KEYS, TextApi } from 'platejs';
+import { ElementApi, KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
@@ -117,6 +117,8 @@ function getFieldValueFromNode(
 }
 
 function isDerivedFieldValueValid(
+  document: Value,
+  fieldId: NodeId,
   definition: NonNullable<TanaBlockElement['tanaFieldDefinition']>,
   value: FieldValue,
   nodesById: ReadonlyMap<NodeId, TanaNode>,
@@ -125,7 +127,14 @@ function isDerivedFieldValueValid(
   if (definition.type !== value.type) return false;
 
   if (definition.type === 'options' && value.type === 'options') {
-    return definition.options.includes(value.value) && nodesById.has(value.value);
+    const fieldDefinitionNode = nodesById.get(fieldId);
+
+    return !!fieldDefinitionNode && getTanaDirectChildPaths(document, fieldDefinitionNode.path)
+      .some((path) => {
+        const candidate = document[path[0]];
+
+        return ElementApi.isElement(candidate) && candidate.id === value.value;
+      });
   }
 
   if (definition.type === 'from-supertag' && value.type === 'from-supertag') {
@@ -294,7 +303,14 @@ export function buildTanaIndex(document: Value): TanaIndex {
     const value =
       definition &&
       parsedValue &&
-      isDerivedFieldValueValid(definition, parsedValue, nodesById, nodesBySupertag)
+      isDerivedFieldValueValid(
+        document,
+        fieldId,
+        definition,
+        parsedValue,
+        nodesById,
+        nodesBySupertag
+      )
         ? parsedValue
         : undefined;
     const fieldNode: TanaFieldNode = {

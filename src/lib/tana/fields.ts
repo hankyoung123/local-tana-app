@@ -72,14 +72,17 @@ export function isFieldValueCompatible(
 /** Validates both a FieldValue's type and its reference-like candidate. */
 export function isFieldValueValid(
   index: TanaIndex,
-  definition: FieldDefinition,
+  fieldId: NodeId,
   value: FieldValue
 ): boolean {
+  const definition = index.nodesById.get(fieldId)?.fieldDefinition;
+
+  if (!definition) return false;
   if (!isFieldValueCompatible(definition, value)) return false;
 
   if (definition.type === 'options' && value.type === 'options') {
-    return (
-      definition.options.includes(value.value) && index.nodesById.has(value.value)
+    return getFieldValueCandidates(index, fieldId).some(
+      (candidate) => candidate.id === value.value
     );
   }
 
@@ -103,6 +106,22 @@ function getTanaBlockAt(
   return node && ElementApi.isElement(node) && isTanaNodeElement(node, path)
     ? (node as TanaBlockElement)
     : undefined;
+}
+
+/**
+ * A Field occurrence may be attached only to an ordinary Tana Node or a
+ * Supertag Definition Node. Definitions, Field rows, and value rows are never
+ * valid Field hosts.
+ */
+export function isTanaFieldHostNode(document: Value, path: Path): boolean {
+  const node = getTanaBlockAt(document, path);
+
+  return (
+    !!node &&
+    node.tanaFieldDefinition === undefined &&
+    node.tanaFieldId === undefined &&
+    node.tanaFieldValueType === undefined
+  );
 }
 
 function getTanaElementText(element: TElement): string {
@@ -350,20 +369,30 @@ export function getSupertagTemplateFields(
 /** Candidate values are always derived from NodeIds already present in the index. */
 export function getFieldValueCandidates(
   index: TanaIndex,
-  definition: FieldDefinition
+  fieldId: NodeId
 ): TanaNode[] {
-  const candidateIds =
-    definition.type === 'options'
-      ? definition.options
-      : definition.type === 'from-supertag' && definition.sourceSupertagId
-        ? (index.nodesBySupertag.get(definition.sourceSupertagId) ?? [])
-        : [];
+  const definitionNode = index.nodesById.get(fieldId);
+  const definition = definitionNode?.fieldDefinition;
 
-  return candidateIds.flatMap((nodeId) => {
-    const node = index.nodesById.get(nodeId);
+  if (!definition || !definitionNode) return [];
 
-    return node ? [node] : [];
-  });
+  if (definition.type === 'options') {
+    return getTanaDirectChildPaths(index.document, definitionNode.path)
+      .map((path) => getNodeAtDocumentPath(index, path))
+      .filter((node): node is TanaNode => !!node);
+  }
+
+  if (definition.type !== 'from-supertag' || !definition.sourceSupertagId) {
+    return [];
+  }
+
+  return (index.nodesBySupertag.get(definition.sourceSupertagId) ?? []).flatMap(
+    (nodeId) => {
+      const node = index.nodesById.get(nodeId);
+
+      return node ? [node] : [];
+    }
+  );
 }
 
 function formatNodeNames(nodes: readonly TanaNode[]): string {

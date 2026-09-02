@@ -207,7 +207,7 @@ function AddCustomField({ nodeId }: { nodeId: NodeId }) {
   const [type, setType] = React.useState<FieldType>('plain');
 
   const createDefinition = (): FieldDefinition => {
-    if (type === 'options') return { options: [], type };
+    if (type === 'options') return { type };
     if (type === 'from-supertag') return { sourceSupertagId: null, type };
 
     return { type };

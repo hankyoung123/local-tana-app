@@ -8,7 +8,8 @@ export type FieldDefinition =
   | { type: 'date' }
   | { sourceSupertagId: NodeId | null; type: 'from-supertag' }
   | { type: 'number' }
-  | { options: readonly NodeId[]; type: 'options' }
+  /** Option candidates are ordered direct child Nodes of this definition. */
+  | { type: 'options' }
   | { type: 'plain' };
 
 export type FieldType = FieldDefinition['type'];

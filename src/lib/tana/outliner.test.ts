@@ -261,7 +261,11 @@ describe('Tana outliner behavior', () => {
     assert.equal(
       canDropOnInteractableTanaNode({
         dragEntry: fieldEntry,
-        dragItem: { editorId: editor.id, element: fieldEntry[0], id: 'field' },
+        dragItem: {
+          editorId: editor.id,
+          element: fieldEntry[0],
+          id: ['field', 'field-value'],
+        },
         dropEntry: hostChildEntry,
         editor,
       }),
@@ -272,6 +276,15 @@ describe('Tana outliner behavior', () => {
         dragEntry: fieldEntry,
         dragItem: { editorId: editor.id, element: fieldEntry[0], id: 'field' },
         dropEntry: definitionEntry,
+        editor,
+      }),
+      false
+    );
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: hostChildEntry,
+        dragItem: { editorId: editor.id, element: hostChildEntry[0], id: 'host-child' },
+        dropEntry: fieldEntry,
         editor,
       }),
       false

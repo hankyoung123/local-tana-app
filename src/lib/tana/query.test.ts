@@ -26,11 +26,11 @@ const document: Value = [
   {
     id: 'status',
     children: [{ text: 'Status' }],
-    tanaFieldDefinition: { options: ['active', 'done'], type: 'options' },
+    tanaFieldDefinition: { type: 'options' },
     type: 'p',
   },
-  { id: 'active', children: [{ text: 'Active' }], type: 'p' },
-  { id: 'done', children: [{ text: 'Done' }], type: 'p' },
+  { id: 'active', children: [{ text: 'Active' }], indent: 1, type: 'p' },
+  { id: 'done', children: [{ text: 'Done' }], indent: 1, type: 'p' },
   {
     id: 'alpha',
     children: [

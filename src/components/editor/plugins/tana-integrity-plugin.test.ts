@@ -62,7 +62,7 @@ describe('Tana relation integrity', () => {
 
   test('clears a dangling Options value through its ordinary value Node', () => {
     const editor = createEditor([
-      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
       { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
@@ -77,10 +77,7 @@ describe('Tana relation integrity', () => {
 
     editor.tf.removeNodes({ at: [1] });
 
-    assert.deepEqual(editor.children[0].tanaFieldDefinition, {
-      options: [],
-      type: 'options',
-    });
+    assert.deepEqual(editor.children[0].tanaFieldDefinition, { type: 'options' });
     assert.equal(
       buildTanaIndex(editor.children).fieldValues.get('task')?.has('status') ?? false,
       false
@@ -103,8 +100,8 @@ describe('Tana relation integrity', () => {
         tanaFieldValueType: 'options',
         type: KEYS.p,
       },
-      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: KEYS.p },
-      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
     ]);
 
     editor.tf.removeNodes({ at: [4] });
@@ -175,8 +172,8 @@ describe('Tana relation integrity', () => {
 
   test('prunes dangling View clauses while retaining unrelated clauses', () => {
     const editor = createEditor([
-      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: KEYS.p },
-      { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
       {
         children: [{ text: 'Open tasks' }],
         id: 'view',

@@ -3,8 +3,12 @@ import type { NodeEntry } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { getTanaParentPath } from '@/lib/tana/outliner';
+import {
+  getTanaNodeDescendantPaths,
+  getTanaParentPath,
+} from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_PRESENTATION_PLUGIN_KEY = 'tanaPresentation' as const;
 
@@ -16,6 +20,47 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   return isTanaNodeElement(entry)
     ? (entry as NodeEntry<TanaBlockElement>)
     : undefined;
+}
+
+function moveInteractionToFieldOwner(
+  editor: PlateEditor,
+  ownerEntry: NodeEntry<TanaBlockElement>,
+  fieldEntry: NodeEntry<TanaBlockElement>
+) {
+  const hiddenPathIndexes = new Set(
+    [fieldEntry[1], ...getTanaNodeDescendantPaths(editor.children, fieldEntry[1])].map(
+      (path) => path[0]
+    )
+  );
+  const selectionPaths = [editor.selection?.anchor.path, editor.selection?.focus.path];
+
+  if (selectionPaths.some((path) => path && hiddenPathIndexes.has(path[0]))) {
+    const point = editor.api.start(ownerEntry[1]);
+
+    if (point) {
+      editor.tf.navigation.navigate({
+        flash: false,
+        focus: true,
+        scroll: true,
+        select: point,
+        target: { path: ownerEntry[1], type: 'node' },
+      });
+    }
+  }
+
+  const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+  const focusedEntry =
+    typeof focusedNodeId === 'string' ? getTanaNodeEntry(editor, focusedNodeId) : undefined;
+
+  if (
+    focusedEntry &&
+    hiddenPathIndexes.has(focusedEntry[1][0]) &&
+    typeof ownerEntry[0].id === 'string'
+  ) {
+    editor.getTransforms(TanaZoomPlugin).zoom.to(ownerEntry[0].id);
+  }
+
+  editor.getApi(TanaZoomPlugin).zoom.pruneBlockSelection();
 }
 
 /**
@@ -70,6 +115,10 @@ function setFieldVisible(
     { tanaPresentation: { hiddenFieldNodeIds: nextHiddenFieldNodeIds } },
     { at: entry[1] }
   );
+
+  if (!visible) {
+    moveInteractionToFieldOwner(editor, entry, fieldEntry);
+  }
 
   return true;
 }

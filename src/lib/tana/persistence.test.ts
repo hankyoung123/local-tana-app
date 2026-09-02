@@ -78,7 +78,7 @@ describe('Plate document persistence', () => {
     );
   });
 
-  test('treats Field-as-Node as a breaking schema and rejects legacy value maps', () => {
+  test('treats obsolete Field metadata as a breaking schema', () => {
     assert.equal(CURRENT_SCHEMA_VERSION, 4);
     assert.equal(
       isValidTanaDocument([
@@ -86,6 +86,17 @@ describe('Plate document persistence', () => {
           children: [{ text: 'Task' }],
           id: 'task',
           tanaFieldValues: { priority: { type: 'plain', value: 'legacy' } },
+          type: 'p',
+        },
+      ]),
+      false
+    );
+    assert.equal(
+      isValidTanaDocument([
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { options: ['active'], type: 'options' },
           type: 'p',
         },
       ]),

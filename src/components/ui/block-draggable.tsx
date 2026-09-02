@@ -36,6 +36,8 @@ import {
 import { cn } from '@/lib/utils';
 import {
   hasTanaNodeDescendants,
+  getTanaDirectChildPaths,
+  getTanaNodeDescendantPaths,
   getTanaParentPath,
   isTanaNodeElement,
   isTanaNodeHidden,
@@ -71,6 +73,24 @@ function isFieldHost(node: ReturnType<typeof getTanaSemanticBlock>) {
     !isFieldValueNode(node) &&
     node.tanaFieldDefinition === undefined
   );
+}
+
+function isWithinFieldStructure(editor: PlateEditor, path: Path): boolean {
+  let currentPath: Path | undefined = path;
+
+  while (currentPath) {
+    const node = getTanaSemanticBlock(editor, currentPath);
+
+    if (isFieldOccurrence(node) || isFieldValueNode(node)) return true;
+
+    currentPath = getTanaParentPath(editor.children, currentPath);
+  }
+
+  return false;
+}
+
+function getNodeIndent(node: TElement): number {
+  return typeof node.indent === 'number' ? node.indent : 0;
 }
 
 export const BlockDraggable: RenderNodeWrapper = (props) => {
@@ -170,9 +190,25 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   }
 
   const dropNode = getTanaSemanticBlock(editor, dropEntry[1]);
+  const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
+  const dropParent = dropParentPath
+    ? getTanaSemanticBlock(editor, dropParentPath)
+    : undefined;
+
+  // No ordinary Node may enter a Field occurrence or typed value subtree.
+  // Field semantics are structural, not a post-drop Integrity repair task.
+  if (isWithinFieldStructure(editor, dropEntry[1])) return false;
 
   // A typed value cannot be moved independently from the one Field occurrence
   // that owns it. The normal Plate multi-block drag retains the Field subtree.
+  const fieldNodeIds = new Set(
+    dragged.flatMap(([node]) =>
+      isFieldOccurrence(node as TElement) && typeof node.id === 'string'
+        ? [node.id]
+        : []
+    )
+  );
+
   if (
     dragged.some(([node, path]) => {
       const semanticNode = node as TElement & { tanaFieldValueType?: unknown };
@@ -182,25 +218,65 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
       const ownerPath = getTanaParentPath(editor.children, path);
       const owner = ownerPath ? getTanaSemanticBlock(editor, ownerPath) : undefined;
 
-      return typeof owner?.id !== 'string' || !dragIds.includes(owner.id);
+      return typeof owner?.id !== 'string' || !fieldNodeIds.has(owner.id);
     })
   ) {
     return false;
   }
 
-  if (!dragged.some(([node]) => isFieldOccurrence(node as TElement))) {
+  if (fieldNodeIds.size === 0) {
     return true;
   }
 
-  // Field occurrence nodes can only be placed among ordinary children of an
-  // ordinary host Node. Field definitions, Field rows, and value rows never
-  // become ad-hoc hosts through DnD.
-  const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
-  const dropParent = dropParentPath
-    ? getTanaSemanticBlock(editor, dropParentPath)
-    : undefined;
+  // A Field row moves only with every Node in its subtree. Plate's callback
+  // runs before it calculates top/bottom placement, so a direct leaf sibling
+  // at the target host is the safe way to prove the resulting parent remains
+  // that ordinary host for either placement direction.
+  if (
+    !dropParentPath ||
+    !isFieldHost(dropParent) ||
+    !isFieldHost(dropNode) ||
+    hasTanaNodeDescendants(editor.children, dropEntry[1]) ||
+    !getTanaDirectChildPaths(editor.children, dropParentPath).some(
+      (path) => path[0] === dropEntry[1][0]
+    )
+  ) {
+    return false;
+  }
 
-  return isFieldHost(dropNode) || isFieldHost(dropParent);
+  return dragged.every(([node, path]) => {
+    const semanticNode = node as TElement & {
+      tanaFieldId?: unknown;
+      tanaFieldValueType?: unknown;
+    };
+
+    if (
+      typeof semanticNode.tanaFieldId !== 'string' &&
+      typeof semanticNode.tanaFieldValueType !== 'string'
+    ) {
+      return false;
+    }
+
+    if (typeof semanticNode.tanaFieldValueType === 'string') return true;
+
+    const sourceParentPath = getTanaParentPath(editor.children, path);
+    const sourceParent = sourceParentPath
+      ? getTanaSemanticBlock(editor, sourceParentPath)
+      : undefined;
+    const subtreeIds = getTanaNodeDescendantPaths(editor.children, path).flatMap(
+      (descendantPath) => {
+        const descendant = getTanaSemanticBlock(editor, descendantPath);
+
+        return typeof descendant?.id === 'string' ? [descendant.id] : [];
+      }
+    );
+
+    return (
+      isFieldHost(sourceParent) &&
+      getNodeIndent(node as TElement) === getNodeIndent(dropNode!) &&
+      subtreeIds.every((id) => dragIds.includes(id))
+    );
+  });
 };
 
 function Draggable({

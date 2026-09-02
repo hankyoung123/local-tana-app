@@ -7,6 +7,7 @@ import {
   findFieldDefinitionExactMatch,
   isAdHocField,
   isAdHocFieldInputNode,
+  isTanaFieldHostNode,
   isFieldValueValid,
   isSupertagFieldInputNode,
   getSupertagFieldInputParentId,
@@ -163,7 +164,9 @@ function materialize(
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
-  if (!parentEntry || !definition) return;
+  if (!parentEntry || !definition || !isTanaFieldHostNode(editor.children, parentEntry[1])) {
+    return;
+  }
   const existing = getFieldNode(editor, parentNodeId, fieldId);
 
   if (existing) return existing.id;
@@ -199,13 +202,23 @@ function writeValue(
   fieldId: NodeId,
   value?: FieldValue
 ): boolean {
+  const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getFieldNodeEntry(editor, parentNodeId, fieldId);
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
-  if (!fieldEntry || !definition) return false;
+  if (
+    !parentEntry ||
+    !fieldEntry ||
+    !definition ||
+    !isTanaFieldHostNode(editor.children, parentEntry[1]) ||
+    fieldEntry[0].tanaFieldId !== fieldId ||
+    getTanaParentPath(editor.children, fieldEntry[1])?.[0] !== parentEntry[1][0]
+  ) {
+    return false;
+  }
   if (
     value !== undefined &&
-    !isFieldValueValid(buildTanaIndex(editor.children), definition, value)
+    !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)
   ) {
     return false;
   }
@@ -250,9 +263,7 @@ function applyDefault(
   value: FieldValue
 ) {
   const index = buildTanaIndex(editor.children);
-  const definition = index.nodesById.get(fieldId)?.fieldDefinition;
-
-  if (!definition || !isFieldValueValid(index, definition, value)) return false;
+  if (!isFieldValueValid(index, fieldId, value)) return false;
 
   const fieldNodeId = materialize(editor, nodeId, fieldId);
 
@@ -355,37 +366,19 @@ function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
   );
 
   const optionEntry = editor.api.node(path);
-  const optionId =
-    optionEntry &&
+
+  return optionEntry &&
     isTanaNodeElement(optionEntry) &&
     typeof optionEntry[0].id === 'string'
-      ? optionEntry[0].id
-      : undefined;
-
-  if (!optionId) return;
-
-  editor.tf.setNodes(
-    {
-      tanaFieldDefinition: {
-        options: [...definition.options, optionId],
-        type: 'options',
-      },
-    },
-    { at: fieldPath }
-  );
-
-  return optionId;
+    ? optionEntry[0].id
+    : undefined;
 }
 
 function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
-  if (
-    !fieldEntry ||
-    definition?.type !== 'options' ||
-    !definition.options.includes(optionId)
-  ) {
+  if (!fieldEntry || definition?.type !== 'options') {
     return false;
   }
 
@@ -398,16 +391,6 @@ function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
   ) {
     return false;
   }
-
-  editor.tf.setNodes(
-    {
-      tanaFieldDefinition: {
-        options: definition.options.filter((id) => id !== optionId),
-        type: 'options',
-      },
-    },
-    { at: fieldPath }
-  );
 
   getTanaNodeDescendantPaths(editor.children, optionPath)
     .reverse()
@@ -425,8 +408,16 @@ function materializeInputNode(
 ): NodeId | undefined {
   const inputEntry = editor.api.node(inputPath) as NodeEntry<TanaBlockElement> | undefined;
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const parentPath = getTanaParentPath(editor.children, inputPath);
 
-  if (!inputEntry || !definition) return;
+  if (
+    !inputEntry ||
+    !definition ||
+    !parentPath ||
+    !isTanaFieldHostNode(editor.children, parentPath)
+  ) {
+    return;
+  }
 
   const inputIndent =
     typeof inputEntry[0].indent === 'number' ? inputEntry[0].indent : 0;

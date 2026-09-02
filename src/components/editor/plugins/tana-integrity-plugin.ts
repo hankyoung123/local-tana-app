@@ -32,7 +32,6 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * - field occurrence.tanaFieldId
  * - value child.tanaFieldValueType
  * - presentation.hiddenFieldNodeIds
- * - options.options[]
  * - from-supertag.sourceSupertagId
  * - value-node mention.key
  *
@@ -40,6 +39,9 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * - query fieldId
  * - query supertagId
  * - query reference-like FieldValue.value
+ *
+ * Options intentionally have no duplicated NodeId relation here: their
+ * candidates and order are direct Field Definition child Nodes.
  */
 type TanaNodeEntry = [TanaBlockElement, Path];
 type RelationElement = TElement & { key?: unknown };
@@ -313,17 +315,6 @@ function normalizeRelations(editor: PlateEditor): boolean {
       continue;
     }
 
-    if (definition?.type !== 'options') continue;
-
-    const options = definition.options.filter((optionId) => nodeIds.has(optionId));
-
-    if (options.length !== definition.options.length) {
-      editor.tf.setNodes(
-        { tanaFieldDefinition: { options, type: 'options' } },
-        { at: path }
-      );
-      return true;
-    }
   }
 
   for (const [node, path] of entries) {

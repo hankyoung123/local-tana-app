@@ -189,6 +189,7 @@ export function TanaViewDefinitionEditor({
         {kind === 'field-equals' && selectedField && (
           <QueryValueInput
             field={selectedField.fieldDefinition!}
+            fieldId={selectedField.id}
             index={index}
             value={rawValue}
             onChange={setRawValue}
@@ -220,11 +221,13 @@ export function TanaViewDefinitionEditor({
 
 function QueryValueInput({
   field,
+  fieldId,
   index,
   onChange,
   value,
 }: {
   field: FieldDefinition;
+  fieldId: NodeId;
   index: TanaIndex;
   onChange: (value: string) => void;
   value: string;
@@ -240,7 +243,7 @@ function QueryValueInput({
             { label: '是', value: 'true' },
             { label: '否', value: 'false' },
           ]
-        : getFieldValueCandidates(index, field).map((node) => ({
+        : getFieldValueCandidates(index, fieldId).map((node) => ({
             label: node.text || node.id,
             value: node.id,
           }));

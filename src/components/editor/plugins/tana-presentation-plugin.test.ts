@@ -19,6 +19,8 @@ import {
 
 import { TanaPresentationPlugin } from './tana-presentation-plugin';
 
+globalThis.requestAnimationFrame ??= () => 0;
+
 function createEditor(value: Value) {
   return createPlateEditor({
     nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
@@ -70,6 +72,41 @@ describe('Tana Field presentation', () => {
       false
     );
     assert.equal(editor.children[0].tanaPresentation, undefined);
+  });
+
+  test('moves selection and Zoom to the owner and prunes block selection when hiding', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const fieldNodeId = editor
+      .getTransforms(TanaFieldPlugin)
+      .field.materialize('task', 'status');
+    assert.ok(fieldNodeId);
+    const valueNodeId = buildTanaIndex(editor.children).fieldNodesById.get(fieldNodeId)
+      ?.valueNodeId;
+    assert.ok(valueNodeId);
+    const valueEntry = editor.api.node({ at: [], id: valueNodeId });
+    assert.ok(valueEntry);
+    const valuePath = valueEntry[1];
+    const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+
+    selection.set([fieldNodeId, valueNodeId]);
+    editor.tf.select(valuePath, { edge: 'start' });
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to(valueNodeId), true);
+
+    assert.equal(
+      editor
+        .getTransforms(TanaPresentationPlugin)
+        .presentation.setFieldVisible('task', fieldNodeId, false),
+      true
+    );
+    assert.deepEqual(
+      selection.getNodes({ sort: true }).map(([node]) => node.id),
+      []
+    );
+    assert.deepEqual(editor.selection?.anchor.path, [0, 0]);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'task');
   });
 
   test('excludes a hidden Field subtree from selection, DnD eligibility, and navigation', () => {
