@@ -6,6 +6,7 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
+import { getSupertagTemplateFields } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
@@ -64,7 +65,7 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
-      tanaSupertagDefinition: { fields: [] },
+      tanaSupertagDefinition: {},
     }),
     { at: path }
   );
@@ -83,7 +84,7 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 
   if (!entry || entry[0].tanaSupertagDefinition) return false;
 
-  editor.tf.setNodes({ tanaSupertagDefinition: { fields: [] } }, { at: entry[1] });
+  editor.tf.setNodes({ tanaSupertagDefinition: {} }, { at: entry[1] });
 
   return true;
 }
@@ -99,13 +100,13 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   if (index.nodesBySupertag.get(supertagId)?.includes(nodeId)) return false;
 
   const [, nodePath] = nodeEntry;
-  const bindings = definitionEntry[0].tanaSupertagDefinition!.fields;
-  bindings.forEach(({ defaultValue, fieldId }) => {
+  const templates = getSupertagTemplateFields(index, supertagId);
+  templates.forEach(({ template }) => {
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
-    fieldTransforms.materialize(nodeId, fieldId, defaultValue);
-    if (defaultValue !== undefined) {
-      fieldTransforms.applyDefault(nodeId, fieldId, defaultValue);
+    fieldTransforms.materialize(nodeId, template.fieldId);
+    if (template.value !== undefined) {
+      fieldTransforms.applyDefault(nodeId, template.fieldId, template.value);
     }
   });
 

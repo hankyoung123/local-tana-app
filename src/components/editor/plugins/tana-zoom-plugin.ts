@@ -7,6 +7,7 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   getTanaAncestorPaths,
   getTanaNodePath,
+  isTanaFieldNodePresentationHidden,
   isTanaNodeInteractable,
 } from '@/lib/tana/outliner';
 import type { NodeId } from '@/lib/tana/types';
@@ -56,7 +57,12 @@ function pruneBlockSelection(editor: PlateEditor) {
 function reveal(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
-  if (!targetEntry) return false;
+  if (
+    !targetEntry ||
+    isTanaFieldNodePresentationHidden(editor.children, targetEntry[1])
+  ) {
+    return false;
+  }
 
   const [, targetPath] = targetEntry;
   const ancestorIds = getTanaAncestorPaths(editor.children, targetPath).flatMap(
@@ -100,7 +106,12 @@ function focus(editor: PlateEditor, targetNodeId: NodeId) {
 function zoomTo(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
-  if (!targetEntry) return false;
+  if (
+    !targetEntry ||
+    isTanaFieldNodePresentationHidden(editor.children, targetEntry[1])
+  ) {
+    return false;
+  }
 
   editor.setOption(TanaZoomPlugin, 'focusedNodeId', targetNodeId);
   reveal(editor, targetNodeId);

@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { KEYS, type Value } from 'platejs';
+import { KEYS, type NodeEntry, type TElement, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
+import { BlockSelectionPlugin } from '@platejs/selection/react';
+import { TogglePlugin } from '@platejs/toggle/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { canDropOnInteractableTanaNode } from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana/index';
+import {
+  isTanaFieldNodePresentationHidden,
+  isTanaNodeInteractable,
+} from '@/lib/tana/outliner';
 
 import { TanaPresentationPlugin } from './tana-presentation-plugin';
 
@@ -62,5 +70,56 @@ describe('Tana Field presentation', () => {
       false
     );
     assert.equal(editor.children[0].tanaPresentation, undefined);
+  });
+
+  test('excludes a hidden Field subtree from selection, DnD eligibility, and navigation', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const fields = editor.getTransforms(TanaFieldPlugin).field;
+    const fieldNodeId = fields.materialize('task', 'status')!;
+    const index = buildTanaIndex(editor.children);
+    const fieldPath = index.nodesById.get(fieldNodeId)!.path;
+    const valuePath = index.nodesById.get(
+      index.fieldNodesById.get(fieldNodeId)!.valueNodeId!
+    )!.path;
+
+    editor
+      .getTransforms(TanaPresentationPlugin)
+      .presentation.setFieldVisible('task', fieldNodeId, false);
+
+    const openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+
+    assert.equal(isTanaFieldNodePresentationHidden(editor.children, fieldPath), true);
+    assert.equal(isTanaFieldNodePresentationHidden(editor.children, valuePath), true);
+    assert.equal(
+      isTanaNodeInteractable(editor.children, fieldPath, openIds, null),
+      false
+    );
+    assert.equal(
+      isTanaNodeInteractable(editor.children, valuePath, openIds, null),
+      false
+    );
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to(fieldNodeId), false);
+
+    const taskEntry = editor.api.node({ at: [], id: 'task' }) as NodeEntry<TElement>;
+    const fieldEntry = editor.api.node({ at: [], id: fieldNodeId }) as NodeEntry<TElement>;
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: taskEntry,
+        dragItem: { editorId: editor.id, element: taskEntry[0], id: 'task' },
+        dropEntry: fieldEntry,
+        editor,
+      }),
+      false
+    );
+
+    const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+    selection.selectAll();
+    assert.deepEqual(
+      selection.getNodes({ sort: true }).map(([node]) => node.id),
+      ['task', 'status']
+    );
   });
 });

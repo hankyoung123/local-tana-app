@@ -1,17 +1,19 @@
 import type { Descendant, TElement, Value } from 'platejs';
 
 import { isTauri } from '@tauri-apps/api/core';
-import { KEYS, normalizeNodeId } from 'platejs';
+import { KEYS } from 'platejs';
 
 import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from './constants';
+import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
+import type { TanaBlockElement } from './types';
 
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 type DocumentRow = {
   schema_version: number;
@@ -56,6 +58,7 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaFieldDefinition?: unknown;
     tanaFieldId?: unknown;
     tanaFieldValueType?: unknown;
+    tanaFieldValues?: unknown;
     tanaPresentation?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaViewDefinition?: unknown;
@@ -67,6 +70,10 @@ function hasValidSemanticData(element: TElement): boolean {
   ) {
     return false;
   }
+
+  // Field-as-Node is a schema break. The old parent value map is never valid
+  // in v4 and is reset rather than migrated.
+  if (semantic.tanaFieldValues !== undefined) return false;
 
   if (
     semantic.tanaFieldValueType !== undefined &&
@@ -104,18 +111,12 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   if (semantic.tanaSupertagDefinition !== undefined) {
-    const definition = semantic.tanaSupertagDefinition as {
-      fields?: unknown;
-    };
-
-    if (!definition || !Array.isArray(definition.fields)) return false;
-
-    const fieldIds = new Set<string>();
-
-    for (const field of definition.fields) {
-      if (!isFieldBinding(field) || fieldIds.has(field.fieldId)) return false;
-
-      fieldIds.add(field.fieldId);
+    if (
+      !semantic.tanaSupertagDefinition ||
+      typeof semantic.tanaSupertagDefinition !== 'object' ||
+      Object.keys(semantic.tanaSupertagDefinition).length > 0
+    ) {
+      return false;
     }
   }
 
@@ -169,44 +170,6 @@ function isFieldType(value: unknown): value is string {
   ].includes(value as string);
 }
 
-function isFieldBinding(value: unknown): value is {
-  defaultValue?: unknown;
-  fieldId: string;
-} {
-  if (!value || typeof value !== 'object') return false;
-
-  const binding = value as Record<string, unknown>;
-
-  return (
-    typeof binding.fieldId === 'string' &&
-    binding.fieldId.length > 0 &&
-    (binding.defaultValue === undefined || isFieldValue(binding.defaultValue))
-  );
-}
-
-function isFieldValue(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-
-  const fieldValue = value as Record<string, unknown>;
-
-  switch (fieldValue.type) {
-    case 'checkbox':
-      return typeof fieldValue.value === 'boolean';
-    case 'number':
-      return (
-        typeof fieldValue.value === 'number' &&
-        Number.isFinite(fieldValue.value)
-      );
-    case 'date':
-    case 'from-supertag':
-    case 'options':
-    case 'plain':
-      return typeof fieldValue.value === 'string';
-    default:
-      return false;
-  }
-}
-
 export function isPlateDocument(value: unknown): value is Value {
   return Array.isArray(value) && value.length > 0 && value.every(isDescendant);
 }
@@ -216,6 +179,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
   if (!isPlateDocument(value)) return false;
 
   const nodeIds = new Set<string>();
+  const entries: Array<[TanaBlockElement, number[]]> = [];
   let valid = true;
 
   function visit(descendant: Descendant, path: number[]): void {
@@ -227,6 +191,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaFieldDefinition?: unknown;
       tanaFieldId?: unknown;
       tanaFieldValueType?: unknown;
+      tanaFieldValues?: unknown;
       tanaPresentation?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaViewDefinition?: unknown;
@@ -235,6 +200,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldId !== undefined ||
       semantic.tanaFieldValueType !== undefined ||
+      semantic.tanaFieldValues !== undefined ||
       semantic.tanaPresentation !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaViewDefinition !== undefined;
@@ -252,6 +218,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       }
 
       nodeIds.add(descendant.id);
+      entries.push([descendant as TanaBlockElement, path]);
     } else if (hasTanaMetadata) {
       valid = false;
 
@@ -275,65 +242,59 @@ export function isValidTanaDocument(value: unknown): value is Value {
 
   value.forEach((descendant, index) => visit(descendant, [index]));
 
-  return valid;
-}
+  if (!valid) return false;
 
-function stripCopiedSemanticNames(value: Value): Value {
-  function migrate(descendant: Descendant): Descendant {
-    if (!isElement(descendant)) return { ...descendant };
+  const elementsByPath = new Map(entries.map((entry) => [entry[1][0], entry[0]]));
+  const fieldDefinitions = new Map(
+    entries.flatMap(([node]) =>
+      typeof node.id === 'string' && node.tanaFieldDefinition
+        ? [[node.id, node.tanaFieldDefinition] as const]
+        : []
+    )
+  );
 
-    const next = {
-      ...descendant,
-      children: descendant.children.map(migrate),
-    } as TElement & { value?: unknown };
+  for (const [node, path] of entries) {
+    if (node.tanaFieldDefinition && node.tanaFieldId) return false;
 
-    if (next.type === KEYS.mention || next.type === TANA_SUPERTAG_KEY) {
-      delete next.value;
+    if (node.tanaFieldId) {
+      const definition = fieldDefinitions.get(node.tanaFieldId);
+      const parentPath = getTanaParentPath(value, path);
+      const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
+
+      if (
+        !definition ||
+        !parent ||
+        parent.tanaFieldDefinition !== undefined ||
+        parent.tanaFieldId !== undefined ||
+        parent.tanaFieldValueType !== undefined
+      ) {
+        return false;
+      }
+
+      const valuePaths = getTanaDirectChildPaths(value, path).filter(
+        (childPath) =>
+          elementsByPath.get(childPath[0])?.tanaFieldValueType !== undefined
+      );
+
+      if (valuePaths.length !== 1) return false;
+
+      const valueNode = elementsByPath.get(valuePaths[0][0]);
+
+      if (valueNode?.tanaFieldValueType !== definition.type) return false;
     }
 
-    return next;
+    if (!node.tanaFieldValueType) continue;
+
+    const parentPath = getTanaParentPath(value, path);
+    const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
+    const definition = parent?.tanaFieldId
+      ? fieldDefinitions.get(parent.tanaFieldId)
+      : undefined;
+
+    if (!definition || node.tanaFieldValueType !== definition.type) return false;
   }
 
-  return value.map(migrate) as Value;
-}
-
-export function migratePlateDocument(
-  value: Value,
-  schemaVersion: number
-): Value {
-  if (!Number.isInteger(schemaVersion) || schemaVersion < 1) {
-    throw new Error(`Invalid schema version: ${schemaVersion}`);
-  }
-  if (schemaVersion > CURRENT_SCHEMA_VERSION) {
-    throw new Error(
-      `Document schema ${schemaVersion} is newer than supported schema ${CURRENT_SCHEMA_VERSION}`
-    );
-  }
-
-  let migrated = structuredClone(value);
-  let version = schemaVersion;
-
-  while (version < CURRENT_SCHEMA_VERSION) {
-    if (version === 1) {
-      migrated = stripCopiedSemanticNames(migrated);
-      version = 2;
-
-      continue;
-    }
-
-    if (version === 2) {
-      migrated = normalizeNodeId(migrated, {
-        filter: isTanaNodeElement,
-      });
-      version = 3;
-
-      continue;
-    }
-
-    throw new Error(`No migration from schema version ${version}`);
-  }
-
-  return migrated;
+  return true;
 }
 
 async function getDatabase() {
@@ -371,6 +332,19 @@ export function usesSQLitePersistence() {
   return isTauri();
 }
 
+function hasLegacyFieldValues(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+
+  if (Array.isArray(value)) return value.some(hasLegacyFieldValues);
+
+  const record = value as Record<string, unknown>;
+
+  return (
+    Object.hasOwn(record, 'tanaFieldValues') ||
+    Object.values(record).some(hasLegacyFieldValues)
+  );
+}
+
 export async function loadPlateDocument(fallback: Value): Promise<Value> {
   if (!usesSQLitePersistence()) return structuredClone(fallback);
 
@@ -386,23 +360,34 @@ export async function loadPlateDocument(fallback: Value): Promise<Value> {
     return structuredClone(fallback);
   }
 
+  if (rows[0].schema_version < CURRENT_SCHEMA_VERSION) {
+    await savePlateDocument(fallback);
+
+    return structuredClone(fallback);
+  }
+  if (rows[0].schema_version > CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Document schema ${rows[0].schema_version} is newer than supported schema ${CURRENT_SCHEMA_VERSION}`
+    );
+  }
+
   const parsed: unknown = JSON.parse(rows[0].value);
 
   if (!isPlateDocument(parsed)) {
     throw new Error('The persisted Plate document is structurally invalid');
   }
 
-  const value = migratePlateDocument(parsed, rows[0].schema_version);
+  if (!isValidTanaDocument(parsed)) {
+    if (hasLegacyFieldValues(parsed)) {
+      await savePlateDocument(fallback);
 
-  if (!isValidTanaDocument(value)) {
+      return structuredClone(fallback);
+    }
+
     throw new Error('The persisted Plate document violates Tana invariants');
   }
 
-  if (rows[0].schema_version !== CURRENT_SCHEMA_VERSION) {
-    await savePlateDocument(value);
-  }
-
-  return value;
+  return parsed;
 }
 
 export async function savePlateDocument(value: Value): Promise<void> {

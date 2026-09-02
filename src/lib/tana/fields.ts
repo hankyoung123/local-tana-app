@@ -5,22 +5,24 @@ import { isTanaNodeElement } from './constants';
 import { getNodeSupertagIds } from './index';
 import {
   getTanaAncestorPaths,
+  getTanaDirectChildPaths,
   getTanaParentPath,
 } from './outliner';
 import type {
-  FieldBinding,
   FieldDefinition,
   FieldValue,
   NodeId,
   TanaBlockElement,
+  TanaFieldNode,
   TanaIndex,
   TanaNode,
 } from './types';
 
-export type ResolvedFieldBinding = {
-  binding: FieldBinding;
+/** A Supertag template is its real direct child Field occurrence Node. */
+export type ResolvedSupertagTemplateField = {
   definition: FieldDefinition;
   field: TanaNode;
+  template: TanaFieldNode;
 };
 
 export type FieldDefinitionCandidate = Pick<
@@ -214,7 +216,7 @@ export function isFieldDefined(
   );
 }
 
-/** True only when an applied Supertag binds this Field for the current Node. */
+/** True only when an applied Supertag owns a matching template Field Node. */
 export function isFieldDefinedBySupertag(
   index: TanaIndex,
   nodeId: NodeId,
@@ -225,17 +227,15 @@ export function isFieldDefinedBySupertag(
   return Array.from(index.nodesBySupertag.entries()).some(
     ([supertagId, nodeIds]) =>
       nodeIds.includes(nodeId) &&
-      index.nodesById
-        .get(supertagId)
-        ?.supertagDefinition?.fields.some(
-          (binding) => binding.fieldId === fieldId
-        )
+      getSupertagTemplateFields(index, supertagId).some(
+        (template) => template.template.fieldId === fieldId
+      )
   );
 }
 
 /**
  * A Field occurrence is ad-hoc only when no applied Supertag supplies the
- * same Field binding. The occurrence itself remains a normal Plate Node.
+ * same template Field. The occurrence itself remains a normal Plate Node.
  */
 export function isAdHocField(
   index: TanaIndex,
@@ -328,21 +328,22 @@ export function findFieldDefinitionExactMatch(
   );
 }
 
-/** Resolves field bindings from document nodes without creating a schema cache. */
-export function getSupertagFieldBindings(
+/**
+ * Resolves a Supertag's template Fields from its ordered direct child Nodes.
+ * The template Field and its value child remain ordinary Plate Nodes.
+ */
+export function getSupertagTemplateFields(
   index: TanaIndex,
   supertagId: NodeId
-): ResolvedFieldBinding[] {
-  const bindings = index.nodesById.get(supertagId)?.supertagDefinition?.fields;
+): ResolvedSupertagTemplateField[] {
+  if (!index.nodesById.get(supertagId)?.supertagDefinition) return [];
 
-  if (!bindings) return [];
-
-  return bindings.flatMap((binding) => {
-    const field = index.nodesById.get(binding.fieldId);
+  return (index.fieldNodesByParent.get(supertagId) ?? []).flatMap((template) => {
+    const field = index.nodesById.get(template.fieldId);
 
     if (!field?.fieldDefinition) return [];
 
-    return [{ binding, definition: field.fieldDefinition, field }];
+    return [{ definition: field.fieldDefinition, field, template }];
   });
 }
 
@@ -365,42 +366,20 @@ export function getFieldValueCandidates(
   });
 }
 
-function getNodeIndent(node: TanaNode): number {
-  return typeof node.node.indent === 'number' ? node.node.indent : 0;
-}
-
-function getParentNode(
-  nodes: readonly TanaNode[],
-  nodeIndex: number
-): TanaNode | undefined {
-  const nodeIndent = getNodeIndent(nodes[nodeIndex]);
-
-  for (let index = nodeIndex - 1; index >= 0; index -= 1) {
-    if (getNodeIndent(nodes[index]) < nodeIndent) return nodes[index];
-  }
-}
-
-function getDirectChildren(
-  nodes: readonly TanaNode[],
-  nodeIndex: number
-): TanaNode[] {
-  const node = nodes[nodeIndex];
-  const nodeIndent = getNodeIndent(node);
-  const children: TanaNode[] = [];
-
-  for (let index = nodeIndex + 1; index < nodes.length; index += 1) {
-    if (getNodeIndent(nodes[index]) <= nodeIndent) break;
-
-    if (getParentNode(nodes, index)?.id === node.id) children.push(nodes[index]);
-  }
-
-  return children;
-}
-
 function formatNodeNames(nodes: readonly TanaNode[]): string {
   if (nodes.length === 0) return '无';
 
   return nodes.map((node) => node.text || '未命名节点').join('、');
+}
+
+function getNodeAtDocumentPath(
+  index: TanaIndex,
+  path: Path
+): TanaNode | undefined {
+  const candidate = index.document[path[0]];
+  const id = ElementApi.isElement(candidate) ? candidate.id : undefined;
+
+  return typeof id === 'string' ? index.nodesById.get(id) : undefined;
 }
 
 /**
@@ -425,10 +404,13 @@ export function getNodeFieldDescriptors(
       descriptor.fieldNodeId === undefined ||
       !hiddenFieldNodeIds.has(descriptor.fieldNodeId),
   });
-  const nodes = Array.from(index.nodesById.values());
-  const nodeIndex = nodes.findIndex((candidate) => candidate.id === nodeId);
-  const parent = nodeIndex >= 0 ? getParentNode(nodes, nodeIndex) : undefined;
-  const children = nodeIndex >= 0 ? getDirectChildren(nodes, nodeIndex) : [];
+  const parentPath = getTanaParentPath(index.document, node.path);
+  const parent = parentPath
+    ? getNodeAtDocumentPath(index, parentPath)
+    : undefined;
+  const children = getTanaDirectChildPaths(index.document, node.path)
+    .map((childPath) => getNodeAtDocumentPath(index, childPath))
+    .filter((child): child is TanaNode => !!child);
   const supertagIds = getNodeSupertagIds(index, nodeId);
   const supertagLabels = supertagIds
     .map((supertagId) => index.nodesById.get(supertagId))
@@ -475,11 +457,9 @@ export function getNodeFieldDescriptors(
     if (!field?.fieldDefinition) return [];
 
     const matchingSupertagIds = supertagIds.filter((supertagId) =>
-      index.nodesById
-        .get(supertagId)
-        ?.supertagDefinition?.fields.some(
-          (binding) => binding.fieldId === fieldNode.fieldId
-        )
+      getSupertagTemplateFields(index, supertagId).some(
+        (template) => template.template.fieldId === fieldNode.fieldId
+      )
     );
 
     return [

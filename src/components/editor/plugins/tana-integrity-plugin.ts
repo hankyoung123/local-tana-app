@@ -6,9 +6,12 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
-import { getTanaNodeDescendantPaths, getTanaParentPath } from '@/lib/tana/outliner';
+import {
+  getTanaDirectChildPaths,
+  getTanaNodeDescendantPaths,
+  getTanaParentPath,
+} from '@/lib/tana/outliner';
 import type {
-  FieldBinding,
   FieldValue,
   NodeId,
   TanaBlockElement,
@@ -25,10 +28,10 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * - supertag.key
  *
  * field
+ * - Field Definition Node identity
  * - field occurrence.tanaFieldId
+ * - value child.tanaFieldValueType
  * - presentation.hiddenFieldNodeIds
- * - binding.fieldId
- * - binding.defaultValue
  * - options.options[]
  * - from-supertag.sourceSupertagId
  * - value-node mention.key
@@ -143,24 +146,6 @@ function pruneHiddenFieldNodeIds(
   return true;
 }
 
-function pruneSupertagFieldBindings(
-  bindings: readonly FieldBinding[],
-  nodeIds: ReadonlySet<NodeId>
-): readonly FieldBinding[] {
-  return bindings.flatMap((binding) => {
-    if (!nodeIds.has(binding.fieldId)) return [];
-
-    if (
-      isReferenceLikeFieldValue(binding.defaultValue) &&
-      !nodeIds.has(binding.defaultValue.value)
-    ) {
-      return [{ fieldId: binding.fieldId }];
-    }
-
-    return [binding];
-  });
-}
-
 function isTanaQueryClauseValid(
   clause: TanaQueryClause,
   nodeIds: ReadonlySet<NodeId>
@@ -182,6 +167,111 @@ function isTanaQueryClauseValid(
   }
 }
 
+function getFieldDefinitions(entries: readonly TanaNodeEntry[]) {
+  return new Map(
+    entries.flatMap(([node]) =>
+      typeof node.id === 'string' && node.tanaFieldDefinition
+        ? [[node.id, node.tanaFieldDefinition] as const]
+        : []
+    )
+  );
+}
+
+function getEntryAtPath(
+  entries: readonly TanaNodeEntry[],
+  path: Path
+): TanaBlockElement | undefined {
+  return entries.find(([, candidatePath]) => candidatePath[0] === path[0])?.[0];
+}
+
+function isFieldHost(node: TanaBlockElement | undefined) {
+  return (
+    !!node &&
+    node.tanaFieldDefinition === undefined &&
+    node.tanaFieldId === undefined &&
+    node.tanaFieldValueType === undefined
+  );
+}
+
+function normalizeFieldValueNodes(
+  editor: PlateEditor,
+  entries: readonly TanaNodeEntry[],
+  fieldDefinitions: ReadonlyMap<NodeId, NonNullable<TanaBlockElement['tanaFieldDefinition']>>
+) {
+  for (const [node, path] of entries) {
+    if (!node.tanaFieldValueType) continue;
+
+    const parentPath = getTanaParentPath(editor.children, path);
+    const parent = parentPath ? getEntryAtPath(entries, parentPath) : undefined;
+    const definition = parent?.tanaFieldId
+      ? fieldDefinitions.get(parent.tanaFieldId)
+      : undefined;
+
+    if (!definition || node.tanaFieldValueType !== definition.type) {
+      editor.tf.unsetNodes('tanaFieldValueType', { at: path });
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeFieldOccurrences(
+  editor: PlateEditor,
+  entries: readonly TanaNodeEntry[],
+  fieldDefinitions: ReadonlyMap<NodeId, NonNullable<TanaBlockElement['tanaFieldDefinition']>>
+) {
+  for (const [node, path] of entries) {
+    if (!node.tanaFieldId) continue;
+
+    if (node.tanaFieldDefinition) {
+      editor.tf.unsetNodes('tanaFieldId', { at: path });
+      return true;
+    }
+
+    const definition = fieldDefinitions.get(node.tanaFieldId);
+
+    const parentPath = getTanaParentPath(editor.children, path);
+    const parent = parentPath ? getEntryAtPath(entries, parentPath) : undefined;
+
+    if (!definition) {
+      removeNodeSubtree(editor, path);
+      return true;
+    }
+
+    if (!isFieldHost(parent)) {
+      editor.tf.unsetNodes('tanaFieldId', { at: path });
+      return true;
+    }
+
+    const valuePaths = getTanaDirectChildPaths(editor.children, path).filter(
+      (childPath) =>
+        getEntryAtPath(entries, childPath)?.tanaFieldValueType === definition.type
+    );
+
+    if (valuePaths.length > 1) {
+      editor.tf.unsetNodes('tanaFieldValueType', { at: valuePaths[1] });
+      return true;
+    }
+
+    if (valuePaths.length === 0) {
+      const indent = typeof node.indent === 'number' ? node.indent + 1 : 1;
+
+      editor.tf.insertNodes(
+        editor.api.create.block({
+          children: [{ text: '' }],
+          indent,
+          tanaFieldValueType: definition.type,
+        }),
+        { at: [path[0] + 1] }
+      );
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Repairs one dangling semantic relation at a time. Returning after a repair
  * lets Plate's native normalization schedule the next pass with fresh paths.
@@ -189,6 +279,7 @@ function isTanaQueryClauseValid(
 function normalizeRelations(editor: PlateEditor): boolean {
   const entries = getTanaNodeEntries(editor);
   const nodeIds = getNodeIds(entries);
+  const fieldDefinitions = getFieldDefinitions(entries);
   const danglingInlinePath = findDanglingInlineRelation(entries, nodeIds);
 
   if (danglingInlinePath) {
@@ -196,31 +287,8 @@ function normalizeRelations(editor: PlateEditor): boolean {
     return true;
   }
 
-  for (const [node, path] of entries) {
-    const definition = node.tanaSupertagDefinition;
-
-    if (!definition) continue;
-
-    const fields = pruneSupertagFieldBindings(definition.fields, nodeIds);
-
-    if (
-      fields.length !== definition.fields.length ||
-      fields.some((field, index) => field !== definition.fields[index])
-    ) {
-      editor.tf.setNodes(
-        { tanaSupertagDefinition: { fields } },
-        { at: path }
-      );
-      return true;
-    }
-  }
-
-  for (const [node, path] of entries) {
-    if (!node.tanaFieldId || nodeIds.has(node.tanaFieldId)) continue;
-
-    removeNodeSubtree(editor, path);
-    return true;
-  }
+  if (normalizeFieldValueNodes(editor, entries, fieldDefinitions)) return true;
+  if (normalizeFieldOccurrences(editor, entries, fieldDefinitions)) return true;
 
   for (const [node, path] of entries) {
     const definition = node.tanaFieldDefinition;

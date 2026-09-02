@@ -53,19 +53,18 @@ describe('Tana Supertag operations', () => {
     assert.equal(supertag.apply('task', supertagId!), false);
   });
 
-  test('materializes bound Field Nodes and applies defaults only to unset occurrences', () => {
+  test('materializes template Field Nodes and applies template values only to unset occurrences', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: {
-          fields: [
-            { defaultValue: { type: 'plain', value: 'Untitled' }, fieldId: 'title' },
-            { fieldId: 'estimate' },
-          ],
-        },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
+      { children: [{ text: '' }], id: 'template-title', indent: 1, tanaFieldId: 'title', type: KEYS.p },
+      { children: [{ text: 'Untitled' }], id: 'template-title-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-estimate', indent: 1, tanaFieldId: 'estimate', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-estimate-value', indent: 2, tanaFieldValueType: 'number', type: KEYS.p },
       { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: KEYS.p },
       { children: [{ text: 'New task' }], id: 'new-task', type: KEYS.p },
@@ -100,14 +99,16 @@ describe('Tana Supertag operations', () => {
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'title' }] },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
+      { children: [{ text: '' }], id: 'template-title', indent: 1, tanaFieldId: 'title', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-title-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
       { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
       { children: [{ text: 'B' }], id: 'b', type: KEYS.p },
     ]);
-    editor.tf.select([3, 0], { edge: 'end' });
+    editor.tf.select([5, 0], { edge: 'end' });
     const selection = structuredClone(editor.selection);
 
     assert.equal(
@@ -124,9 +125,11 @@ describe('Tana Supertag operations', () => {
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: { fields: [{ fieldId: 'status' }] },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
+      { children: [{ text: '' }], id: 'template-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
     ]);
@@ -146,7 +149,7 @@ describe('Tana Supertag operations', () => {
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: { fields: [] },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
     ]);

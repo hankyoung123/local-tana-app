@@ -13,7 +13,7 @@ const document: Value = [
   {
     id: 'project',
     children: [{ text: 'Project' }],
-    tanaSupertagDefinition: { fields: [] },
+    tanaSupertagDefinition: {},
     type: 'p',
   },
   {

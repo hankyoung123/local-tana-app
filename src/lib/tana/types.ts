@@ -1,4 +1,4 @@
-import type { Path, TElement } from 'platejs';
+import type { Path, TElement, Value } from 'platejs';
 
 export type NodeId = string;
 export type FieldId = NodeId;
@@ -21,11 +21,6 @@ export type FieldValue =
   | { type: 'options'; value: NodeId }
   | { type: 'plain'; value: string };
 
-export type FieldBinding = {
-  defaultValue?: FieldValue;
-  fieldId: FieldId;
-};
-
 export type TanaQueryClause =
   | { kind: 'field-equals'; fieldId: FieldId; value: FieldValue }
   | { kind: 'field-defined'; fieldId: FieldId }
@@ -45,9 +40,8 @@ export type TanaPresentation = {
   hiddenFieldNodeIds?: readonly NodeId[];
 };
 
-export type SupertagDefinition = {
-  fields: readonly FieldBinding[];
-};
+/** A Supertag's template Fields are direct child Field Nodes in the document. */
+export type SupertagDefinition = Record<never, never>;
 
 export type TanaBlockElement = TElement & {
   tanaFieldDefinition?: FieldDefinition;
@@ -100,6 +94,8 @@ export type TanaIndex = {
   fieldNodesByParent: ReadonlyMap<NodeId, readonly TanaFieldNode[]>;
   /** Derived only from Field Nodes; never persisted on the parent document Node. */
   fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValue>>;
+  /** The unchanged Plate document from which every index entry is derived. */
+  document: Value;
   nodesById: ReadonlyMap<NodeId, TanaNode>;
   nodesBySupertag: ReadonlyMap<string, readonly NodeId[]>;
 };

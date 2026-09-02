@@ -12,7 +12,7 @@ import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
 import { CircleIcon, ChevronRight, GripVertical } from 'lucide-react';
-import { type Path, type TElement, getPluginByType } from 'platejs';
+import { ElementApi, type Path, type TElement, getPluginByType } from 'platejs';
 import {
   type PlateEditor,
   type PlateElementProps,
@@ -36,12 +36,42 @@ import {
 import { cn } from '@/lib/utils';
 import {
   hasTanaNodeDescendants,
+  getTanaParentPath,
   isTanaNodeElement,
   isTanaNodeHidden,
   isTanaNodeInteractable,
 } from '@/lib/tana';
 
 const EMPTY_OPEN_IDS = new Set<string>();
+
+function getTanaSemanticBlock(editor: PlateEditor, path: Path) {
+  const entry = editor.api.node(path);
+
+  return entry && ElementApi.isElement(entry[0])
+    ? (entry[0] as TElement & {
+        tanaFieldDefinition?: unknown;
+        tanaFieldId?: unknown;
+        tanaFieldValueType?: unknown;
+      })
+    : undefined;
+}
+
+function isFieldOccurrence(node: ReturnType<typeof getTanaSemanticBlock>) {
+  return typeof node?.tanaFieldId === 'string';
+}
+
+function isFieldValueNode(node: ReturnType<typeof getTanaSemanticBlock>) {
+  return typeof node?.tanaFieldValueType === 'string';
+}
+
+function isFieldHost(node: ReturnType<typeof getTanaSemanticBlock>) {
+  return (
+    !!node &&
+    !isFieldOccurrence(node) &&
+    !isFieldValueNode(node) &&
+    node.tanaFieldDefinition === undefined
+  );
+}
 
 export const BlockDraggable: RenderNodeWrapper = (props) => {
   const { editor, element, path } = props;
@@ -129,12 +159,48 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   if (!('id' in dragItem)) return true;
 
   const dragIds = Array.isArray(dragItem.id) ? dragItem.id : [dragItem.id];
-
-  return dragIds.every((id) => {
+  const dragged = dragIds.flatMap((id) => {
     const dragNode = editor.api.node({ at: [], id });
 
-    return !!dragNode && isInteractable(dragNode[1]);
+    return dragNode ? [dragNode] : [];
   });
+
+  if (dragged.length !== dragIds.length || !dragged.every(([, path]) => isInteractable(path))) {
+    return false;
+  }
+
+  const dropNode = getTanaSemanticBlock(editor, dropEntry[1]);
+
+  // A typed value cannot be moved independently from the one Field occurrence
+  // that owns it. The normal Plate multi-block drag retains the Field subtree.
+  if (
+    dragged.some(([node, path]) => {
+      const semanticNode = node as TElement & { tanaFieldValueType?: unknown };
+
+      if (typeof semanticNode.tanaFieldValueType !== 'string') return false;
+
+      const ownerPath = getTanaParentPath(editor.children, path);
+      const owner = ownerPath ? getTanaSemanticBlock(editor, ownerPath) : undefined;
+
+      return typeof owner?.id !== 'string' || !dragIds.includes(owner.id);
+    })
+  ) {
+    return false;
+  }
+
+  if (!dragged.some(([node]) => isFieldOccurrence(node as TElement))) {
+    return true;
+  }
+
+  // Field occurrence nodes can only be placed among ordinary children of an
+  // ordinary host Node. Field definitions, Field rows, and value rows never
+  // become ad-hoc hosts through DnD.
+  const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
+  const dropParent = dropParentPath
+    ? getTanaSemanticBlock(editor, dropParentPath)
+    : undefined;
+
+  return isFieldHost(dropNode) || isFieldHost(dropParent);
 };
 
 function Draggable({

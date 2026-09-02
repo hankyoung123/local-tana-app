@@ -23,7 +23,7 @@ function relation(type: string, key: string): TElement {
 describe('Tana relation integrity', () => {
   test('removes dangling inline references and supertags', () => {
     const editor = createEditor([
-      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: { fields: [] }, type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
       {
         children: [
           { text: 'Ship ' },
@@ -40,10 +40,12 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].children, [{ text: 'Ship ' }]);
   });
 
-  test('removes Field occurrences and bindings when their Definition Node is deleted', () => {
+  test('removes Field occurrence Nodes when their Definition Node is deleted', () => {
     const editor = createEditor([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
-      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: { fields: [{ fieldId: 'status' }] }, type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
       { children: [{ text: 'Open' }], id: 'task-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
@@ -51,7 +53,9 @@ describe('Tana relation integrity', () => {
 
     editor.tf.removeNodes({ at: [0] });
 
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, { fields: [] });
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+    assert.equal(editor.children.some((node) => node.id === 'template-status'), false);
+    assert.equal(editor.children.some((node) => node.id === 'template-status-value'), false);
     assert.equal(editor.children.some((node) => node.id === 'task-status'), false);
     assert.equal(editor.children.some((node) => node.id === 'task-status-value'), false);
   });
@@ -83,31 +87,39 @@ describe('Tana relation integrity', () => {
     );
   });
 
-  test('removes dangling binding defaults but keeps their binding', () => {
+  test('clears a dangling template Value Node relation without deleting its Field Node', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: {
-          fields: [{ defaultValue: { type: 'options', value: 'active' }, fieldId: 'status' }],
-        },
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'template-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      {
+        children: [relation(KEYS.mention, 'active')],
+        id: 'template-status-value',
+        indent: 2,
+        tanaFieldValueType: 'options',
         type: KEYS.p,
       },
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { options: ['active'], type: 'options' }, type: KEYS.p },
       { children: [{ text: 'Active' }], id: 'active', type: KEYS.p },
     ]);
 
-    editor.tf.removeNodes({ at: [2] });
+    editor.tf.removeNodes({ at: [4] });
 
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
-      fields: [{ fieldId: 'status' }],
-    });
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+    assert.deepEqual(
+      editor.children.find((node) => node.id === 'template-status-value')?.children,
+      [{ text: '' }]
+    );
   });
 
   test('nulls a deleted From-Supertag source without deleting the Field Definition', () => {
     const editor = createEditor([
       { children: [{ text: 'Owner' }], id: 'owner', tanaFieldDefinition: { sourceSupertagId: 'project', type: 'from-supertag' }, type: KEYS.p },
-      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: { fields: [] }, type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
     ]);
 
     editor.tf.removeNodes({ at: [1] });
@@ -116,6 +128,49 @@ describe('Tana relation integrity', () => {
       sourceSupertagId: null,
       type: 'from-supertag',
     });
+  });
+
+  test('repairs a missing or duplicate direct Value Node without deleting the Field occurrence', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-priority', indent: 1, tanaFieldId: 'priority', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-priority-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    ]);
+
+    editor.tf.removeNodes({ at: [3] });
+    assert.equal(editor.children.some((node) => node.id === 'task-priority'), true);
+    assert.equal(
+      editor.children.filter((node) => node.tanaFieldValueType === 'plain').length,
+      1
+    );
+
+    editor.tf.insertNodes(
+      { children: [{ text: 'duplicate' }], id: 'duplicate-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { at: [4] }
+    );
+    assert.equal(
+      editor.children.filter((node) => node.tanaFieldValueType === 'plain').length,
+      1
+    );
+    assert.equal(
+      editor.children.find((node) => node.id === 'duplicate-value')?.tanaFieldValueType,
+      undefined
+    );
+  });
+
+  test('removes a Field occurrence whose target is not a Field Definition Node', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Not a field' }], id: 'not-definition', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'invalid-field', indent: 1, tanaFieldId: 'not-definition', type: KEYS.p },
+      { children: [{ text: '' }], id: 'invalid-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    ]);
+
+    editor.tf.setNodes({ type: KEYS.h1 }, { at: [1] });
+
+    assert.equal(editor.children.some((node) => node.id === 'invalid-field'), false);
+    assert.equal(editor.children.some((node) => node.id === 'invalid-value'), false);
   });
 
   test('prunes dangling View clauses while retaining unrelated clauses', () => {

@@ -3,6 +3,7 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 import { KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
+import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import type {
   FieldId,
   FieldValue,
@@ -26,10 +27,6 @@ export type SupertagCandidate = NodeReferenceCandidate & {
 
 function isElement(node: Descendant): node is TElement {
   return 'children' in node && Array.isArray(node.children);
-}
-
-function getIndent(node: TanaNode): number {
-  return typeof node.node.indent === 'number' ? node.node.indent : 0;
 }
 
 function getReferenceTarget(element: TElement): NodeId | undefined {
@@ -68,37 +65,6 @@ function findMentionTarget(element: TElement): NodeId | undefined {
 
     if (target) return target;
   }
-}
-
-function getParentNodeId(
-  nodes: readonly TanaNode[],
-  nodeIndex: number
-): NodeId | undefined {
-  const nodeIndent = getIndent(nodes[nodeIndex]);
-
-  for (let index = nodeIndex - 1; index >= 0; index -= 1) {
-    if (getIndent(nodes[index]) < nodeIndent) return nodes[index].id;
-  }
-}
-
-function getDirectChildNodes(
-  nodes: readonly TanaNode[],
-  parentNodeId: NodeId,
-  parentIndex: number,
-  parentNodeIds: ReadonlyMap<NodeId, NodeId | undefined>
-): TanaNode[] {
-  const children: TanaNode[] = [];
-  const parentIndent = getIndent(nodes[parentIndex]);
-
-  for (let index = parentIndex + 1; index < nodes.length; index += 1) {
-    if (getIndent(nodes[index]) <= parentIndent) break;
-
-    if (parentNodeIds.get(nodes[index].id) === parentNodeId) {
-      children.push(nodes[index]);
-    }
-  }
-
-  return children;
 }
 
 /**
@@ -256,11 +222,9 @@ export function buildTanaIndex(document: Value): TanaIndex {
 
     return resolved ? [resolved] : [];
   });
-  const parentNodeIds = new Map<NodeId, NodeId | undefined>();
-
-  resolvedNodes.forEach((node, nodeIndex) => {
-    parentNodeIds.set(node.id, getParentNodeId(resolvedNodes, nodeIndex));
-  });
+  const nodeIdsByDocumentIndex = new Map(
+    resolvedNodes.map((node) => [node.path[0], node.id])
+  );
 
   function visitSemanticChild(
     descendant: Descendant,
@@ -302,19 +266,30 @@ export function buildTanaIndex(document: Value): TanaIndex {
     });
   });
 
-  resolvedNodes.forEach((node, nodeIndex) => {
+  resolvedNodes.forEach((node) => {
     const fieldId = (node.node as TanaBlockElement).tanaFieldId;
-    const parentNodeId = parentNodeIds.get(node.id);
+    const parentPath = getTanaParentPath(document, node.path);
+    const parentNodeId = parentPath
+      ? nodeIdsByDocumentIndex.get(parentPath[0])
+      : undefined;
 
     if (!fieldId || !parentNodeId) return;
 
     const definition = nodesById.get(fieldId)?.fieldDefinition;
-    const valueNode = getDirectChildNodes(
-      resolvedNodes,
-      node.id,
-      nodeIndex,
-      parentNodeIds
-    )[0];
+    const valuePath = getTanaDirectChildPaths(document, node.path).find(
+      (childPath) => {
+        const childId = nodeIdsByDocumentIndex.get(childPath[0]);
+        const child = childId ? nodesById.get(childId) : undefined;
+
+        return (
+          !!child &&
+          (child.node as TanaBlockElement).tanaFieldValueType !== undefined
+        );
+      }
+    );
+    const valueNode = valuePath
+      ? nodesById.get(nodeIdsByDocumentIndex.get(valuePath[0]) ?? '')
+      : undefined;
     const parsedValue = getFieldValueFromNode(definition, valueNode);
     const value =
       definition &&
@@ -347,6 +322,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
 
   return {
     backlinks,
+    document,
     fieldNodesById,
     fieldNodesByParent,
     fieldValues,

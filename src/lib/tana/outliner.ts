@@ -1,7 +1,7 @@
 import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
-import type { NodeId } from './types';
+import type { NodeId, TanaBlockElement } from './types';
 
 function getIndent(element: TElement): number {
   return typeof element.indent === 'number' ? element.indent : 0;
@@ -96,6 +96,13 @@ export function getTanaNodeDescendantPaths(
   return descendants;
 }
 
+/** Derives only the immediate flat-indent children of one Tana Node. */
+export function getTanaDirectChildPaths(document: Value, path: Path): Path[] {
+  return getTanaNodeDescendantPaths(document, path).filter((childPath) =>
+    getTanaParentPath(document, childPath)?.[0] === path[0]
+  );
+}
+
 /**
  * Derives the visual Zoom range from the single focused NodeId. The returned
  * paths always point into the unchanged Plate document; this never creates a
@@ -186,6 +193,39 @@ export function isTanaNodeHidden(
 }
 
 /**
+ * A Field's presentation preference conceals its real occurrence Node and
+ * every descendant, without removing any document structure or semantics.
+ */
+export function isTanaFieldNodePresentationHidden(
+  document: Value,
+  path: Path
+): boolean {
+  let candidatePath: Path | undefined = path;
+
+  while (candidatePath) {
+    const candidate = getTanaNodeAt(
+      document,
+      candidatePath
+    ) as TanaBlockElement | undefined;
+
+    if (candidate?.tanaFieldId && typeof candidate.id === 'string') {
+      const parentPath = getTanaParentPath(document, candidatePath);
+      const parent = parentPath
+        ? (getTanaNodeAt(document, parentPath) as TanaBlockElement | undefined)
+        : undefined;
+
+      if (parent?.tanaPresentation?.hiddenFieldNodeIds?.includes(candidate.id)) {
+        return true;
+      }
+    }
+
+    candidatePath = getTanaParentPath(document, candidatePath);
+  }
+
+  return false;
+}
+
+/**
  * The one interaction boundary for the outliner: a top-level Tana node that
  * is neither concealed by a collapsed ancestor nor outside the derived Zoom
  * range. `null` represents the workspace root and keeps every Tana Node in
@@ -200,6 +240,7 @@ export function isTanaNodeInteractable(
   return (
     !!getTanaNodeAt(document, path) &&
     !isTanaNodeHidden(document, path, openIds) &&
+    !isTanaFieldNodePresentationHidden(document, path) &&
     isTanaNodeInZoomRange(document, path, focusedNodeId)
   );
 }

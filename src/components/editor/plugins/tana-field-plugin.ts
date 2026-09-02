@@ -14,11 +14,11 @@ import {
 import { buildTanaIndex } from '@/lib/tana/index';
 import {
   getTanaNodeDescendantPaths,
+  getTanaDirectChildPaths,
   getTanaNodePath,
   getTanaParentPath,
 } from '@/lib/tana/outliner';
 import type {
-  FieldBinding,
   FieldDefinition,
   FieldValue,
   NodeId,
@@ -46,9 +46,7 @@ function getDirectChildEntry(
   editor: PlateEditor,
   parentPath: Path
 ): NodeEntry<TanaBlockElement> | undefined {
-  const directChildPath = getTanaNodeDescendantPaths(editor.children, parentPath).find(
-    (path) => getTanaParentPath(editor.children, path)?.[0] === parentPath[0]
-  );
+  const directChildPath = getTanaDirectChildPaths(editor.children, parentPath)[0];
 
   if (!directChildPath) return;
 
@@ -159,21 +157,13 @@ function insertValueChild(
 function materialize(
   editor: PlateEditor,
   parentNodeId: NodeId,
-  fieldId: NodeId,
-  defaultValue?: FieldValue
+  fieldId: NodeId
 ): NodeId | undefined {
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
   if (!parentEntry || !definition) return;
-  if (
-    defaultValue !== undefined &&
-    !isFieldValueValid(buildTanaIndex(editor.children), definition, defaultValue)
-  ) {
-    return;
-  }
-
   const existing = getFieldNode(editor, parentNodeId, fieldId);
 
   if (existing) return existing.id;
@@ -189,7 +179,7 @@ function materialize(
         indent: parentIndent + 1,
         tanaFieldId: fieldId,
       }),
-      createValueNode(editor, parentIndent + 2, definition, defaultValue),
+      createValueNode(editor, parentIndent + 2, definition),
     ],
     { at: insertionPath }
   );
@@ -305,36 +295,17 @@ function deleteAdHoc(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
 function createDefinition(
   editor: PlateEditor,
   name: string,
-  definition: FieldDefinition,
-  parentNodeId?: NodeId
+  definition: FieldDefinition
 ): NodeId | undefined {
   const normalizedName = name.trim();
 
   if (!normalizedName) return;
 
-  const parentEntry = parentNodeId
-    ? getTanaNodeEntry(editor, parentNodeId)
-    : undefined;
-
-  if (parentNodeId && !parentEntry) return;
-
-  const parentPath = parentEntry?.[1];
-  const parentIndent = parentEntry?.[0].indent;
-  const descendants = parentPath
-    ? getTanaNodeDescendantPaths(editor.children, parentPath)
-    : [];
-  const path = parentPath
-    ? [(descendants.at(-1)?.[0] ?? parentPath[0]) + 1]
-    : [editor.children.length];
-  const indent =
-    parentPath
-      ? (typeof parentIndent === 'number' ? parentIndent : 0) + 1
-      : undefined;
+  const path = [editor.children.length];
 
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
-      ...(indent === undefined ? {} : { indent }),
       tanaFieldDefinition: definition,
     }),
     { at: path }
@@ -446,119 +417,38 @@ function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
   return true;
 }
 
-function bind(
+/** Turns the verified transient input itself into a real Field occurrence. */
+function materializeInputNode(
   editor: PlateEditor,
-  supertagId: NodeId,
-  fieldId: NodeId,
-  defaultValue?: FieldValue
-) {
-  const supertagEntry = getTanaNodeEntry(editor, supertagId);
-  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  inputPath: Path,
+  fieldId: NodeId
+): NodeId | undefined {
+  const inputEntry = editor.api.node(inputPath) as NodeEntry<TanaBlockElement> | undefined;
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
-  if (
-    !supertagEntry?.[0].tanaSupertagDefinition ||
-    !fieldEntry?.[0].tanaFieldDefinition
-  ) {
-    return false;
-  }
+  if (!inputEntry || !definition) return;
 
-  if (
-    defaultValue !== undefined &&
-    !isFieldValueValid(
-      buildTanaIndex(editor.children),
-      fieldEntry[0].tanaFieldDefinition,
-      defaultValue
-    )
-  ) {
-    return false;
-  }
-
-  const definition = supertagEntry[0].tanaSupertagDefinition;
-
-  if (definition.fields.some((binding) => binding.fieldId === fieldId)) {
-    return false;
-  }
-
-  const binding: FieldBinding =
-    defaultValue === undefined ? { fieldId } : { defaultValue, fieldId };
+  const inputIndent =
+    typeof inputEntry[0].indent === 'number' ? inputEntry[0].indent : 0;
 
   editor.tf.setNodes(
     {
-      tanaSupertagDefinition: {
-        fields: [...definition.fields, binding],
-      },
+      children: [{ text: '' }],
+      tanaFieldId: fieldId,
     },
-    { at: supertagEntry[1] }
+    { at: inputPath }
   );
+  editor.tf.insertNodes(createValueNode(editor, inputIndent + 1, definition), {
+    at: [inputPath[0] + 1],
+  });
 
-  return true;
-}
+  const fieldEntry = editor.api.node(inputPath);
 
-function unbind(editor: PlateEditor, supertagId: NodeId, fieldId: NodeId) {
-  const entry = getTanaNodeEntry(editor, supertagId);
-  const definition = entry?.[0].tanaSupertagDefinition;
-
-  if (!entry || !definition?.fields.some((binding) => binding.fieldId === fieldId)) {
-    return false;
-  }
-
-  editor.tf.setNodes(
-    {
-      tanaSupertagDefinition: {
-        fields: definition.fields.filter((binding) => binding.fieldId !== fieldId),
-      },
-    },
-    { at: entry[1] }
-  );
-
-  return true;
-}
-
-function setBindingDefault(
-  editor: PlateEditor,
-  supertagId: NodeId,
-  fieldId: NodeId,
-  defaultValue: FieldValue | undefined
-) {
-  const entry = getTanaNodeEntry(editor, supertagId);
-  const fieldEntry = getTanaNodeEntry(editor, fieldId);
-  const definition = entry?.[0].tanaSupertagDefinition;
-
-  if (
-    !entry ||
-    !fieldEntry?.[0].tanaFieldDefinition ||
-    !definition?.fields.some((binding) => binding.fieldId === fieldId)
-  ) {
-    return false;
-  }
-
-  if (
-    defaultValue !== undefined &&
-    !isFieldValueValid(
-      buildTanaIndex(editor.children),
-      fieldEntry[0].tanaFieldDefinition,
-      defaultValue
-    )
-  ) {
-    return false;
-  }
-
-  editor.tf.setNodes(
-    {
-      tanaSupertagDefinition: {
-        fields: definition.fields.map((binding) =>
-          binding.fieldId === fieldId
-            ? defaultValue === undefined
-              ? { fieldId }
-              : { defaultValue, fieldId }
-            : binding
-        ),
-      },
-    },
-    { at: entry[1] }
-  );
-
-  return true;
+  return fieldEntry &&
+    isTanaNodeElement(fieldEntry) &&
+    typeof fieldEntry[0].id === 'string'
+    ? fieldEntry[0].id
+    : undefined;
 }
 
 function completeTemplateInput(
@@ -580,23 +470,23 @@ function completeTemplateInput(
   const fieldId =
     'fieldId' in choice
       ? choice.fieldId
-      : createDefinition(editor, choice.name, { type: 'plain' }, supertagId);
+      : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)
+          ?.id ?? createDefinition(editor, choice.name, { type: 'plain' }));
 
   if (!fieldId) return;
 
-  const definition = getTanaNodeEntry(editor, supertagId)?.[0]
-    .tanaSupertagDefinition;
-  const alreadyBound = definition?.fields.some(
-    (binding) => binding.fieldId === fieldId
-  );
-
-  if (!alreadyBound && !bind(editor, supertagId, fieldId)) return;
+  if (
+    !getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition ||
+    getFieldNode(editor, supertagId, fieldId)
+  ) {
+    return;
+  }
 
   const currentTemporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
 
-  if (!currentTemporaryPath) return;
-
-  editor.tf.removeNodes({ at: currentTemporaryPath });
+  if (!currentTemporaryPath || !materializeInputNode(editor, currentTemporaryPath, fieldId)) {
+    return;
+  }
   const supertagPath = getTanaNodePath(editor.children, supertagId);
   const point = supertagPath ? editor.api.end(supertagPath) : undefined;
 
@@ -638,23 +528,7 @@ function completeAdHocInput(
   if (!parentNodeId || !fieldId || !fieldEntry?.[0].tanaFieldDefinition) return;
   if (getFieldNode(editor, parentNodeId, fieldId)) return;
 
-  const inputEntry = editor.api.node(nodePath) as NodeEntry<TanaBlockElement>;
-  const inputIndent =
-    typeof inputEntry[0].indent === 'number' ? inputEntry[0].indent : 0;
-
-  editor.tf.setNodes(
-    {
-      children: [{ text: '' }],
-      tanaFieldId: fieldId,
-    },
-    { at: nodePath }
-  );
-  editor.tf.insertNodes(
-    createValueNode(editor, inputIndent + 1, fieldEntry[0].tanaFieldDefinition),
-    { at: [nodePath[0] + 1] }
-  );
-
-  return fieldId;
+  return materializeInputNode(editor, nodePath, fieldId) ? fieldId : undefined;
 }
 
 /** Owns all document writes for Field definitions, occurrences, and values. */
@@ -664,11 +538,6 @@ export const TanaFieldPlugin = createPlatePlugin({
   field: {
     applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
       applyDefault(editor, nodeId, fieldId, value),
-    bind: (
-      supertagId: NodeId,
-      fieldId: NodeId,
-      defaultValue?: FieldValue
-    ) => bind(editor, supertagId, fieldId, defaultValue),
     clearValue: (nodeId: NodeId, fieldId: NodeId) =>
       clearValue(editor, nodeId, fieldId),
     completeAdHocInput: (nodeId: NodeId, choice: FieldInputChoice) =>
@@ -678,31 +547,18 @@ export const TanaFieldPlugin = createPlatePlugin({
       supertagId: NodeId,
       choice: FieldInputChoice
     ) => completeTemplateInput(editor, temporaryNodeId, supertagId, choice),
-    createDefinition: (
-      name: string,
-      definition: FieldDefinition,
-      parentNodeId?: NodeId
-    ) => createDefinition(editor, name, definition, parentNodeId),
+    createDefinition: (name: string, definition: FieldDefinition) =>
+      createDefinition(editor, name, definition),
     createOption: (fieldId: NodeId, name: string) =>
       createOption(editor, fieldId, name),
     deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) =>
       deleteAdHoc(editor, nodeId, fieldId),
-    materialize: (
-      nodeId: NodeId,
-      fieldId: NodeId,
-      defaultValue?: FieldValue
-    ) => materialize(editor, nodeId, fieldId, defaultValue),
+    materialize: (nodeId: NodeId, fieldId: NodeId) =>
+      materialize(editor, nodeId, fieldId),
     removeOption: (fieldId: NodeId, optionId: NodeId) =>
       removeOption(editor, fieldId, optionId),
-    setBindingDefault: (
-      supertagId: NodeId,
-      fieldId: NodeId,
-      defaultValue: FieldValue | undefined
-    ) => setBindingDefault(editor, supertagId, fieldId, defaultValue),
     setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
       setValue(editor, nodeId, fieldId, value),
-    unbind: (supertagId: NodeId, fieldId: NodeId) =>
-      unbind(editor, supertagId, fieldId),
     updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
       updateDefinition(editor, fieldId, definition),
   },

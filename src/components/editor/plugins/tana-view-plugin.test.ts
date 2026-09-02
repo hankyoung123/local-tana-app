@@ -35,13 +35,13 @@ const value: Value = [
   {
     children: [{ text: 'Project' }],
     id: 'project',
-    tanaSupertagDefinition: { fields: [] },
+    tanaSupertagDefinition: {},
     type: KEYS.p,
   },
   {
     children: [{ text: 'Person' }],
     id: 'person',
-    tanaSupertagDefinition: { fields: [] },
+    tanaSupertagDefinition: {},
     type: KEYS.p,
   },
   {

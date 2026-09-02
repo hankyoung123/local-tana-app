@@ -8,7 +8,6 @@ import {
   CURRENT_SCHEMA_VERSION,
   isPlateDocument,
   isValidTanaDocument,
-  migratePlateDocument,
 } from './persistence';
 
 const value = (text: string): Value => [
@@ -34,10 +33,20 @@ describe('Plate document persistence', () => {
     );
     assert.equal(
       isValidTanaDocument([
+        { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
+        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
         {
           children: [{ text: '' }],
           id: 'field-occurrence',
+          indent: 1,
           tanaFieldId: 'priority',
+          type: 'p',
+        },
+        {
+          children: [{ text: '' }],
+          id: 'field-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
           type: 'p',
         },
       ]),
@@ -69,50 +78,19 @@ describe('Plate document persistence', () => {
     );
   });
 
-  test('migrates copied reference names to key-only semantic nodes', () => {
-    const migrated = migratePlateDocument(
-      [
+  test('treats Field-as-Node as a breaking schema and rejects legacy value maps', () => {
+    assert.equal(CURRENT_SCHEMA_VERSION, 4);
+    assert.equal(
+      isValidTanaDocument([
         {
-          children: [
-            { text: 'A ' },
-            {
-              children: [{ text: '' }],
-              key: 'target',
-              type: 'mention',
-              value: 'Stale name',
-            },
-          ],
-          id: 'source',
+          children: [{ text: 'Task' }],
+          id: 'task',
+          tanaFieldValues: { priority: { type: 'plain', value: 'legacy' } },
           type: 'p',
         },
-      ],
-      1
+      ]),
+      false
     );
-
-    assert.equal(CURRENT_SCHEMA_VERSION, 3);
-    assert.deepEqual(migrated[0].children[1], {
-      children: [{ text: '' }],
-      key: 'target',
-      type: 'mention',
-    });
-  });
-
-  test('migrates every legacy top-level block to a NodeId without changing its type', () => {
-    const migrated = migratePlateDocument(
-      [
-        { children: [{ text: 'Heading' }], type: 'h1' },
-        { children: [{ text: 'Quote' }], type: 'blockquote' },
-        { children: [{ text: 'Existing' }], id: 'existing', type: 'p' },
-      ],
-      2
-    );
-
-    assert.equal(migrated[0].type, 'h1');
-    assert.equal(migrated[1].type, 'blockquote');
-    assert.equal(typeof migrated[0].id, 'string');
-    assert.equal(typeof migrated[1].id, 'string');
-    assert.equal(migrated[2].id, 'existing');
-    assert.equal(isValidTanaDocument(migrated), true);
   });
 
   test('flushes a debounced final edit before close', async () => {

@@ -20,7 +20,7 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 
 /**
  * Persists only a Node's field visibility preference. It deliberately never
- * touches Field Values, bindings, queries, or any other Tana semantics.
+ * touches Field Values, templates, queries, or any other Tana semantics.
  */
 function setFieldVisible(
   editor: PlateEditor,

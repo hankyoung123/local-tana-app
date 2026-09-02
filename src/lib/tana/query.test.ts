@@ -14,9 +14,7 @@ const document: Value = [
   {
     id: 'project-tag',
     children: [{ text: 'Project' }],
-    tanaSupertagDefinition: {
-      fields: [{ fieldId: 'estimate' }, { fieldId: 'status' }],
-    },
+    tanaSupertagDefinition: {},
     type: 'p',
   },
   {
@@ -121,7 +119,7 @@ describe('runTanaQuery', () => {
     );
   });
 
-  test('treats both a Supertag binding and an ad-hoc key as field-defined', () => {
+  test('treats both a template-derived and an ad-hoc Field Node as field-defined', () => {
     assert.deepEqual(
       runTanaQuery(index, [{ fieldId: 'estimate', kind: 'field-defined' }]).map(
         ({ id }) => id

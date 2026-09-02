@@ -149,12 +149,12 @@ describe('Field occurrence Nodes', () => {
     assert.ok(index.fieldNodesById.get('temporary')?.valueNodeId);
   });
 
-  test('creates template Field Definitions under the Supertag and never treats them as transient inputs', () => {
+  test('turns a transient Supertag child into a real template Field Node', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: { fields: [] },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
       { children: [{ text: '' }], id: 'template-input', indent: 1, type: KEYS.p },
@@ -171,24 +171,28 @@ describe('Field occurrence Nodes', () => {
 
     assert.ok(fieldId);
     assert.equal(definition?.fieldDefinition?.type, 'plain');
-    assert.equal(definition?.node.indent, 1);
-    assert.equal(editor.children.some((node) => node.id === 'template-input'), false);
-    assert.equal(isSupertagFieldInputNode(editor.children, definition?.path ?? [0]), false);
+    assert.equal(definition?.node.indent, undefined);
+    assert.equal(editor.children.find((node) => node.id === 'template-input')?.tanaFieldId, fieldId);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesById.get('template-input')
+        ?.parentNodeId,
+      'project'
+    );
+    assert.equal(isSupertagFieldInputNode(editor.children, [1]), false);
   });
 
-  test('materializes every bound Field when applying a Supertag and keeps Field labels dynamic', () => {
+  test('materializes every template Field when applying a Supertag and keeps Field labels dynamic', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
         id: 'project',
-        tanaSupertagDefinition: {
-          fields: [
-            { defaultValue: { type: 'plain', value: 'Untitled' }, fieldId: 'title' },
-            { fieldId: 'estimate' },
-          ],
-        },
+        tanaSupertagDefinition: {},
         type: KEYS.p,
       },
+      { children: [{ text: '' }], id: 'template-title', indent: 1, tanaFieldId: 'title', type: KEYS.p },
+      { children: [{ text: 'Untitled' }], id: 'template-title-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-estimate', indent: 1, tanaFieldId: 'estimate', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-estimate-value', indent: 2, tanaFieldValueType: 'number', type: KEYS.p },
       { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },

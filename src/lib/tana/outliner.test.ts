@@ -240,6 +240,53 @@ describe('Tana outliner behavior', () => {
     assert.equal('tanaFieldId' in editor.children[1], false);
   });
 
+  test('lets Plate DnD keep Field Nodes on ordinary hosts and values with their owner', () => {
+    const editor = createPlateEditor({
+      plugins: EditorKit,
+      value: [
+        { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+        { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
+        { children: [{ text: '' }], id: 'field', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+        { children: [{ text: '' }], id: 'field-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+        { children: [{ text: 'Host' }], id: 'host', type: KEYS.p },
+        { children: [{ text: 'Existing child' }], id: 'host-child', indent: 1, type: KEYS.p },
+      ],
+    });
+    editor.getApi(TogglePlugin).toggle.toggleIds(['source', 'field', 'host'], true);
+    const fieldEntry = editor.api.node({ at: [], id: 'field' }) as NodeEntry<TElement>;
+    const valueEntry = editor.api.node({ at: [], id: 'field-value' }) as NodeEntry<TElement>;
+    const hostChildEntry = editor.api.node({ at: [], id: 'host-child' }) as NodeEntry<TElement>;
+    const definitionEntry = editor.api.node({ at: [], id: 'status' }) as NodeEntry<TElement>;
+
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: fieldEntry,
+        dragItem: { editorId: editor.id, element: fieldEntry[0], id: 'field' },
+        dropEntry: hostChildEntry,
+        editor,
+      }),
+      true
+    );
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: fieldEntry,
+        dragItem: { editorId: editor.id, element: fieldEntry[0], id: 'field' },
+        dropEntry: definitionEntry,
+        editor,
+      }),
+      false
+    );
+    assert.equal(
+      canDropOnInteractableTanaNode({
+        dragEntry: valueEntry,
+        dragItem: { editorId: editor.id, element: valueEntry[0], id: 'field-value' },
+        dropEntry: hostChildEntry,
+        editor,
+      }),
+      false
+    );
+  });
+
   test('derives hierarchy for every presentation without changing node types', () => {
     const styledOutliner: Value = [
       { children: [{ text: 'Heading parent' }], id: 'heading', type: KEYS.h1 },
@@ -529,9 +576,7 @@ describe('Tana outliner behavior', () => {
         {
           children: [{ text: 'Project tag' }],
           id: 'project-tag',
-          tanaSupertagDefinition: {
-            fields: [],
-          },
+          tanaSupertagDefinition: {},
           type: KEYS.p,
         },
         {
