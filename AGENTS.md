@@ -31,3 +31,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Collapse is UI behavior only: derive parent/descendant structure from flat
   indent, then use Plate Toggle's `openIds`. Never change a Node's Plate type
   or write collapse state into Tana semantics.
+
+## Frozen Field-as-Node model
+
+- Field Definition, Field occurrence, Value, Option, and Supertag template
+  entries are ordinary Plate Nodes with stable NodeIds.
+- Options are the ordered direct child Nodes of an `options` Field Definition;
+  do not add an `options[]` metadata list or a parallel candidate store.
+- A Field occurrence may be hosted only by an ordinary Node or Supertag
+  Definition Node. Value Nodes stay under their Field occurrence and cannot be
+  moved independently.
+- `isTanaFieldHostNode` is the canonical host invariant for Field writers,
+  DnD policy, and Integrity validation. Plate remains the sole owner of
+  Selection, DnD, Navigation, History, and keyboard behavior.
+- Field visibility is presentation metadata only. Hiding a Field prunes the
+  current Plate interaction and returns focus/zoom to its owner without
+  deleting or copying Field/Value Nodes.

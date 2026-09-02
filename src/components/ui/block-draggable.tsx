@@ -48,6 +48,7 @@ import {
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
   getTanaParentPath,
+  isTanaFieldHostNode,
   isTanaNodeElement,
   isTanaNodeHidden,
   isTanaNodeInteractable,
@@ -56,45 +57,6 @@ import {
 } from '@/lib/tana';
 
 const EMPTY_OPEN_IDS = new Set<string>();
-
-function hasSemantic(
-  editor: PlateEditor,
-  path: Path,
-  semantic: 'field' | 'field-definition' | 'value'
-) {
-  const entry = editor.api.node(path);
-
-  return (
-    !!entry &&
-    ElementApi.isElement(entry[0]) &&
-    hasNodeSemantic(entry[0], semantic, { document: editor.children, path })
-  );
-}
-
-function isFieldHost(editor: PlateEditor, path: Path) {
-  return (
-    !hasSemantic(editor, path, 'field') &&
-    !hasSemantic(editor, path, 'value') &&
-    !hasSemantic(editor, path, 'field-definition')
-  );
-}
-
-function isWithinFieldStructure(editor: PlateEditor, path: Path): boolean {
-  let currentPath: Path | undefined = path;
-
-  while (currentPath) {
-    if (
-      hasSemantic(editor, currentPath, 'field') ||
-      hasSemantic(editor, currentPath, 'value')
-    ) {
-      return true;
-    }
-
-    currentPath = getTanaParentPath(editor.children, currentPath);
-  }
-
-  return false;
-}
 
 function getNodeIndent(node: TElement): number {
   return typeof node.indent === 'number' ? node.indent : 0;
@@ -246,10 +208,6 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 
   const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
 
-  // No ordinary Node may enter a Field occurrence or typed value subtree.
-  // Field semantics are structural, not a post-drop Integrity repair task.
-  if (isWithinFieldStructure(editor, dropEntry[1])) return false;
-
   // A typed value cannot be moved independently from the one Field occurrence
   // that owns it. The normal Plate multi-block drag retains the Field subtree.
   const fieldNodeIds = new Set(
@@ -298,8 +256,8 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   // that ordinary host for either placement direction.
   if (
     !dropParentPath ||
-    !isFieldHost(editor, dropParentPath) ||
-    !isFieldHost(editor, dropEntry[1]) ||
+    !isTanaFieldHostNode(editor.children, dropParentPath) ||
+    !isTanaFieldHostNode(editor.children, dropEntry[1]) ||
     hasTanaNodeDescendants(editor.children, dropEntry[1]) ||
     !getTanaDirectChildPaths(editor.children, dropParentPath).some(
       (path) => path[0] === dropEntry[1][0]
@@ -340,7 +298,7 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 
     return (
       !!sourceParentPath &&
-      isFieldHost(editor, sourceParentPath) &&
+      isTanaFieldHostNode(editor.children, sourceParentPath) &&
       getNodeIndent(node as TElement) === getNodeIndent(dropEntry[0] as TElement) &&
       subtreeIds.every((id) => dragIds.includes(id))
     );

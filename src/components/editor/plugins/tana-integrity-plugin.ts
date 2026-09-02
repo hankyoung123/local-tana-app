@@ -1,15 +1,15 @@
-import { ElementApi } from 'platejs';
+import { ElementApi, KEYS } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
-import { isTanaNodeElement } from '@/lib/tana/constants';
+import { isTanaNodeElement, TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
+import { isTanaFieldHostNode } from '@/lib/tana/fields';
 import {
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
   getTanaParentPath,
 } from '@/lib/tana/outliner';
 import {
-  getNodeSemanticType,
   getNodeSemanticTypes,
   hasNodeSemantic,
   type TanaNodeSemanticType,
@@ -98,7 +98,7 @@ function findDanglingInlineRelation(
     const targetNodeId = (node as RelationElement).key;
 
     if (
-      getNodeSemanticType(node) === 'reference' &&
+      (node.type === KEYS.mention || node.type === TANA_SUPERTAG_KEY) &&
       typeof targetNodeId === 'string' &&
       !nodeIds.has(targetNodeId)
     ) {
@@ -235,15 +235,6 @@ function getEntryAtPath(
   return entries.find(([, candidatePath]) => candidatePath[0] === path[0])?.[0];
 }
 
-function isFieldHost(node: TanaBlockElement | undefined) {
-  return (
-    !!node &&
-    node.tanaFieldDefinition === undefined &&
-    node.tanaFieldId === undefined &&
-    node.tanaFieldValueType === undefined
-  );
-}
-
 type TanaNodeIntegrityValidator = (
   node: TanaBlockElement,
   path: Path,
@@ -278,9 +269,12 @@ const NodeIntegrityValidators: Partial<
     if (!definition) return 'missing-field-definition';
 
     const parentPath = getTanaParentPath(context.document, path);
-    const parent = parentPath ? getEntryAtPath(context.entries, parentPath) : undefined;
-
-    if (!isFieldHost(parent)) return 'invalid-field-host';
+    if (
+      !parentPath ||
+      !isTanaFieldHostNode(context.document, parentPath)
+    ) {
+      return 'invalid-field-host';
+    }
 
     const valuePaths = getTanaDirectChildPaths(context.document, path).filter(
       (childPath) => {

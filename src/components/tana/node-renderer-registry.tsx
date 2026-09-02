@@ -27,14 +27,8 @@ export type TanaNodeWorkspaceRendererProps = {
   selectedNodeId: NodeId | null;
 };
 
-export type TanaNodeSearchRendererProps = {
-  node: TanaNode;
-  onNavigate: (nodeId: NodeId) => void;
-};
-
 export type TanaNodeRenderer = {
   Block?: React.ComponentType<TanaNodeBlockRendererProps>;
-  SearchResult?: React.ComponentType<TanaNodeSearchRendererProps>;
   Workspace: React.ComponentType<TanaNodeWorkspaceRendererProps>;
 };
 
@@ -108,53 +102,21 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   );
 }
 
-function EmptyBlockRenderer() {
-  return null;
-}
-
-const ContentRenderer = OutlineRenderer;
-const FieldDefinitionRenderer = OutlineRenderer;
-const OptionRenderer = OutlineRenderer;
-const ReferenceRenderer = OutlineRenderer;
-const CommandRenderer = OutlineRenderer;
-const SearchRenderer = OutlineRenderer;
-const ValueWorkspaceRenderer = OutlineRenderer;
-
-function SearchResultRenderer({ node, onNavigate }: TanaNodeSearchRendererProps) {
-  return (
-    <button
-      className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-[#f1f5f2]"
-      type="button"
-      onClick={() => onNavigate(node.id)}
-    >
-      {node.text || '未命名节点'}
-    </button>
-  );
-}
-
 /**
  * The registry selects presentation only. It owns neither document mutation
  * nor editor interaction state; both remain in Plate and semantic plugins.
  */
-export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer> = {
-  command: { Block: EmptyBlockRenderer, Workspace: CommandRenderer },
-  content: { Block: EmptyBlockRenderer, Workspace: ContentRenderer },
-  'field-definition': { Block: EmptyBlockRenderer, Workspace: FieldDefinitionRenderer },
-  field: { Block: FieldRenderer, Workspace: ContentRenderer },
-  option: { Block: EmptyBlockRenderer, Workspace: OptionRenderer },
-  reference: { Block: EmptyBlockRenderer, Workspace: ReferenceRenderer },
-  search: {
-    Block: EmptyBlockRenderer,
-    SearchResult: SearchResultRenderer,
-    Workspace: SearchRenderer,
-  },
-  'supertag-definition': { Block: EmptyBlockRenderer, Workspace: SupertagRenderer },
-  value: { Block: ValueRenderer, Workspace: ValueWorkspaceRenderer },
-  view: { Block: EmptyBlockRenderer, Workspace: ViewRenderer },
+export const NodeRendererRegistry: Partial<
+  Record<TanaNodeSemanticType, TanaNodeRenderer>
+> = {
+  field: { Block: FieldRenderer, Workspace: OutlineRenderer },
+  value: { Block: ValueRenderer, Workspace: OutlineRenderer },
+  'supertag-definition': { Workspace: SupertagRenderer },
+  view: { Workspace: ViewRenderer },
 };
 
 export function getNodeRenderer(semanticType: TanaNodeSemanticType): TanaNodeRenderer {
-  return NodeRendererRegistry[semanticType];
+  return NodeRendererRegistry[semanticType] ?? { Workspace: OutlineRenderer };
 }
 
 function SupertagInstances({

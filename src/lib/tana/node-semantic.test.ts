@@ -82,15 +82,20 @@ describe('Node semantic runtime', () => {
     assert.equal(getNodeSemanticType(nodeAt([8]), { document, path: [8] }), 'view');
   });
 
-  test('classifies transient Plate elements without persisting a Node type', () => {
-    assert.equal(
-      getNodeSemanticType({ children: [{ text: '' }], key: 'task', type: KEYS.mention }),
-      'reference'
+  test('keeps transient Plate elements outside the Tana Node semantic union', () => {
+    assert.deepEqual(
+      getNodeSemanticTypes(
+        { children: [{ text: '' }], key: 'task', type: KEYS.mention },
+        { document, path: [0, 0] }
+      ),
+      ['content']
     );
-    assert.equal(
-      getNodeSemanticType({ children: [{ text: '' }], type: KEYS.slashInput }),
-      'command'
+    assert.deepEqual(
+      getNodeSemanticTypes(
+        { children: [{ text: '' }], type: KEYS.slashInput },
+        { document, path: [0, 0] }
+      ),
+      ['content']
     );
-    assert.equal(getNodeSemanticType(nodeAt([0]), { surface: 'search' }), 'search');
   });
 });

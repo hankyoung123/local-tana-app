@@ -6,7 +6,6 @@ import { KEYS, type TElement, type Value } from 'platejs';
 import {
   canDrag,
   canDrop,
-  getContextActions,
 } from './node-behavior';
 
 const document: Value = [
@@ -59,14 +58,33 @@ describe('Node behavior runtime', () => {
       ),
       false
     );
+    assert.equal(
+      canDrop(
+        nodeAt([2]),
+        nodeAt([0]),
+        { document, path: [2] },
+        { document, path: [0] }
+      ),
+      true
+    );
+    assert.equal(
+      canDrop(
+        nodeAt([2]),
+        nodeAt([1]),
+        { document, path: [2] },
+        { document, path: [1] }
+      ),
+      false
+    );
+    assert.equal(
+      canDrop(
+        nodeAt([0]),
+        nodeAt([3]),
+        { document, path: [0] },
+        { document, path: [3] }
+      ),
+      false
+    );
   });
 
-  test('exposes semantic context actions for future Plate menus without owning handlers', () => {
-    assert.deepEqual(getContextActions(nodeAt([2]), { document, path: [2] }), [
-      'edit',
-      'open-definition',
-      'move',
-      'delete',
-    ]);
-  });
 });

@@ -11,12 +11,12 @@ import {
   getTanaNodePath,
   isTanaNodeElement,
   searchTanaNodes,
+  type TanaNode,
 } from '@/lib/tana';
 
 import { TanaIndexProvider, useTanaIndex } from './tana-index-context';
 import { TanaInspector } from './tana-inspector';
 import { TanaNodeViewHost } from './tana-node-view-host';
-import { getNodeRenderer } from './node-renderer-registry';
 import { TanaOutlinerOpenState } from './tana-outliner-open-state';
 import { TanaSidebar } from './tana-sidebar';
 
@@ -25,6 +25,24 @@ export type PersistenceStatus =
   | 'error'
   | 'saved'
   | 'saving';
+
+function SearchResult({
+  node,
+  onNavigate,
+}: {
+  node: TanaNode;
+  onNavigate: (nodeId: string) => void;
+}) {
+  return (
+    <button
+      className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+      type="button"
+      onClick={() => onNavigate(node.id)}
+    >
+      {node.text || '未命名节点'}
+    </button>
+  );
+}
 
 export function TanaWorkspace({
   persistenceStatus,
@@ -102,7 +120,6 @@ function TanaWorkspaceContent({
     return node ? [node] : [];
   });
   const searchResults = searchTanaNodes(index, search);
-  const SearchResultRenderer = getNodeRenderer('search').SearchResult;
   const activeNodeId = focusedNodeId ?? selectedNodeId;
 
   const navigateToSearchResult = (nodeId: string) => {
@@ -217,13 +234,11 @@ function TanaWorkspaceContent({
                     <p className="px-2 py-2 text-[#7b827d] text-xs">没有匹配的节点</p>
                   ) : (
                     searchResults.map((node) =>
-                      SearchResultRenderer ? (
-                        <SearchResultRenderer
-                          key={node.id}
-                          node={node}
-                          onNavigate={navigateToSearchResult}
-                        />
-                      ) : null
+                      <SearchResult
+                        key={node.id}
+                        node={node}
+                        onNavigate={navigateToSearchResult}
+                      />
                     )
                   )}
                 </div>
