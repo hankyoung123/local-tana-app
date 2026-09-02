@@ -1,13 +1,11 @@
 'use client';
 
 import {
-  CircleXIcon,
-  ArrowUpRightIcon,
   EyeOffIcon,
   HashIcon,
   ListFilterIcon,
-  PencilLineIcon,
   SlidersHorizontalIcon,
+  XIcon,
 } from 'lucide-react';
 import type { TElement } from 'platejs';
 import { useEditorRef } from 'platejs/react';
@@ -30,7 +28,7 @@ import type {
   TanaNode,
   TanaNodeSemanticType,
 } from '@/lib/tana';
-import { getFieldValueCandidates, getSupertagTemplateFields } from '@/lib/tana';
+import { getFieldValueCandidates } from '@/lib/tana';
 
 import { OutlineNodeView } from './outline-node-view';
 import { TanaView } from './tana-view';
@@ -84,10 +82,6 @@ function FieldDefinitionHint({ element }: TanaNodeBlockRendererProps) {
   );
 }
 
-function OptionHint() {
-  return <NodeSemanticHint label="选项" />;
-}
-
 function SupertagHint() {
   return <NodeSemanticHint icon={<HashIcon />} label="超级标签" />;
 }
@@ -116,14 +110,6 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
   );
 }
 
-function SupertagRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps) {
-  return node ? (
-    <SupertagInstances definition={node} index={index} />
-  ) : (
-    <OutlineRenderer index={index} {...props} />
-  );
-}
-
 /** Field occurrence labels are derived from their Field Definition Node. */
 function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const editor = useEditorRef();
@@ -138,7 +124,6 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const field = index.nodesById.get(fieldId);
   const indent = typeof element.indent === 'number' ? element.indent : 0;
   const labelLeft = `${indent * 24}px`;
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
 
   return (
@@ -163,22 +148,6 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       </button>
 
       <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-white/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
-        <FieldAction
-          label="编辑字段值"
-          onClick={() => {
-            if (fieldNode.valueNodeId) {
-              editor.getApi(TanaZoomPlugin).zoom.focus(fieldNode.valueNodeId);
-            }
-          }}
-        >
-          <PencilLineIcon />
-        </FieldAction>
-        <FieldAction
-          label="清空字段值"
-          onClick={() => fieldTransforms.clearValue(fieldNode.parentNodeId, fieldId)}
-        >
-          <CircleXIcon />
-        </FieldAction>
         <FieldAction
           label="在正文中隐藏"
           onClick={() =>
@@ -226,7 +195,7 @@ function FieldAction({
 
 /**
  * The Value remains a real Plate Node. Structured types receive a thin Tana
- * editor while plain text continues to use Plate's native contenteditable.
+ * editor while plain and number text continue to use Plate contenteditable.
  */
 function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const editor = useEditorRef();
@@ -250,43 +219,12 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const clearValue = () =>
     fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
 
-  if (definition.type === 'plain') {
-    if (fieldNode.value) return null;
+  if (definition.type === 'plain' || definition.type === 'number') {
+    const text = fieldNode.valueNodeId
+      ? index.nodesById.get(fieldNode.valueNodeId)?.text
+      : undefined;
 
-    return <UnsetValuePlaceholder />;
-  }
-
-  if (definition.type === 'number') {
-    const value =
-      fieldNode.value?.type === 'number' ? fieldNode.value.value : undefined;
-
-    return (
-      <ValueControl>
-        <input
-          aria-label="数字字段值"
-          className="h-7 w-full min-w-0 rounded border-0 bg-transparent px-1.5 text-[13px] text-[#28312c] outline-none hover:bg-[#f5f7f5] focus:bg-white focus:ring-1 focus:ring-[#9eb7aa]"
-          data-plate-prevent-deselect
-          inputMode="decimal"
-          placeholder="未设置"
-          type="number"
-          value={value ?? ''}
-          onChange={(event) => {
-            const raw = event.target.value;
-
-            if (!raw) {
-              clearValue();
-              return;
-            }
-
-            const nextValue = Number(raw);
-
-            if (Number.isFinite(nextValue)) {
-              setValue({ type: 'number', value: nextValue });
-            }
-          }}
-        />
-      </ValueControl>
-    );
+    return text ? null : <UnsetValuePlaceholder />;
   }
 
   if (definition.type === 'checkbox') {
@@ -307,6 +245,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
           />
           <span>{value === undefined ? '未设置' : value ? '已完成' : '未完成'}</span>
         </label>
+        {value !== undefined && <ValueClearButton onClear={clearValue} />}
       </ValueControl>
     );
   }
@@ -370,8 +309,29 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
             ))
           )}
         </SelectContent>
-      </Select>
-    </ValueControl>
+        </Select>
+        {currentValue && <ValueClearButton onClear={clearValue} />}
+      </ValueControl>
+  );
+}
+
+function ValueClearButton({ onClear }: { onClear: () => void }) {
+  return (
+    <button
+      aria-label="清空字段值"
+      className="grid size-6 shrink-0 place-items-center rounded text-[#929a95] hover:bg-[#edf3ef] hover:text-[#275d48]"
+      data-plate-prevent-deselect
+      title="清空字段值"
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClear();
+      }}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <XIcon className="size-3.5" />
+    </button>
   );
 }
 
@@ -415,10 +375,10 @@ export const NodeRendererRegistry: Record<
     Workspace: OutlineRenderer,
   },
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
-  option: { Block: OptionHint, Workspace: OutlineRenderer },
+  option: { Workspace: OutlineRenderer },
   'supertag-definition': {
     Block: SupertagHint,
-    Workspace: SupertagRenderer,
+    Workspace: OutlineRenderer,
   },
   value: { Block: ValueRenderer, Workspace: OutlineRenderer },
   view: { Block: ViewHint, Workspace: ViewRenderer },
@@ -426,122 +386,4 @@ export const NodeRendererRegistry: Record<
 
 export function getNodeRenderer(semanticType: TanaNodeSemanticType): TanaNodeRenderer {
   return NodeRendererRegistry[semanticType];
-}
-
-function SupertagInstances({
-  definition,
-  index,
-}: {
-  definition: TanaNode;
-  index: TanaIndex;
-}) {
-  const editor = useEditorRef();
-  const instanceIds = index.nodesBySupertag.get(definition.id) ?? [];
-  const templates = getSupertagTemplateFields(index, definition.id);
-
-  return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <div className="shrink-0 border-b border-[#e7ebe8] bg-[linear-gradient(180deg,#fbfdfb_0%,#fff_100%)] px-6 py-7 sm:px-[max(48px,calc(50%-390px))]">
-        <p className="mb-2 flex items-center gap-1.5 text-[#47725f] text-xs">
-          <HashIcon className="size-3.5" />
-          超级标签定义
-        </p>
-        <h1 className="font-semibold text-2xl text-[#202421] tracking-normal">
-          #{definition.text || '未命名超级标签'}
-        </h1>
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          {templates.length === 0 ? (
-            <span className="text-[#909892] text-xs">尚未配置模板字段</span>
-          ) : (
-            templates.map((template) => (
-              <button
-                key={template.template.id}
-                className="rounded-full border border-[#dfe8e2] bg-white px-2.5 py-1 text-[#4e6358] text-[11px] hover:border-[#b8ccbf] hover:text-[#245b46]"
-                type="button"
-                onClick={() =>
-                  editor.getTransforms(TanaZoomPlugin).zoom.to(template.field.id)
-                }
-              >
-                {template.field.text || '未命名字段'}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto px-6 py-4 sm:px-[max(48px,calc(50%-390px))]">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="font-medium text-[#4c5750] text-xs">实例</p>
-          <span className="rounded-full bg-[#eff4f1] px-2 py-0.5 text-[#66736b] text-[10px] tabular-nums">
-            {instanceIds.length}
-          </span>
-        </div>
-        {instanceIds.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#dfe6e1] px-6 py-10 text-center">
-            <HashIcon className="mx-auto mb-2 size-5 text-[#a0aaa3]" />
-            <p className="text-muted-foreground text-sm">暂无实例</p>
-            <p className="mt-1 text-[#9aa19d] text-xs">在任意节点输入 # 应用此超级标签。</p>
-          </div>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {instanceIds.map((instanceId) => {
-              const instance = index.nodesById.get(instanceId);
-
-              if (!instance) return null;
-
-              const values = index.fieldValues.get(instance.id);
-
-              return (
-                <button
-                  key={instance.id}
-                  className="group rounded-xl border border-[#e4e9e6] bg-white p-3 text-left shadow-[0_1px_2px_rgb(31_54_43/0.03)] hover:border-[#c7d6cd] hover:bg-[#fbfdfc]"
-                  type="button"
-                  onClick={() =>
-                    editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
-                  }
-                >
-                  <span className="flex items-start gap-2">
-                    <span className="min-w-0 flex-1 truncate font-medium text-[#2b332e] text-sm">
-                      {instance.text || '未命名节点'}
-                    </span>
-                    <ArrowUpRightIcon className="mt-0.5 size-3.5 shrink-0 text-[#9aa39d] group-hover:text-[#3e705a]" />
-                  </span>
-                  {templates.length > 0 && (
-                    <span className="mt-2 block space-y-1">
-                      {templates.slice(0, 3).map((template) => (
-                        <span
-                          key={template.field.id}
-                          className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 text-[11px]"
-                        >
-                          <span className="truncate text-[#849088]">
-                            {template.field.text || '字段'}
-                          </span>
-                          <span className="truncate text-[#56615a]">
-                            {formatFieldValue(
-                              index,
-                              values?.get(template.field.id)
-                            )}
-                          </span>
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function formatFieldValue(index: TanaIndex, value?: FieldValue): string {
-  if (!value) return '未设置';
-
-  if (value.type === 'checkbox') return value.value ? '是' : '否';
-  if (value.type === 'options' || value.type === 'from-supertag') {
-    return index.nodesById.get(value.value)?.text || '未命名节点';
-  }
-
-  return String(value.value);
 }

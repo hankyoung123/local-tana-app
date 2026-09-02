@@ -18,9 +18,16 @@ describe('Node renderer registry', () => {
     });
 
     assert.ok(NodeRendererRegistry['field-definition'].Block);
-    assert.ok(NodeRendererRegistry.option.Block);
     assert.ok(NodeRendererRegistry.field.Block);
     assert.ok(NodeRendererRegistry.value.Block);
+  });
+
+  test('renders a Supertag Definition through the ordinary Outline Node page', () => {
+    assert.equal(
+      NodeRendererRegistry['supertag-definition'].Workspace,
+      NodeRendererRegistry.content.Workspace
+    );
+    assert.equal(NodeRendererRegistry.option.Block, undefined);
   });
 
   test('selects the View renderer for a composable Supertag View Node', () => {

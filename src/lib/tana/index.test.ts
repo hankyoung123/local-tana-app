@@ -119,6 +119,27 @@ describe('buildTanaIndex', () => {
     assert.equal(index.fieldNodesById.get('task-status')?.value, undefined);
   });
 
+  test('derives numbers from Plate text while preserving intermediate input', () => {
+    const numberDocument: Value = [
+      { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: 'p' },
+      { children: [{ text: 'Draft' }], id: 'draft', type: 'p' },
+      { children: [{ text: '' }], id: 'draft-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },
+      { children: [{ text: '1.' }], id: 'draft-estimate-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
+      { children: [{ text: 'Final' }], id: 'final', type: 'p' },
+      { children: [{ text: '' }], id: 'final-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },
+      { children: [{ text: '1.20' }], id: 'final-estimate-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
+    ];
+    const index = buildTanaIndex(numberDocument);
+
+    assert.equal(index.fieldValues.get('draft')?.has('estimate') ?? false, false);
+    assert.deepEqual(index.fieldValues.get('final')?.get('estimate'), {
+      type: 'number',
+      value: 1.2,
+    });
+    assert.equal(index.nodesById.get('draft-estimate-value')?.text, '1.');
+    assert.equal(index.nodesById.get('final-estimate-value')?.text, '1.20');
+  });
+
   test('derives reference and supertag names from the current target node', () => {
     const renamed = structuredClone(document);
     renamed[0].children = [{ text: 'Renamed Project' }];

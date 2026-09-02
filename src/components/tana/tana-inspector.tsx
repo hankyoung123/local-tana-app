@@ -2,13 +2,12 @@
 
 import * as React from 'react';
 
-import { HashIcon, PlusIcon, Settings2Icon, Trash2Icon } from 'lucide-react';
+import { ArrowUpRightIcon, Settings2Icon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   Select,
   SelectContent,
@@ -18,7 +17,6 @@ import {
 } from '@/components/ui/select';
 import {
   getNodeFieldDescriptors,
-  getFieldValueCandidates,
   type FieldDefinition,
   type FieldType,
   type NodeId,
@@ -48,19 +46,15 @@ const fieldTypes: readonly FieldType[] = [
   'from-supertag',
 ];
 
-const semanticLabels: Record<TanaNodeSemanticType, string> = {
-  content: '内容节点',
+const semanticLabels: Partial<Record<TanaNodeSemanticType, string>> = {
   'field-definition': '字段定义',
-  field: '字段',
-  option: '选项',
   'supertag-definition': '超级标签',
-  value: '字段值',
   view: '视图',
 };
 
 /**
- * The Fields Panel owns only field source, body visibility, and direct field
- * creation. Field Values remain editable where the Node content is rendered.
+ * The Inspector owns semantic configuration, Field source navigation, and
+ * body visibility. Node creation and Field Values stay in the Plate outline.
  */
 export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null }) {
   const editor = useEditorRef();
@@ -80,6 +74,11 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
   const systemFields = descriptors.filter(({ source }) => source === 'system');
   const customFields = descriptors.filter(({ source }) => source === 'custom');
   const isSupertagDefinition = node.semanticTypes.includes('supertag-definition');
+  const semanticBadges = node.semanticTypes.flatMap((semantic) => {
+    const label = semanticLabels[semantic];
+
+    return label ? [{ label, semantic }] : [];
+  });
   const supertagGroups = new Map<NodeId, TanaFieldDescriptor[]>();
 
   descriptors
@@ -104,16 +103,18 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
         <h2 className="truncate font-medium text-[15px] text-[#242a26]">
           {node.text || '未命名节点'}
         </h2>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {node.semanticTypes.map((semantic) => (
+        {semanticBadges.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {semanticBadges.map(({ label, semantic }) => (
             <span
               key={semantic}
               className="rounded-full bg-[#eaf1ed] px-2 py-0.5 text-[#3f6856] text-[10px]"
             >
-              {semanticLabels[semantic]}
+              {semantic === 'supertag-definition' ? `# ${label}` : label}
             </span>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
         <p className="mt-2 truncate font-mono text-[#a0a6a2] text-[9px]" title={node.id}>
           {node.id}
         </p>
@@ -171,11 +172,14 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
             ))}
           </div>
         )}
-        <AddCustomField
-          buttonLabel={isSupertagDefinition ? '添加模板字段' : '添加自定义字段'}
-          nodeId={node.id}
-        />
+        <p className="mt-2 text-[#8b938d] text-[11px]">
+          在正文空节点输入 &gt; 添加字段
+        </p>
       </FieldSection>
+
+      {isSupertagDefinition && (
+        <SupertagInstancesSection supertagId={node.id} />
+      )}
 
       <TanaViewDefinitionEditor
         editor={editor}
@@ -222,18 +226,22 @@ function PresentationFieldRow({
 }) {
   const editor = useEditorRef();
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
+  const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
 
   return (
     <div className="group flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[#f1f5f2]">
-      <span
+      <button
         className={
           descriptor.visible
-            ? 'min-w-0 flex-1 truncate'
-            : 'min-w-0 flex-1 truncate text-[#9aa19d] line-through'
+            ? 'min-w-0 flex-1 truncate text-left hover:text-[#1f6f52]'
+            : 'min-w-0 flex-1 truncate text-left text-[#9aa19d] line-through hover:text-[#68716b]'
         }
+        title="打开字段定义"
+        type="button"
+        onClick={() => descriptor.fieldId && zoom.to(descriptor.fieldId)}
       >
         {descriptor.label}
-      </span>
+      </button>
       <button
         className="opacity-0 text-[#7b827d] text-[11px] transition-opacity hover:text-[#202421] focus:opacity-100 group-hover:opacity-100"
         type="button"
@@ -263,8 +271,6 @@ function FieldDefinitionEditor({
   const editor = useEditorRef();
   const index = useTanaIndex();
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const [optionName, setOptionName] = React.useState('');
-  const candidates = getFieldValueCandidates(index, fieldId);
   const supertags = Array.from(index.nodesById.values()).filter((node) =>
     node.semanticTypes.includes('supertag-definition')
   );
@@ -322,150 +328,48 @@ function FieldDefinitionEditor({
       )}
 
       {definition.type === 'options' && (
-        <div className="mt-4">
-          <div className="mb-2 flex items-center gap-1.5 text-[#59645e] text-[11px]">
-            <HashIcon className="size-3" />
-            选项节点
-          </div>
-          <div className="mb-2 space-y-1">
-            {candidates.length === 0 ? (
-              <p className="text-[#8b938d] text-xs">暂无选项。</p>
-            ) : (
-              candidates.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  className="group/option flex h-7 items-center rounded bg-white px-2 text-xs"
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {candidate.text || '未命名选项'}
-                  </span>
-                  <button
-                    aria-label={`删除选项 ${candidate.text || ''}`}
-                    className="opacity-0 text-[#939a95] hover:text-destructive group-hover/option:opacity-100"
-                    title="删除选项节点"
-                    type="button"
-                    onClick={() => fieldTransforms.removeOption(fieldId, candidate.id)}
-                  >
-                    <Trash2Icon className="size-3" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-          <div className="flex gap-1.5">
-            <Input
-              className="h-8 bg-white text-xs shadow-none"
-              placeholder="新选项"
-              value={optionName}
-              onChange={(event) => setOptionName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || !optionName.trim()) return;
-                event.preventDefault();
-                fieldTransforms.createOption(fieldId, optionName);
-                setOptionName('');
-              }}
-            />
-            <Button
-              aria-label="添加选项"
-              className="size-8 shrink-0 p-0"
-              disabled={!optionName.trim()}
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                fieldTransforms.createOption(fieldId, optionName);
-                setOptionName('');
-              }}
-            >
-              <PlusIcon className="size-3.5" />
-            </Button>
-          </div>
-        </div>
+        <p className="mt-3 text-[#8b938d] text-[11px]">
+          选项由正文中的直接子节点定义，可使用 Enter、拖拽与删除编辑。
+        </p>
       )}
     </FieldSection>
   );
 }
 
-function AddCustomField({
-  buttonLabel,
-  nodeId,
-}: {
-  buttonLabel: string;
-  nodeId: NodeId;
-}) {
+function SupertagInstancesSection({ supertagId }: { supertagId: NodeId }) {
   const editor = useEditorRef();
-  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const [isAdding, setIsAdding] = React.useState(false);
-  const [name, setName] = React.useState('');
-  const [type, setType] = React.useState<FieldType>('plain');
-
-  const createDefinition = (): FieldDefinition => {
-    if (type === 'options') return { type };
-    if (type === 'from-supertag') return { sourceSupertagId: null, type };
-
-    return { type };
-  };
-
-  const addField = () => {
-    const fieldId = fieldTransforms.createDefinition(name, createDefinition());
-
-    if (!fieldId || !fieldTransforms.materialize(nodeId, fieldId)) return;
-
-    setName('');
-    setType('plain');
-    setIsAdding(false);
-  };
-
-  if (!isAdding) {
-    return (
-      <button
-        className="text-[#527664] text-xs hover:text-[#1f6f52]"
-        type="button"
-        onClick={() => setIsAdding(true)}
-      >
-        + {buttonLabel}
-      </button>
-    );
-  }
+  const index = useTanaIndex();
+  const instanceIds = index.nodesBySupertag.get(supertagId) ?? [];
 
   return (
-    <div className="space-y-2 pt-1">
-      <Input
-        autoFocus
-        className="h-8 bg-white text-xs shadow-none"
-        placeholder="字段名称"
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <Select value={type} onValueChange={(value) => setType(value as FieldType)}>
-        <SelectTrigger className="h-8 bg-white text-xs shadow-none">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {fieldTypes.map((fieldType) => (
-            <SelectItem key={fieldType} value={fieldType}>
-              {fieldTypeLabels[fieldType]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <div className="flex items-center gap-2">
-        <Button
-          className="h-7 px-2 text-xs"
-          disabled={!name.trim()}
-          size="sm"
-          type="button"
-          onClick={addField}
-        >
-          添加
-        </Button>
-        <button
-          className="text-[#7b827d] text-xs hover:text-[#202421]"
-          type="button"
-          onClick={() => setIsAdding(false)}
-        >
-          取消
-        </button>
-      </div>
-    </div>
+    <FieldSection title={`实例 · ${instanceIds.length}`}>
+      {instanceIds.length === 0 ? (
+        <p className="text-[#7b827d] text-xs">暂无实例。</p>
+      ) : (
+        <div className="space-y-0.5">
+          {instanceIds.map((instanceId) => {
+            const instance = index.nodesById.get(instanceId);
+
+            if (!instance) return null;
+
+            return (
+              <button
+                key={instance.id}
+                className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+                type="button"
+                onClick={() =>
+                  editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
+                }
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {instance.text || '未命名节点'}
+                </span>
+                <ArrowUpRightIcon className="size-3 shrink-0 text-[#9aa19d] opacity-0 group-hover:opacity-100" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </FieldSection>
   );
 }

@@ -98,9 +98,18 @@ function getFieldValueFromNode(
   }
 
   if (definition.type === 'number') {
-    if (text.trim().length === 0) return;
+    const normalized = text.trim();
 
-    const value = Number(text);
+    if (
+      normalized.length === 0 ||
+      !/^[+-]?(?:(?:\d+(?:\.\d+)?)|(?:\.\d+))(?:[eE][+-]?\d+)?$/.test(
+        normalized
+      )
+    ) {
+      return;
+    }
+
+    const value = Number(normalized);
 
     return Number.isFinite(value) ? { type: 'number', value } : undefined;
   }
