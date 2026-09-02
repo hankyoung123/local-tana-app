@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowUpRightIcon,
   EyeOffIcon,
   HashIcon,
   ListFilterIcon,
@@ -107,6 +108,54 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
     <TanaView index={index} view={node} />
   ) : (
     <OutlineRenderer index={index} {...props} />
+  );
+}
+
+/** A Supertag Definition defaults to its derived instance list, not its outline. */
+function SupertagInstancesRenderer({
+  index,
+  node,
+}: TanaNodeWorkspaceRendererProps) {
+  const editor = useEditorRef();
+
+  if (!node) return <OutlineRenderer focusedNodeId={null} index={index} selectedNodeId={null} />;
+
+  const instanceIds = index.nodesBySupertag.get(node.id) ?? [];
+
+  return (
+    <section className="min-w-0 flex-1 overflow-y-auto bg-white px-8 pt-10 pb-40 sm:px-[max(64px,calc(50%-374px))]">
+      <p className="text-[#7b827d] text-xs">超级标签</p>
+      <h1 className="mt-1 font-semibold text-2xl text-[#242a26]">#{node.text || '未命名超级标签'}</h1>
+      <p className="mt-2 text-[#7b827d] text-sm">实例 · {instanceIds.length}</p>
+
+      {instanceIds.length === 0 ? (
+        <p className="mt-8 text-[#7b827d] text-sm">暂无实例。</p>
+      ) : (
+        <div className="mt-6 space-y-1">
+          {instanceIds.map((instanceId) => {
+            const instance = index.nodesById.get(instanceId);
+
+            if (!instance) return null;
+
+            return (
+              <button
+                key={instance.id}
+                className="group flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-[#f1f5f2]"
+                type="button"
+                onClick={() =>
+                  editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
+                }
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {instance.text || '未命名节点'}
+                </span>
+                <ArrowUpRightIcon className="size-3.5 shrink-0 text-[#9aa19d] opacity-0 transition-opacity group-hover:opacity-100" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -378,7 +427,7 @@ export const NodeRendererRegistry: Record<
   option: { Workspace: OutlineRenderer },
   'supertag-definition': {
     Block: SupertagHint,
-    Workspace: OutlineRenderer,
+    Workspace: SupertagInstancesRenderer,
   },
   value: { Block: ValueRenderer, Workspace: OutlineRenderer },
   view: { Block: ViewHint, Workspace: ViewRenderer },

@@ -47,6 +47,7 @@ import {
   hasTanaNodeDescendants,
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
+  getTanaNodePath,
   getTanaParentPath,
   isTanaFieldHostNode,
   isTanaNodeElement,
@@ -109,42 +110,50 @@ export const BlockDraggable: RenderNodeWrapper = (props) => {
 
   if (!enabled) return;
 
-  return (nodeProps) => <TanaDraggableNode {...nodeProps} tanaPath={path} />;
+  return (nodeProps) => <TanaDraggableNode {...nodeProps} />;
 };
 
-function TanaDraggableNode({
-  tanaPath,
-  ...props
-}: PlateElementProps & { tanaPath: Path }) {
+function TanaDraggableNode(props: PlateElementProps) {
   const openIds = usePluginOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS;
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
-  const { hasChildren, isInteractable } = useEditorSelector(
-    (editor) => ({
-      hasChildren: hasTanaNodeDescendants(editor.children, tanaPath),
-      isInteractable: isTanaNodeInteractable(
-        editor.children,
+  const nodeId =
+    typeof props.element.id === 'string' ? props.element.id : undefined;
+  const nodeState = useEditorSelector(
+    (editor) => {
+      const tanaPath = nodeId
+        ? getTanaNodePath(editor.children, nodeId)
+        : undefined;
+
+      if (!tanaPath) return;
+
+      return {
+        hasChildren: hasTanaNodeDescendants(editor.children, tanaPath),
+        isInteractable: isTanaNodeInteractable(
+          editor.children,
+          tanaPath,
+          openIds,
+          focusedNodeId
+        ),
         tanaPath,
-        openIds,
-        focusedNodeId
-      ),
-    }),
-    [focusedNodeId, openIds, tanaPath]
+      };
+    },
+    [focusedNodeId, nodeId, openIds]
   );
 
-  if (!isInteractable) {
+  if (!nodeState?.isInteractable) {
     return <HiddenTanaNode>{props.children}</HiddenTanaNode>;
   }
 
   return (
     <Draggable
       {...props}
-      hasChildren={hasChildren}
+      hasChildren={nodeState.hasChildren}
       isFocusedNode={
         typeof props.element.id === 'string' && props.element.id === focusedNodeId
       }
       openIds={openIds}
-      tanaPath={tanaPath}
+      tanaPath={nodeState.tanaPath}
     />
   );
 }
@@ -418,11 +427,13 @@ function Draggable({
               />
               {isDraggable && (
                 <Button
+                  aria-label="拖动节点"
                   ref={handleRef}
                   variant="ghost"
                   className="left-4 absolute h-6 w-4 p-0"
                   style={{ top: `${dragButtonTop + 3}px` }}
                   data-plate-prevent-deselect
+                  title="拖动节点"
                 >
                   <DragHandle
                     isDragging={isDragging}
@@ -465,7 +476,19 @@ function Draggable({
         }
       >
         {BlockRenderer && <BlockRenderer element={element} index={index} />}
-        <MemoizedChildren>{children}</MemoizedChildren>
+        {semanticType === 'value' &&
+        element.tanaFieldValueType !== 'plain' &&
+        element.tanaFieldValueType !== 'number' ? (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
+            contentEditable={false}
+          >
+            <MemoizedChildren>{children}</MemoizedChildren>
+          </div>
+        ) : (
+          <MemoizedChildren>{children}</MemoizedChildren>
+        )}
         <DropLine />
       </div>
     </div>
@@ -761,7 +784,6 @@ const DragHandle = React.memo(function DragHandle({
             resetPreview();
           }}
           data-plate-prevent-deselect
-          role="button"
         >
           <GripVertical className="text-muted-foreground" />
         </div>

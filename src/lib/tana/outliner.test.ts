@@ -57,6 +57,84 @@ describe('Tana outliner behavior', () => {
     assert.deepEqual(getTanaNodeDescendantPaths(outliner, [outliner.length]), []);
   });
 
+  test('keeps Zoom interaction tied to a NodeId after preceding insertion', () => {
+    const document: Value = [
+      { children: [{ text: 'Parent' }], id: 'parent', type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+    ];
+
+    const focusedDocument: Value = [
+      document[0],
+      document[1],
+      { children: [{ text: 'Inserted' }], id: 'inserted', indent: 1, type: KEYS.p },
+      document[2],
+    ];
+    const openIds = new Set(['parent']);
+
+    // A wrapper for `sibling` can retain its old [2] path after insertion.
+    assert.equal(isTanaNodeInteractable(focusedDocument, [3], openIds, 'parent'), false);
+    assert.equal(isTanaNodeInteractable(focusedDocument, [2], openIds, 'parent'), true);
+    assert.equal(focusedDocument[3].id, 'sibling');
+  });
+
+  test('keeps a semantic NodeId and its Field subtree with existing content on Enter', () => {
+    let nextId = 0;
+    const editor = createPlateEditor({
+      nodeId: {
+        filter: isTanaNodeElement,
+        idCreator: () => `node-${++nextId}`,
+        initialValueIds: 'always',
+      },
+      plugins: EditorKit,
+      value: [
+        {
+          children: [{ text: 'Project' }],
+          id: 'project',
+          tanaSupertagDefinition: {},
+          type: KEYS.p,
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-status',
+          indent: 1,
+          tanaFieldId: 'status',
+          type: KEYS.p,
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-status-value',
+          indent: 2,
+          tanaFieldValueType: 'options',
+          type: KEYS.p,
+        },
+        { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { type: 'options' },
+          type: KEYS.p,
+        },
+      ],
+    });
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [0, 0] },
+      focus: { offset: 0, path: [0, 0] },
+    });
+    editor.tf.insertBreak();
+
+    assert.notEqual(editor.children[0].id, 'project');
+    assert.equal('tanaSupertagDefinition' in editor.children[0], false);
+    assert.equal(editor.children[1].id, 'project');
+    assert.deepEqual(editor.children[1].tanaSupertagDefinition, {});
+    assert.deepEqual(
+      getTanaZoomRange(editor.children, 'project').map(([index]) => index),
+      [1, 2, 3]
+    );
+    assert.equal(editor.children[4].id, 'sibling');
+  });
+
   test('uses one NodeId predicate for every top-level block type', () => {
     let nextId = 0;
     const normalized = normalizeNodeId(

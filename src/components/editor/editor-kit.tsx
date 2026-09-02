@@ -19,6 +19,7 @@ import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
 import { TanaIntegrityPlugin } from '@/components/editor/plugins/tana-integrity-plugin';
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
@@ -27,6 +28,7 @@ import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 export const EditorKit = [
   // Local Tana semantics: its focusedNodeId lives in the Plate plugin store.
   TanaZoomPlugin,
+  TanaNodeIdentityPlugin,
 
   // Elements
   ...BasicBlocksKit,

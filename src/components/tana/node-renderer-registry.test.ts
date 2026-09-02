@@ -22,8 +22,8 @@ describe('Node renderer registry', () => {
     assert.ok(NodeRendererRegistry.value.Block);
   });
 
-  test('renders a Supertag Definition through the ordinary Outline Node page', () => {
-    assert.equal(
+  test('renders a Supertag Definition through its derived instance page', () => {
+    assert.notEqual(
       NodeRendererRegistry['supertag-definition'].Workspace,
       NodeRendererRegistry.content.Workspace
     );

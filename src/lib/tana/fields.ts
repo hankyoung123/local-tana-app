@@ -3,6 +3,7 @@ import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
 import { getNodeSupertagIds } from './index';
+import { hasNodeSemantic } from './node-semantic';
 import {
   getTanaAncestorPaths,
   getTanaDirectChildPaths,
@@ -447,7 +448,18 @@ export function getNodeFieldDescriptors(
     : undefined;
   const children = getTanaDirectChildPaths(index.document, node.path)
     .map((childPath) => getNodeAtDocumentPath(index, childPath))
-    .filter((child): child is TanaNode => !!child);
+    .filter(
+      (child): child is TanaNode =>
+        !!child &&
+        !hasNodeSemantic(child.node, 'field', {
+          document: index.document,
+          path: child.path,
+        }) &&
+        !hasNodeSemantic(child.node, 'value', {
+          document: index.document,
+          path: child.path,
+        })
+    );
   const supertagIds = getNodeSupertagIds(index, nodeId);
   const supertagLabels = supertagIds
     .map((supertagId) => index.nodesById.get(supertagId))

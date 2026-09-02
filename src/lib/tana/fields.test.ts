@@ -19,6 +19,7 @@ import {
   getFieldValueCandidates,
 } from './fields';
 import { buildTanaIndex } from './index';
+import { isTanaNodeInteractable } from './outliner';
 
 globalThis.requestAnimationFrame ??= () => 0;
 
@@ -41,6 +42,111 @@ function field(editor: ReturnType<typeof createEditor>) {
 }
 
 describe('Field occurrence Nodes', () => {
+  test('keeps Field and Value Nodes structurally atomic while ordinary Nodes use Plate transforms', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'SQLite 在本地持久化文档。' }], id: 'sqlite', type: KEYS.p },
+    ]);
+
+    const occurrenceId = field(editor).materialize('task', 'estimate');
+    assert.ok(occurrenceId);
+    assert.equal(
+      field(editor).setValue('task', 'estimate', { type: 'plain', value: '8' }),
+      true
+    );
+
+    const beforeFieldEditing = structuredClone(editor.children);
+
+    // Field: Enter cannot split it or merge its Value child.
+    editor.tf.select({
+      anchor: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] },
+    });
+    editor.tf.insertBreak();
+    editor.tf.deleteBackward('character');
+    editor.tf.deleteForward('character');
+    assert.deepEqual(editor.children, beforeFieldEditing);
+
+    // Value: Enter cannot create a second Value; edge deletion cannot merge
+    // the Value with its Field or the following ordinary Node.
+    editor.tf.select({
+      anchor: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] },
+    });
+    editor.tf.insertBreak();
+    editor.tf.deleteBackward('character');
+    assert.deepEqual(editor.children, beforeFieldEditing);
+
+    editor.tf.select({
+      anchor: { offset: 1, path: [2, 0] },
+      focus: { offset: 1, path: [2, 0] },
+    });
+    editor.tf.deleteForward('character');
+    assert.deepEqual(editor.children, beforeFieldEditing);
+
+    const fieldIndent = editor.children[1].indent;
+    const valueIndent = editor.children[2].indent;
+    editor.tf.select({
+      anchor: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] },
+    });
+    assert.equal(editor.tf.tab({ reverse: false }), true);
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    editor.tf.select({
+      anchor: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] },
+    });
+    assert.equal(editor.tf.tab({ reverse: false }), true);
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children[1].indent, fieldIndent);
+    assert.equal(editor.children[2].indent, valueIndent);
+
+    // A normal block still receives Plate's unmodified structural behavior.
+    editor.tf.select({
+      anchor: { offset: 0, path: [4, 0] },
+      focus: { offset: 0, path: [4, 0] },
+    });
+    editor.tf.insertBreak();
+    assert.equal(editor.children.length, beforeFieldEditing.length + 1);
+
+    // Editing Field structure cannot make a zoom-external sibling eligible
+    // for interaction. The SQLite node is part of the source document, not
+    // part of Task's Field subtree.
+    assert.equal(
+      isTanaNodeInteractable(editor.children, [5], new Set(), 'task'),
+      false
+    );
+
+    const normalEditor = createEditor([
+      { children: [{ text: 'First' }], id: 'first', type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p },
+    ]);
+    normalEditor.tf.select({
+      anchor: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] },
+    });
+    normalEditor.tf.deleteBackward('character');
+    assert.equal(normalEditor.children.length, 1);
+    assert.equal(normalEditor.children[0].children[0].text, 'FirstSecond');
+
+    const normalTabEditor = createEditor([
+      { children: [{ text: 'First' }], id: 'first', type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p },
+    ]);
+    normalTabEditor.tf.select({
+      anchor: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] },
+    });
+    assert.equal(normalTabEditor.tf.tab({ reverse: false }), true);
+    assert.equal(normalTabEditor.children[1].indent, 1);
+  });
+
   test('materializes a normal Field Node and a typed value child without a parent map', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
@@ -266,6 +372,38 @@ describe('Field occurrence Nodes', () => {
         label: index.nodesById.get(fieldNode.fieldId)?.text,
       }))
     );
+  });
+
+  test('keeps Field and Value Nodes out of the inspector child summary', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'task-status',
+        indent: 1,
+        tanaFieldId: 'status',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'options',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Notes' }], id: 'notes', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'options' },
+        type: KEYS.p,
+      },
+    ]);
+
+    const children = getNodeFieldDescriptors(buildTanaIndex(editor.children), 'task')
+      .find(({ key }) => key === '$system:children');
+
+    assert.equal(children?.systemValue, 'Notes');
   });
 
   test('keeps compatibility a pure type check', () => {

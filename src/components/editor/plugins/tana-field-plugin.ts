@@ -13,6 +13,7 @@ import {
   getSupertagFieldInputParentId,
 } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
+import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
 import {
   getTanaNodeDescendantPaths,
   getTanaDirectChildPaths,
@@ -32,6 +33,51 @@ export const TANA_FIELD_PLUGIN_KEY = 'tanaField' as const;
 export type FieldInputChoice =
   | { fieldId: NodeId }
   | { name: string; type: 'create' };
+
+type FieldStructureEntry = NodeEntry<TanaBlockElement> & {
+  0: TanaBlockElement;
+};
+
+/**
+ * Field occurrences and their Value Nodes remain ordinary Plate blocks, but
+ * they cannot use block transforms that would split or merge that semantic
+ * unit. This is intentionally evaluated from the current Plate document: no
+ * parallel interaction state is needed.
+ */
+function getActiveFieldStructureEntry(editor: PlateEditor): FieldStructureEntry | undefined {
+  const entry = editor.api.block();
+
+  if (
+    !entry ||
+    !ElementApi.isElement(entry[0]) ||
+    !isTanaNodeElement(entry)
+  ) {
+    return;
+  }
+
+  const semanticTypes = getNodeSemanticTypes(entry[0] as TanaBlockElement, {
+    document: editor.children,
+    path: entry[1],
+  });
+
+  return semanticTypes.some((semantic) => semantic === 'field' || semantic === 'value')
+    ? (entry as FieldStructureEntry)
+    : undefined;
+}
+
+function isAtFieldStructureEdge(
+  editor: PlateEditor,
+  entry: FieldStructureEntry,
+  edge: 'start' | 'end'
+): boolean {
+  const selection = editor.selection;
+
+  if (!selection || editor.api.isExpanded()) return false;
+
+  return edge === 'start'
+    ? editor.api.isStart(selection.anchor, entry[1])
+    : editor.api.isEnd(selection.anchor, entry[1]);
+}
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -556,5 +602,36 @@ export const TanaFieldPlugin = createPlatePlugin({
       setValue(editor, nodeId, fieldId, value),
     updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
       updateDefinition(editor, fieldId, definition),
+  },
+})).overrideEditor(({ editor, tf: { deleteBackward, deleteForward, insertBreak, tab } }) => ({
+  transforms: {
+    deleteBackward(unit) {
+      const entry = getActiveFieldStructureEntry(editor);
+
+      if (entry && isAtFieldStructureEdge(editor, entry, 'start')) return;
+
+      return deleteBackward(unit);
+    },
+    deleteForward(unit) {
+      const entry = getActiveFieldStructureEntry(editor);
+
+      if (entry && isAtFieldStructureEdge(editor, entry, 'end')) return;
+
+      return deleteForward(unit);
+    },
+    insertBreak() {
+      // A Field cannot split, and a Value must stay its Field's only direct
+      // Value child. Text editing remains available through insertText.
+      if (getActiveFieldStructureEntry(editor)) return;
+
+      return insertBreak();
+    },
+    tab(options) {
+      // Plate owns Tab/Shift+Tab. Claim the shortcut only for Field structure
+      // so neither a Field nor its Value can move independently.
+      if (getActiveFieldStructureEntry(editor)) return true;
+
+      return tab(options);
+    },
   },
 }));
