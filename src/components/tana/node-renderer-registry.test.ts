@@ -11,16 +11,16 @@ import {
 import { getNodeRenderer, NodeRendererRegistry } from './node-renderer-registry';
 
 describe('Node renderer registry', () => {
-  test('uses one outline renderer by default and only special-cases Node presentations', () => {
+  test('registers every semantic through one presentation entry point', () => {
     TANA_NODE_SEMANTIC_TYPES.forEach((semantic) => {
+      assert.ok(NodeRendererRegistry[semantic]);
       assert.ok(getNodeRenderer(semantic).Workspace);
     });
 
-    assert.equal(NodeRendererRegistry.content, undefined);
-    assert.equal(NodeRendererRegistry['field-definition'], undefined);
-    assert.equal(NodeRendererRegistry.option, undefined);
-    assert.ok(NodeRendererRegistry.field?.Block);
-    assert.ok(NodeRendererRegistry.value?.Block);
+    assert.ok(NodeRendererRegistry['field-definition'].Block);
+    assert.ok(NodeRendererRegistry.option.Block);
+    assert.ok(NodeRendererRegistry.field.Block);
+    assert.ok(NodeRendererRegistry.value.Block);
   });
 
   test('selects the View renderer for a composable Supertag View Node', () => {
@@ -34,7 +34,7 @@ describe('Node renderer registry', () => {
     assert.equal(getNodeSemanticType(node), 'view');
     assert.equal(
       getNodeRenderer(getNodeSemanticType(node)).Workspace,
-      NodeRendererRegistry.view?.Workspace
+      NodeRendererRegistry.view.Workspace
     );
   });
 });

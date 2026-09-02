@@ -329,6 +329,8 @@ function Draggable({
     document: editor.children,
     path: tanaPath,
   });
+  const indent = getNodeIndent(element);
+  const fieldValueOffset = `${Math.max(0, indent - 1) * 24 + 124}px`;
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
@@ -376,7 +378,8 @@ function Draggable({
   return (
     <div
       className={cn(
-        'relative',
+        'tana-node relative',
+        `tana-node--${semanticType}`,
         isDragging && 'opacity-50',
         isFocusedNode && 'tana-focusedNode',
         getPluginByType(editor, element.type)?.node.isContainer
@@ -447,6 +450,14 @@ function Draggable({
           semanticType === 'field' && 'tana-fieldOccurrence',
           semanticType === 'value' && 'tana-fieldValue'
         )}
+        data-tana-semantic={semanticType}
+        style={
+          semanticType === 'value'
+            ? ({
+                '--tana-field-value-offset': fieldValueOffset,
+              } as React.CSSProperties)
+            : undefined
+        }
         onContextMenu={(event) =>
           editor
             .getApi(BlockSelectionPlugin)

@@ -105,3 +105,48 @@
 .tana-nodeFields [data-radix-select-trigger] svg {
   color: #9aa19d;
 }
+
+/*
+ * Field and Value are two real Plate Nodes. Adjacent presentation composes
+ * them into one quiet property row without filtering or reshaping the editor
+ * document.
+ */
+.tana-node--field {
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tana-node--field .slate-gutterLeft {
+  pointer-events: auto;
+}
+
+.tana-node--field + .tana-node--value {
+  z-index: 1;
+  margin-top: -2rem;
+}
+
+.tana-node--field + .tana-node--value .tana-fieldValue {
+  min-height: 2rem;
+}
+
+.tana-fieldValue > [data-slate-node='element'] {
+  margin-left: var(--tana-field-value-offset) !important;
+  min-height: 2rem;
+  padding-top: 0.25rem;
+}
+
+.tana-fieldValue:has(.tana-valueControl) > [data-slate-node='element'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tana-node--field:hover .tana-fieldActions,
+.tana-node--field:has(+ .tana-node--value:hover) .tana-fieldActions,
+.tana-fieldActions:focus-within {
+  opacity: 1;
+}
+
+.tana-node--field:hover .tana-fieldLabel,
+.tana-node--field:has(+ .tana-node--value:hover) .tana-fieldLabel {
+  color: #1f6f52;
+}

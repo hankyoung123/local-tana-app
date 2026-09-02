@@ -96,6 +96,7 @@ describe('Field occurrence Nodes', () => {
     const after = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0];
 
     assert.equal(after.valueNodeId, before.valueNodeId);
+    assert.equal(editor.children.length, 4);
     assert.equal(
       buildTanaIndex(editor.children).fieldValues.get('task')?.has('estimate') ??
         false,

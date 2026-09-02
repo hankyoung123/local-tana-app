@@ -1,5 +1,12 @@
 'use client';
 
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  HashIcon,
+  HomeIcon,
+  ListFilterIcon,
+} from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
@@ -35,11 +42,11 @@ export function TanaSidebar({
       <aside className="flex h-full w-10 shrink-0 justify-center border-r border-[#e6ebe8] bg-[#fafbfa] pt-3">
         <button
           aria-label="展开导航"
-          className="h-7 w-7 text-[#7b827d] text-sm hover:text-[#202421]"
+          className="grid size-7 place-items-center rounded-md text-[#7b827d] hover:bg-[#edf2ef] hover:text-[#202421]"
           type="button"
           onClick={() => onCollapsedChange(false)}
         >
-          ›
+          <ChevronRightIcon className="size-3.5" />
         </button>
       </aside>
     );
@@ -47,14 +54,20 @@ export function TanaSidebar({
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-[#e6ebe8] bg-[#fafbfa]">
-      <div className="flex h-11 items-center justify-between px-4">
-        <span className="font-medium text-[13px]">导航</span>
+      <div className="flex h-12 items-center justify-between px-4">
+        <span className="flex items-center gap-2 font-medium text-[13px]">
+          <span className="grid size-5 place-items-center rounded-md bg-[#35654f] font-semibold text-white text-[10px]">
+            T
+          </span>
+          Local Tana
+        </span>
         <button
-          className="text-[#7b827d] text-xs hover:text-[#202421]"
+          aria-label="收起导航"
+          className="grid size-7 place-items-center rounded-md text-[#7b827d] hover:bg-[#edf2ef] hover:text-[#202421]"
           type="button"
           onClick={() => onCollapsedChange(true)}
         >
-          收起
+          <ChevronLeftIcon className="size-3.5" />
         </button>
       </div>
 
@@ -64,6 +77,7 @@ export function TanaSidebar({
             active={workspaceRootActive}
             onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
           >
+            <HomeIcon className="size-3.5 text-[#6f7d75]" />
             工作区
           </SidebarButton>
         </SidebarSection>
@@ -78,6 +92,7 @@ export function TanaSidebar({
                 active={activeNodeId === node.id}
                 onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
               >
+                <HashIcon className="size-3.5 shrink-0 text-[#4f725f]" />
                 <span className="truncate">#{node.text || '未命名超级标签'}</span>
                 <span className="ml-auto text-[#8b938d] text-[10px] tabular-nums">
                   {index.nodesBySupertag.get(node.id)?.length ?? 0}
@@ -97,6 +112,7 @@ export function TanaSidebar({
                 active={activeNodeId === view.id}
                 onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(view.id)}
               >
+                <ListFilterIcon className="size-3.5 shrink-0 text-[#6f7d75]" />
                 <span className="truncate">{view.text || '未命名视图'}</span>
               </SidebarButton>
             ))

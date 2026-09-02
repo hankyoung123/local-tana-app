@@ -7,8 +7,8 @@ function getIndent(element: TElement): number {
   return typeof element.indent === 'number' ? element.indent : 0;
 }
 
-function isElement(value: Value[number]): value is TElement {
-  return 'children' in value && Array.isArray(value.children);
+function isElement(value: Value[number] | undefined): value is TElement {
+  return !!value && 'children' in value && Array.isArray(value.children);
 }
 
 function getTanaNodeAt(document: Value, path: Path): TElement | undefined {

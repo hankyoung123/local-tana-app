@@ -233,15 +233,19 @@ function writeValue(
 
   // Slate does not accept child-list replacement through setNodes. Reinsert
   // the same ordinary Node object at its path, retaining the stable NodeId.
-  editor.tf.removeNodes({ at: valuePath });
-  editor.tf.insertNodes(
-    {
-      ...valueNode,
-      children: createValueChildren(value),
-      tanaFieldValueType: definition.type,
-    },
-    { at: valuePath }
-  );
+  // Keep both transforms in Plate's normalizing transaction so Integrity does
+  // not observe the intentional, momentary absence of the Value Node.
+  editor.tf.withoutNormalizing(() => {
+    editor.tf.removeNodes({ at: valuePath });
+    editor.tf.insertNodes(
+      {
+        ...valueNode,
+        children: createValueChildren(value),
+        tanaFieldValueType: definition.type,
+      },
+      { at: valuePath }
+    );
+  });
 
   return true;
 }

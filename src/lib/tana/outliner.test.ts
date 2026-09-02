@@ -52,6 +52,11 @@ function resetInvalidTanaZoom(editor: ReturnType<typeof createPlateEditor>) {
 }
 
 describe('Tana outliner behavior', () => {
+  test('treats a transient stale render path as having no descendants', () => {
+    assert.equal(hasTanaNodeDescendants(outliner, [outliner.length]), false);
+    assert.deepEqual(getTanaNodeDescendantPaths(outliner, [outliner.length]), []);
+  });
+
   test('uses one NodeId predicate for every top-level block type', () => {
     let nextId = 0;
     const normalized = normalizeNodeId(

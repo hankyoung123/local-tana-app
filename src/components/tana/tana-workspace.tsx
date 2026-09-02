@@ -2,7 +2,19 @@
 
 import * as React from 'react';
 
-import { useEditorRef, useEditorSelector, usePluginOption } from 'platejs/react';
+import {
+  CommandIcon,
+  CornerDownLeftIcon,
+  PanelRightIcon,
+  SearchIcon,
+  WorkflowIcon,
+} from 'lucide-react';
+import {
+  useEditorRef,
+  useEditorSelector,
+  useHotkeys,
+  usePluginOption,
+} from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Input } from '@/components/ui/input';
@@ -35,11 +47,17 @@ function SearchResult({
 }) {
   return (
     <button
-      className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+      className="group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[#eef3f0]"
       type="button"
       onClick={() => onNavigate(node.id)}
     >
-      {node.text || '未命名节点'}
+      <span className="grid size-5 shrink-0 place-items-center rounded bg-[#e6eee9] text-[#4f725f] text-[10px]">
+        {node.semanticType === 'supertag-definition' ? '#' : '•'}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{node.text || '未命名节点'}</span>
+      <span className="opacity-0 text-[#8f9792] group-hover:opacity-100">
+        <CornerDownLeftIcon className="size-3" />
+      </span>
     </button>
   );
 }
@@ -66,6 +84,7 @@ function TanaWorkspaceContent({
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [fieldPanelOpen, setFieldPanelOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [paletteMode, setPaletteMode] = React.useState<'command' | 'search'>('search');
   const [search, setSearch] = React.useState('');
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
@@ -128,8 +147,33 @@ function TanaWorkspaceContent({
     setSearchOpen(false);
   };
 
+  const openPalette = React.useCallback((mode: 'command' | 'search') => {
+    setPaletteMode(mode);
+    setSearch('');
+    setSearchOpen(true);
+  }, []);
+
+  const hotkeyRef = useHotkeys<HTMLDivElement>(
+    ['mod+k', 'mod+p'],
+    (event) => {
+      openPalette(event.key.toLowerCase() === 'k' ? 'command' : 'search');
+    },
+    {
+      enableOnContentEditable: true,
+      enableOnFormTags: true,
+      preventDefault: true,
+    },
+    [openPalette]
+  );
+
+  const commandMatches = (label: string) =>
+    !search.trim() || label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
+
   return (
-    <div className="flex h-dvh min-w-0 bg-[#f7f9f8] text-[#202421]">
+    <div
+      ref={hotkeyRef}
+      className="flex h-dvh min-w-0 bg-[#f6f8f6] text-[#202421]"
+    >
       <TanaOutlinerOpenState />
       <TanaSidebar
         activeNodeId={activeNodeId}
@@ -140,7 +184,7 @@ function TanaWorkspaceContent({
       />
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="relative flex h-11 shrink-0 items-center border-b border-[#e6ebe8] bg-white px-5">
+        <div className="relative flex h-12 shrink-0 items-center border-b border-[#e6ebe8] bg-white/95 px-5">
           <nav
             aria-label="路径导航"
             className="flex min-w-0 flex-1 items-center gap-1 text-[#7b827d] text-xs"
@@ -192,33 +236,44 @@ function TanaWorkspaceContent({
               <span className="text-[#8b938d]">浏览器预览</span>
             )}
             <button
-              className="text-[#527664] hover:text-[#1f6f52]"
+              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[#527664] hover:bg-[#f1f5f2] hover:text-[#1f6f52]"
               type="button"
-              onClick={() => setSearchOpen((open) => !open)}
+              onClick={() => openPalette('search')}
             >
+              <SearchIcon className="size-3.5" />
               搜索
+              <kbd className="ml-1 text-[#a1a8a3] text-[10px]">⌘P</kbd>
             </button>
             <button
               aria-pressed={fieldPanelOpen}
-              className={
+              className={`flex h-7 items-center gap-1.5 rounded-md px-2 hover:bg-[#f1f5f2] ${
                 fieldPanelOpen
-                  ? 'font-medium text-[#1f6f52]'
+                  ? 'bg-[#eaf1ed] font-medium text-[#1f6f52]'
                   : 'text-[#527664] hover:text-[#1f6f52]'
-              }
+              }`}
               type="button"
               onClick={() => setFieldPanelOpen((open) => !open)}
             >
-              字段
+              <PanelRightIcon className="size-3.5" />
+              检查器
             </button>
           </div>
 
           {searchOpen && (
-            <div className="absolute top-10 right-4 z-50 w-80 border border-[#e1e7e3] bg-white p-2 shadow-sm">
+            <div className="absolute top-12 right-4 z-50 w-[22rem] overflow-hidden rounded-xl border border-[#dfe6e1] bg-white p-2 shadow-[0_18px_50px_rgb(28_48_38/0.16)]">
+              <div className="mb-1 flex items-center gap-2 px-2 text-[#87908a] text-[10px] uppercase tracking-[0.1em]">
+                {paletteMode === 'command' ? (
+                  <CommandIcon className="size-3" />
+                ) : (
+                  <SearchIcon className="size-3" />
+                )}
+                {paletteMode === 'command' ? '命令' : '全局搜索'}
+              </div>
               <Input
                 autoFocus
-                aria-label="搜索所有节点"
-                className="h-8 border-0 bg-[#f6f8f7] text-xs shadow-none focus-visible:ring-1"
-                placeholder="搜索所有节点"
+                aria-label={paletteMode === 'command' ? '搜索命令或节点' : '搜索所有节点'}
+                className="h-9 border-0 bg-[#f5f7f5] text-sm shadow-none focus-visible:ring-1"
+                placeholder={paletteMode === 'command' ? '输入命令或节点名称' : '搜索所有节点'}
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={(event) => {
@@ -228,9 +283,43 @@ function TanaWorkspaceContent({
                   }
                 }}
               />
-              {search.trim() && (
-                <div className="mt-2 max-h-72 overflow-y-auto">
-                  {searchResults.length === 0 ? (
+              <div className="mt-2 max-h-80 overflow-y-auto">
+                {paletteMode === 'command' && (
+                  <div className="mb-2">
+                    <p className="px-2.5 py-1 text-[#9aa19d] text-[10px] uppercase tracking-[0.08em]">
+                      工作区操作
+                    </p>
+                    {commandMatches('返回工作区') && (
+                      <PaletteCommand
+                        icon={<WorkflowIcon />}
+                        label="返回工作区"
+                        onClick={() => {
+                          editor.getTransforms(TanaZoomPlugin).zoom.root();
+                          setSearchOpen(false);
+                        }}
+                      />
+                    )}
+                    {commandMatches(fieldPanelOpen ? '关闭检查器' : '打开检查器') && (
+                      <PaletteCommand
+                        icon={<PanelRightIcon />}
+                        label={fieldPanelOpen ? '关闭检查器' : '打开检查器'}
+                        onClick={() => {
+                          setFieldPanelOpen((open) => !open);
+                          setSearchOpen(false);
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {search.trim() && (
+                  <div>
+                    {paletteMode === 'command' && (
+                      <p className="px-2.5 py-1 text-[#9aa19d] text-[10px] uppercase tracking-[0.08em]">
+                        节点
+                      </p>
+                    )}
+                    {searchResults.length === 0 ? (
                     <p className="px-2 py-2 text-[#7b827d] text-xs">没有匹配的节点</p>
                   ) : (
                     searchResults.map((node) =>
@@ -241,8 +330,13 @@ function TanaWorkspaceContent({
                       />
                     )
                   )}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
+              <div className="mt-1 flex items-center justify-between border-t border-[#eef1ef] px-2 pt-2 text-[#9aa19d] text-[10px]">
+                <span>Enter 打开</span>
+                <span>Esc 关闭</span>
+              </div>
             </div>
           )}
         </div>
@@ -256,5 +350,26 @@ function TanaWorkspaceContent({
         </div>
       </main>
     </div>
+  );
+}
+
+function PaletteCommand({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[#eef3f0] [&_svg]:size-3.5 [&_svg]:text-[#66806f]"
+      type="button"
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
