@@ -93,6 +93,10 @@ describe('buildTanaIndex', () => {
       id: field.id,
       valueNodeId: field.valueNodeId,
     })), [{ fieldId: 'status', id: 'task-status', valueNodeId: 'task-status-value' }]);
+    assert.equal(index.nodesById.get('status')?.semanticType, 'field-definition');
+    assert.equal(index.nodesById.get('active')?.semanticType, 'option');
+    assert.equal(index.nodesById.get('task-status')?.semanticType, 'field');
+    assert.equal(index.nodesById.get('task-status-value')?.semanticType, 'value');
   });
 
   test('keeps an invalid reference-shaped value as an unset Field', () => {

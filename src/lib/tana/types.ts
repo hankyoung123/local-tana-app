@@ -1,5 +1,7 @@
 import type { Path, TElement, Value } from 'platejs';
 
+import type { TanaNodeSemanticType } from './node-semantic';
+
 export type NodeId = string;
 export type FieldId = NodeId;
 
@@ -65,6 +67,10 @@ export type TanaNode = {
   text: string;
   fieldDefinition?: FieldDefinition;
   presentation?: TanaPresentation;
+  /** Derived runtime classification; it is never persisted on the Plate Node. */
+  semanticType: TanaNodeSemanticType;
+  /** Preserves composable semantics such as Field Definition + View. */
+  semanticTypes: readonly TanaNodeSemanticType[];
   supertagDefinition?: SupertagDefinition;
   viewDefinition?: TanaViewDefinition;
 };

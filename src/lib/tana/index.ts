@@ -3,6 +3,11 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 import { ElementApi, KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
+import {
+  getNodeSemanticType,
+  getNodeSemanticTypes,
+  hasNodeSemantic,
+} from './node-semantic';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import type {
   FieldId,
@@ -165,12 +170,15 @@ export function buildTanaIndex(document: Value): TanaIndex {
     if (typeof descendant.id !== 'string' || descendant.id.length === 0) return;
 
     const tanaNode = descendant as TanaBlockElement;
+    const semanticContext = { document, path };
     const node: TanaNode = {
       fieldDefinition: tanaNode.tanaFieldDefinition,
       id: descendant.id,
       node: descendant,
       path,
       presentation: tanaNode.tanaPresentation,
+      semanticType: getNodeSemanticType(tanaNode, semanticContext),
+      semanticTypes: getNodeSemanticTypes(tanaNode, semanticContext),
       supertagDefinition: tanaNode.tanaSupertagDefinition,
       text: '',
       viewDefinition: tanaNode.tanaViewDefinition,
@@ -276,6 +284,10 @@ export function buildTanaIndex(document: Value): TanaIndex {
   });
 
   resolvedNodes.forEach((node) => {
+    if (!hasNodeSemantic(node.node, 'field', { document, path: node.path })) {
+      return;
+    }
+
     const fieldId = (node.node as TanaBlockElement).tanaFieldId;
     const parentPath = getTanaParentPath(document, node.path);
     const parentNodeId = parentPath
@@ -284,16 +296,23 @@ export function buildTanaIndex(document: Value): TanaIndex {
 
     if (!fieldId || !parentNodeId) return;
 
-    const definition = nodesById.get(fieldId)?.fieldDefinition;
+    const definitionNode = nodesById.get(fieldId);
+    const definition =
+      definitionNode && hasNodeSemantic(definitionNode.node, 'field-definition', {
+        document,
+        path: definitionNode.path,
+      })
+        ? definitionNode.fieldDefinition
+        : undefined;
     const valuePath = getTanaDirectChildPaths(document, node.path).find(
       (childPath) => {
         const childId = nodeIdsByDocumentIndex.get(childPath[0]);
         const child = childId ? nodesById.get(childId) : undefined;
 
-        return (
-          !!child &&
-          (child.node as TanaBlockElement).tanaFieldValueType !== undefined
-        );
+        return !!child && hasNodeSemantic(child.node, 'value', {
+          document,
+          path: child.path,
+        });
       }
     );
     const valueNode = valuePath
@@ -360,7 +379,7 @@ export function getSupertagCandidatesFromIndex(
   return Array.from(index.nodesById.values())
     .filter(
       (node): node is TanaNode & { supertagDefinition: SupertagDefinition } =>
-        !!node.supertagDefinition && node.text.length > 0
+        node.semanticTypes.includes('supertag-definition') && node.text.length > 0
     )
     .map(({ id, supertagDefinition: definition, text }) => ({
       definition,

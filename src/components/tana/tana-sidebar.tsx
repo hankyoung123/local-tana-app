@@ -24,10 +24,10 @@ export function TanaSidebar({
 }: TanaSidebarProps) {
   const editor = useEditorRef();
   const supertags = Array.from(index.nodesById.values()).filter(
-    ({ supertagDefinition }) => !!supertagDefinition
+    ({ semanticTypes }) => semanticTypes.includes('supertag-definition')
   );
   const views = Array.from(index.nodesById.values()).filter(
-    ({ viewDefinition }) => !!viewDefinition
+    ({ semanticTypes }) => semanticTypes.includes('view')
   );
 
   if (collapsed) {

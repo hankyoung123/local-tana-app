@@ -12,7 +12,13 @@ import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
 import { CircleIcon, ChevronRight, GripVertical } from 'lucide-react';
-import { ElementApi, type Path, type TElement, getPluginByType } from 'platejs';
+import {
+  ElementApi,
+  type NodeEntry,
+  type Path,
+  type TElement,
+  getPluginByType,
+} from 'platejs';
 import {
   type PlateEditor,
   type PlateElementProps,
@@ -27,6 +33,7 @@ import { useSelected } from 'platejs/react';
 
 import { Button } from '@/components/ui/button';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { getNodeRenderer } from '@/components/tana/node-renderer-registry';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
   Tooltip,
@@ -35,6 +42,8 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
+  canDrag as canDragByNodeBehavior,
+  canDrop as canDropByNodeBehavior,
   hasTanaNodeDescendants,
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
@@ -42,36 +51,31 @@ import {
   isTanaNodeElement,
   isTanaNodeHidden,
   isTanaNodeInteractable,
+  getNodeSemanticType,
+  hasNodeSemantic,
 } from '@/lib/tana';
 
 const EMPTY_OPEN_IDS = new Set<string>();
 
-function getTanaSemanticBlock(editor: PlateEditor, path: Path) {
+function hasSemantic(
+  editor: PlateEditor,
+  path: Path,
+  semantic: 'field' | 'field-definition' | 'value'
+) {
   const entry = editor.api.node(path);
 
-  return entry && ElementApi.isElement(entry[0])
-    ? (entry[0] as TElement & {
-        tanaFieldDefinition?: unknown;
-        tanaFieldId?: unknown;
-        tanaFieldValueType?: unknown;
-      })
-    : undefined;
-}
-
-function isFieldOccurrence(node: ReturnType<typeof getTanaSemanticBlock>) {
-  return typeof node?.tanaFieldId === 'string';
-}
-
-function isFieldValueNode(node: ReturnType<typeof getTanaSemanticBlock>) {
-  return typeof node?.tanaFieldValueType === 'string';
-}
-
-function isFieldHost(node: ReturnType<typeof getTanaSemanticBlock>) {
   return (
-    !!node &&
-    !isFieldOccurrence(node) &&
-    !isFieldValueNode(node) &&
-    node.tanaFieldDefinition === undefined
+    !!entry &&
+    ElementApi.isElement(entry[0]) &&
+    hasNodeSemantic(entry[0], semantic, { document: editor.children, path })
+  );
+}
+
+function isFieldHost(editor: PlateEditor, path: Path) {
+  return (
+    !hasSemantic(editor, path, 'field') &&
+    !hasSemantic(editor, path, 'value') &&
+    !hasSemantic(editor, path, 'field-definition')
   );
 }
 
@@ -79,9 +83,12 @@ function isWithinFieldStructure(editor: PlateEditor, path: Path): boolean {
   let currentPath: Path | undefined = path;
 
   while (currentPath) {
-    const node = getTanaSemanticBlock(editor, currentPath);
-
-    if (isFieldOccurrence(node) || isFieldValueNode(node)) return true;
+    if (
+      hasSemantic(editor, currentPath, 'field') ||
+      hasSemantic(editor, currentPath, 'value')
+    ) {
+      return true;
+    }
 
     currentPath = getTanaParentPath(editor.children, currentPath);
   }
@@ -91,6 +98,42 @@ function isWithinFieldStructure(editor: PlateEditor, path: Path): boolean {
 
 function getNodeIndent(node: TElement): number {
   return typeof node.indent === 'number' ? node.indent : 0;
+}
+
+/**
+ * Plate already expands list children for a multi-block drag. A Field uses the
+ * same flat indent hierarchy, so its Value Node must join that exact drag set.
+ */
+function expandFieldSubtreesForDrag(
+  editor: PlateEditor,
+  entries: NodeEntry<TElement>[]
+): NodeEntry<TElement>[] {
+  const entriesById = new Map<string, NodeEntry<TElement>>();
+  const add = (entry: NodeEntry<TElement>) => {
+    const id = entry[0].id;
+
+    if (typeof id === 'string') entriesById.set(id, entry);
+  };
+
+  expandListItemsWithChildren(editor, entries).forEach(add);
+
+  for (const [node, path] of Array.from(entriesById.values())) {
+    if (!hasNodeSemantic(node, 'field', { document: editor.children, path })) {
+      continue;
+    }
+
+    getTanaNodeDescendantPaths(editor.children, path).forEach((descendantPath) => {
+      const descendant = editor.api.node(descendantPath);
+
+      if (descendant && ElementApi.isElement(descendant[0])) {
+        add(descendant as NodeEntry<TElement>);
+      }
+    });
+  }
+
+  return Array.from(entriesById.values()).sort(([, left], [, right]) =>
+    left[0] - right[0]
+  );
 }
 
 export const BlockDraggable: RenderNodeWrapper = (props) => {
@@ -176,6 +219,18 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   if (!isInteractable(dropEntry[1])) return false;
   if (dragEntry && !isInteractable(dragEntry[1])) return false;
 
+  if (
+    dragEntry &&
+    !canDropByNodeBehavior(
+      dragEntry[0] as TElement,
+      dropEntry[0] as TElement,
+      { document: editor.children, path: dragEntry[1] },
+      { document: editor.children, path: dropEntry[1] }
+    )
+  ) {
+    return false;
+  }
+
   if (!('id' in dragItem)) return true;
 
   const dragIds = Array.isArray(dragItem.id) ? dragItem.id : [dragItem.id];
@@ -189,11 +244,7 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
     return false;
   }
 
-  const dropNode = getTanaSemanticBlock(editor, dropEntry[1]);
   const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
-  const dropParent = dropParentPath
-    ? getTanaSemanticBlock(editor, dropParentPath)
-    : undefined;
 
   // No ordinary Node may enter a Field occurrence or typed value subtree.
   // Field semantics are structural, not a post-drop Integrity repair task.
@@ -202,8 +253,11 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   // A typed value cannot be moved independently from the one Field occurrence
   // that owns it. The normal Plate multi-block drag retains the Field subtree.
   const fieldNodeIds = new Set(
-    dragged.flatMap(([node]) =>
-      isFieldOccurrence(node as TElement) && typeof node.id === 'string'
+    dragged.flatMap(([node, path]) =>
+      hasNodeSemantic(node as TElement, 'field', {
+        document: editor.children,
+        path,
+      }) && typeof node.id === 'string'
         ? [node.id]
         : []
     )
@@ -211,14 +265,24 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 
   if (
     dragged.some(([node, path]) => {
-      const semanticNode = node as TElement & { tanaFieldValueType?: unknown };
-
-      if (typeof semanticNode.tanaFieldValueType !== 'string') return false;
+      if (
+        !hasNodeSemantic(node as TElement, 'value', {
+          document: editor.children,
+          path,
+        })
+      ) {
+        return false;
+      }
 
       const ownerPath = getTanaParentPath(editor.children, path);
-      const owner = ownerPath ? getTanaSemanticBlock(editor, ownerPath) : undefined;
+      const owner = ownerPath ? editor.api.node(ownerPath)?.[0] : undefined;
 
-      return typeof owner?.id !== 'string' || !fieldNodeIds.has(owner.id);
+      return (
+        !owner ||
+        !ElementApi.isElement(owner) ||
+        typeof owner.id !== 'string' ||
+        !fieldNodeIds.has(owner.id)
+      );
     })
   ) {
     return false;
@@ -234,8 +298,8 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   // that ordinary host for either placement direction.
   if (
     !dropParentPath ||
-    !isFieldHost(dropParent) ||
-    !isFieldHost(dropNode) ||
+    !isFieldHost(editor, dropParentPath) ||
+    !isFieldHost(editor, dropEntry[1]) ||
     hasTanaNodeDescendants(editor.children, dropEntry[1]) ||
     !getTanaDirectChildPaths(editor.children, dropParentPath).some(
       (path) => path[0] === dropEntry[1][0]
@@ -245,35 +309,39 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   }
 
   return dragged.every(([node, path]) => {
-    const semanticNode = node as TElement & {
-      tanaFieldId?: unknown;
-      tanaFieldValueType?: unknown;
-    };
+    if (
+      hasNodeSemantic(node as TElement, 'value', {
+        document: editor.children,
+        path,
+      })
+    ) {
+      return true;
+    }
 
     if (
-      typeof semanticNode.tanaFieldId !== 'string' &&
-      typeof semanticNode.tanaFieldValueType !== 'string'
+      !hasNodeSemantic(node as TElement, 'field', {
+        document: editor.children,
+        path,
+      })
     ) {
       return false;
     }
 
-    if (typeof semanticNode.tanaFieldValueType === 'string') return true;
-
     const sourceParentPath = getTanaParentPath(editor.children, path);
-    const sourceParent = sourceParentPath
-      ? getTanaSemanticBlock(editor, sourceParentPath)
-      : undefined;
     const subtreeIds = getTanaNodeDescendantPaths(editor.children, path).flatMap(
       (descendantPath) => {
-        const descendant = getTanaSemanticBlock(editor, descendantPath);
+        const descendant = editor.api.node(descendantPath)?.[0];
 
-        return typeof descendant?.id === 'string' ? [descendant.id] : [];
+        return ElementApi.isElement(descendant) && typeof descendant.id === 'string'
+          ? [descendant.id]
+          : [];
       }
     );
 
     return (
-      isFieldHost(sourceParent) &&
-      getNodeIndent(node as TElement) === getNodeIndent(dropNode!) &&
+      !!sourceParentPath &&
+      isFieldHost(editor, sourceParentPath) &&
+      getNodeIndent(node as TElement) === getNodeIndent(dropEntry[0] as TElement) &&
       subtreeIds.every((id) => dragIds.includes(id))
     );
   });
@@ -292,11 +360,24 @@ function Draggable({
   tanaPath: Path;
 }) {
   const { children, editor, element } = props;
+  const semanticType = getNodeSemanticType(element, {
+    document: editor.children,
+    path: tanaPath,
+  });
+  const BlockRenderer = getNodeRenderer(semanticType).Block;
+  const index = useTanaIndex();
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
+  const isDraggable = canDragByNodeBehavior(element, {
+    document: editor.children,
+    path: tanaPath,
+  });
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
       canDropNode: canDropOnInteractableTanaNode,
+      // Keep Plate's default drag lifecycle for valid Nodes. Only Value Nodes
+      // override it, so their source is blocked even without a rendered handle.
+      drag: isDraggable ? undefined : { canDrag: () => false },
       element,
       onDropHandler: (_, { dragItem }) => {
         const id = (dragItem as { id: string[] | string }).id;
@@ -374,20 +455,22 @@ function Draggable({
                 nodeId={element.id}
                 style={{ top: `${dragButtonTop + 3}px` }}
               />
-              <Button
-                ref={handleRef}
-                variant="ghost"
-                className="left-4 absolute h-6 w-4 p-0"
-                style={{ top: `${dragButtonTop + 3}px` }}
-                data-plate-prevent-deselect
-              >
-                <DragHandle
-                  isDragging={isDragging}
-                  previewRef={previewRef}
-                  resetPreview={resetPreview}
-                  setPreviewTop={setPreviewTop}
-                />
-              </Button>
+              {isDraggable && (
+                <Button
+                  ref={handleRef}
+                  variant="ghost"
+                  className="left-4 absolute h-6 w-4 p-0"
+                  style={{ top: `${dragButtonTop + 3}px` }}
+                  data-plate-prevent-deselect
+                >
+                  <DragHandle
+                    isDragging={isDragging}
+                    previewRef={previewRef}
+                    resetPreview={resetPreview}
+                    setPreviewTop={setPreviewTop}
+                  />
+                </Button>
+              )}
             </div>
           </div>
       </Gutter>
@@ -403,11 +486,8 @@ function Draggable({
         ref={nodeRef}
         className={cn(
           'slate-blockWrapper relative flow-root',
-          typeof (element as TElement & { tanaFieldId?: unknown }).tanaFieldId ===
-            'string' && 'tana-fieldOccurrence',
-          typeof (
-            element as TElement & { tanaFieldValueType?: unknown }
-          ).tanaFieldValueType === 'string' && 'tana-fieldValue'
+          semanticType === 'field' && 'tana-fieldOccurrence',
+          semanticType === 'value' && 'tana-fieldValue'
         )}
         onContextMenu={(event) =>
           editor
@@ -415,54 +495,11 @@ function Draggable({
             .blockSelection.addOnContextMenu({ element, event })
         }
       >
-        <TanaFieldNodeLabel fieldId={(element as TElement & { tanaFieldId?: unknown }).tanaFieldId} />
-        <TanaFieldValuePlaceholder nodeId={element.id} />
+        {BlockRenderer && <BlockRenderer element={element} index={index} />}
         <MemoizedChildren>{children}</MemoizedChildren>
         <DropLine />
       </div>
     </div>
-  );
-}
-
-/** Field occurrence labels are derived from the Field Definition Node. */
-function TanaFieldNodeLabel({ fieldId }: { fieldId: unknown }) {
-  const index = useTanaIndex();
-
-  if (typeof fieldId !== 'string') return null;
-
-  const field = index.nodesById.get(fieldId);
-
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute top-0 left-0 z-10 max-w-[45%] truncate pt-0.5 text-[#527664] text-sm"
-      contentEditable={false}
-    >
-      {field?.text || '未命名字段'}
-    </span>
-  );
-}
-
-/** Empty value Nodes remain editable Plate Nodes while showing their state. */
-function TanaFieldValuePlaceholder({ nodeId }: { nodeId: unknown }) {
-  const index = useTanaIndex();
-
-  if (typeof nodeId !== 'string') return null;
-
-  const fieldNode = Array.from(index.fieldNodesById.values()).find(
-    (candidate) => candidate.valueNodeId === nodeId
-  );
-
-  if (!fieldNode || fieldNode.value) return null;
-
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute top-0 left-0 z-10 pt-0.5 text-[#9aa19d] text-sm"
-      contentEditable={false}
-    >
-      未设置
-    </span>
   );
 }
 
@@ -686,11 +723,9 @@ const DragHandle = React.memo(function DragHandle({
               selectionNodes = [[element, editor.api.findPath(element)!]];
             }
 
-            // Process selection nodes to include list children
-            const blocks = expandListItemsWithChildren(
-              editor,
-              selectionNodes
-            ).map(([node]) => node);
+            const blocks = expandFieldSubtreesForDrag(editor, selectionNodes).map(
+              ([node]) => node
+            );
 
             if (blockSelection.length === 0) {
               editor.tf.blur();
@@ -736,8 +771,7 @@ const DragHandle = React.memo(function DragHandle({
               selectedBlocks = [[element, editor.api.findPath(element)!]];
             }
 
-            // Process selection to include list children
-            const processedBlocks = expandListItemsWithChildren(
+            const processedBlocks = expandFieldSubtreesForDrag(
               editor,
               selectedBlocks
             );

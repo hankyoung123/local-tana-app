@@ -1,16 +1,19 @@
-import { ElementApi, KEYS } from 'platejs';
-import type { Path, TElement } from 'platejs';
+import { ElementApi } from 'platejs';
+import type { Path, TElement, Value } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
-import {
-  isTanaNodeElement,
-  TANA_SUPERTAG_KEY,
-} from '@/lib/tana/constants';
+import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
   getTanaParentPath,
 } from '@/lib/tana/outliner';
+import {
+  getNodeSemanticType,
+  getNodeSemanticTypes,
+  hasNodeSemantic,
+  type TanaNodeSemanticType,
+} from '@/lib/tana/node-semantic';
 import type {
   FieldValue,
   NodeId,
@@ -43,8 +46,31 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * Options intentionally have no duplicated NodeId relation here: their
  * candidates and order are direct Field Definition child Nodes.
  */
-type TanaNodeEntry = [TanaBlockElement, Path];
+export type TanaNodeEntry = [TanaBlockElement, Path];
 type RelationElement = TElement & { key?: unknown };
+
+export type TanaNodeIntegrityIssue =
+  | 'duplicate-value-child'
+  | 'field-definition-field-conflict'
+  | 'invalid-field-host'
+  | 'invalid-supertag-definition'
+  | 'invalid-value-owner'
+  | 'missing-field-definition'
+  | 'missing-value-child'
+  | 'missing-from-supertag-source'
+  | 'invalid-view-query';
+
+type TanaNodeIntegrityContext = {
+  document: Value;
+  entries: readonly TanaNodeEntry[];
+  fieldDefinitions: ReadonlyMap<
+    NodeId,
+    NonNullable<TanaBlockElement['tanaFieldDefinition']>
+  >;
+  fieldDefinitionIds: ReadonlySet<NodeId>;
+  nodeIds: ReadonlySet<NodeId>;
+  supertagDefinitionIds: ReadonlySet<NodeId>;
+};
 
 function getTanaNodeEntries(editor: PlateEditor): TanaNodeEntry[] {
   return editor.children.flatMap((node, index) => {
@@ -72,7 +98,7 @@ function findDanglingInlineRelation(
     const targetNodeId = (node as RelationElement).key;
 
     if (
-      (node.type === KEYS.mention || node.type === TANA_SUPERTAG_KEY) &&
+      getNodeSemanticType(node) === 'reference' &&
       typeof targetNodeId === 'string' &&
       !nodeIds.has(targetNodeId)
     ) {
@@ -150,29 +176,52 @@ function pruneHiddenFieldNodeIds(
 
 function isTanaQueryClauseValid(
   clause: TanaQueryClause,
-  nodeIds: ReadonlySet<NodeId>
+  context: Pick<
+    TanaNodeIntegrityContext,
+    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
+  >
 ): boolean {
   switch (clause.kind) {
     case 'field-defined':
     case 'field-exists':
-      return nodeIds.has(clause.fieldId);
+      return context.fieldDefinitionIds.has(clause.fieldId);
     case 'field-equals':
       return (
-        nodeIds.has(clause.fieldId) &&
+        context.fieldDefinitionIds.has(clause.fieldId) &&
         (!isReferenceLikeFieldValue(clause.value) ||
-          nodeIds.has(clause.value.value))
+          context.nodeIds.has(clause.value.value))
       );
     case 'has-supertag':
-      return nodeIds.has(clause.supertagId);
+      return context.supertagDefinitionIds.has(clause.supertagId);
     case 'text-contains':
       return true;
   }
 }
 
-function getFieldDefinitions(entries: readonly TanaNodeEntry[]) {
+function getSemanticNodeIds(
+  entries: readonly TanaNodeEntry[],
+  document: Value,
+  semantic: 'field-definition' | 'supertag-definition'
+): ReadonlySet<NodeId> {
+  return new Set(
+    entries.flatMap(([node, path]) =>
+      typeof node.id === 'string' &&
+      hasNodeSemantic(node, semantic, { document, path })
+        ? [node.id]
+        : []
+    )
+  );
+}
+
+function getFieldDefinitions(
+  entries: readonly TanaNodeEntry[],
+  document: Value
+) {
   return new Map(
-    entries.flatMap(([node]) =>
-      typeof node.id === 'string' && node.tanaFieldDefinition
+    entries.flatMap(([node, path]) =>
+      typeof node.id === 'string' &&
+      hasNodeSemantic(node, 'field-definition', { document, path }) &&
+      node.tanaFieldDefinition
         ? [[node.id, node.tanaFieldDefinition] as const]
         : []
     )
@@ -195,68 +244,147 @@ function isFieldHost(node: TanaBlockElement | undefined) {
   );
 }
 
-function normalizeFieldValueNodes(
-  editor: PlateEditor,
-  entries: readonly TanaNodeEntry[],
-  fieldDefinitions: ReadonlyMap<NodeId, NonNullable<TanaBlockElement['tanaFieldDefinition']>>
-) {
-  for (const [node, path] of entries) {
-    if (!node.tanaFieldValueType) continue;
+type TanaNodeIntegrityValidator = (
+  node: TanaBlockElement,
+  path: Path,
+  context: TanaNodeIntegrityContext
+) => TanaNodeIntegrityIssue | undefined;
 
-    const parentPath = getTanaParentPath(editor.children, path);
-    const parent = parentPath ? getEntryAtPath(entries, parentPath) : undefined;
+const NodeIntegrityValidators: Partial<
+  Record<TanaNodeSemanticType, TanaNodeIntegrityValidator>
+> = {
+  'field-definition': (node, path, context) => {
+    if (
+      node.tanaFieldDefinition?.type === 'from-supertag' &&
+      node.tanaFieldDefinition.sourceSupertagId !== null &&
+      !context.nodeIds.has(node.tanaFieldDefinition.sourceSupertagId)
+    ) {
+      return 'missing-from-supertag-source';
+    }
+  },
+  'supertag-definition': (node) => {
+    const definition = node.tanaSupertagDefinition;
+
+    return typeof definition !== 'object' || definition === null || Array.isArray(definition)
+      ? 'invalid-supertag-definition'
+      : undefined;
+  },
+  field: (node, path, context) => {
+    if (node.tanaFieldDefinition) return 'field-definition-field-conflict';
+
+    const fieldId = node.tanaFieldId;
+    const definition = fieldId ? context.fieldDefinitions.get(fieldId) : undefined;
+
+    if (!definition) return 'missing-field-definition';
+
+    const parentPath = getTanaParentPath(context.document, path);
+    const parent = parentPath ? getEntryAtPath(context.entries, parentPath) : undefined;
+
+    if (!isFieldHost(parent)) return 'invalid-field-host';
+
+    const valuePaths = getTanaDirectChildPaths(context.document, path).filter(
+      (childPath) => {
+        const child = getEntryAtPath(context.entries, childPath);
+
+        return !!child && hasNodeSemantic(child, 'value', {
+          document: context.document,
+          path: childPath,
+        });
+      }
+    );
+
+    if (valuePaths.length === 0) return 'missing-value-child';
+    if (valuePaths.length > 1) return 'duplicate-value-child';
+  },
+  value: (node, path, context) => {
+    const parentPath = getTanaParentPath(context.document, path);
+    const parent = parentPath ? getEntryAtPath(context.entries, parentPath) : undefined;
     const definition = parent?.tanaFieldId
-      ? fieldDefinitions.get(parent.tanaFieldId)
+      ? context.fieldDefinitions.get(parent.tanaFieldId)
       : undefined;
 
     if (!definition || node.tanaFieldValueType !== definition.type) {
-      editor.tf.unsetNodes('tanaFieldValueType', { at: path });
-      return true;
+      return 'invalid-value-owner';
     }
-  }
+  },
+  view: (node, _, context) => {
+    const clauses = node.tanaViewDefinition?.clauses;
 
-  return false;
+    if (!Array.isArray(clauses)) return 'invalid-view-query';
+
+    return clauses.some((clause) => !isTanaQueryClauseValid(clause, context))
+      ? 'invalid-view-query'
+      : undefined;
+  },
+};
+
+/**
+ * Validates the semantic invariants for one existing Plate Node. It only reads
+ * the document and current hierarchy; writers remain responsible for creating
+ * valid structures in the first place.
+ */
+export function validateNode(
+  node: TanaBlockElement,
+  path: Path,
+  context: TanaNodeIntegrityContext
+): TanaNodeIntegrityIssue | undefined {
+  const semanticContext = { document: context.document, path };
+
+  for (const semantic of getNodeSemanticTypes(node, semanticContext)) {
+    const issue = NodeIntegrityValidators[semantic]?.(node, path, context);
+
+    if (issue) return issue;
+  }
 }
 
-function normalizeFieldOccurrences(
+/** Repairs one exceptional semantic invariant failure with Plate transforms. */
+export function repairNode(
   editor: PlateEditor,
-  entries: readonly TanaNodeEntry[],
-  fieldDefinitions: ReadonlyMap<NodeId, NonNullable<TanaBlockElement['tanaFieldDefinition']>>
-) {
-  for (const [node, path] of entries) {
-    if (!node.tanaFieldId) continue;
+  entry: TanaNodeEntry,
+  context: TanaNodeIntegrityContext
+): boolean {
+  const [node, path] = entry;
+  const issue = validateNode(node, path, context);
 
-    if (node.tanaFieldDefinition) {
+  if (!issue) return false;
+
+  switch (issue) {
+    case 'invalid-supertag-definition':
+      editor.tf.setNodes({ tanaSupertagDefinition: {} }, { at: path });
+      return true;
+    case 'invalid-value-owner':
+      editor.tf.unsetNodes('tanaFieldValueType', { at: path });
+      return true;
+    case 'field-definition-field-conflict':
+    case 'invalid-field-host':
       editor.tf.unsetNodes('tanaFieldId', { at: path });
       return true;
-    }
-
-    const definition = fieldDefinitions.get(node.tanaFieldId);
-
-    const parentPath = getTanaParentPath(editor.children, path);
-    const parent = parentPath ? getEntryAtPath(entries, parentPath) : undefined;
-
-    if (!definition) {
+    case 'missing-field-definition':
       removeNodeSubtree(editor, path);
       return true;
-    }
+    case 'duplicate-value-child': {
+      const duplicatePath = getTanaDirectChildPaths(editor.children, path)
+        .filter((childPath) => {
+          const child = getEntryAtPath(context.entries, childPath);
 
-    if (!isFieldHost(parent)) {
-      editor.tf.unsetNodes('tanaFieldId', { at: path });
+          return !!child && hasNodeSemantic(child, 'value', {
+            document: editor.children,
+            path: childPath,
+          });
+        })
+        .at(1);
+
+      if (!duplicatePath) return false;
+
+      editor.tf.unsetNodes('tanaFieldValueType', { at: duplicatePath });
       return true;
     }
+    case 'missing-value-child': {
+      const fieldId = node.tanaFieldId;
+      const definition = fieldId ? context.fieldDefinitions.get(fieldId) : undefined;
 
-    const valuePaths = getTanaDirectChildPaths(editor.children, path).filter(
-      (childPath) =>
-        getEntryAtPath(entries, childPath)?.tanaFieldValueType === definition.type
-    );
+      if (!definition) return false;
 
-    if (valuePaths.length > 1) {
-      editor.tf.unsetNodes('tanaFieldValueType', { at: valuePaths[1] });
-      return true;
-    }
-
-    if (valuePaths.length === 0) {
       const indent = typeof node.indent === 'number' ? node.indent + 1 : 1;
 
       editor.tf.insertNodes(
@@ -269,10 +397,39 @@ function normalizeFieldOccurrences(
       );
       return true;
     }
-  }
+    case 'missing-from-supertag-source':
+      editor.tf.setNodes(
+        {
+          tanaFieldDefinition: {
+            sourceSupertagId: null,
+            type: 'from-supertag',
+          },
+        },
+        { at: path }
+      );
+      return true;
+    case 'invalid-view-query': {
+      const clauses = Array.isArray(node.tanaViewDefinition?.clauses)
+        ? node.tanaViewDefinition.clauses
+        : [];
 
-  return false;
+      editor.tf.setNodes(
+        {
+          tanaViewDefinition: {
+            clauses: clauses.filter((clause) =>
+              isTanaQueryClauseValid(clause, context)
+            ),
+          },
+        },
+        { at: path }
+      );
+      return true;
+    }
+  }
 }
+
+/** The sole integrity router for current Node semantics. */
+export const NodeIntegrity = { repairNode, validateNode };
 
 /**
  * Repairs one dangling semantic relation at a time. Returning after a repair
@@ -281,7 +438,23 @@ function normalizeFieldOccurrences(
 function normalizeRelations(editor: PlateEditor): boolean {
   const entries = getTanaNodeEntries(editor);
   const nodeIds = getNodeIds(entries);
-  const fieldDefinitions = getFieldDefinitions(entries);
+  const fieldDefinitions = getFieldDefinitions(entries, editor.children);
+  const context: TanaNodeIntegrityContext = {
+    document: editor.children,
+    entries,
+    fieldDefinitions,
+    fieldDefinitionIds: getSemanticNodeIds(
+      entries,
+      editor.children,
+      'field-definition'
+    ),
+    nodeIds,
+    supertagDefinitionIds: getSemanticNodeIds(
+      entries,
+      editor.children,
+      'supertag-definition'
+    ),
+  };
   const danglingInlinePath = findDanglingInlineRelation(entries, nodeIds);
 
   if (danglingInlinePath) {
@@ -289,51 +462,12 @@ function normalizeRelations(editor: PlateEditor): boolean {
     return true;
   }
 
-  if (normalizeFieldValueNodes(editor, entries, fieldDefinitions)) return true;
-  if (normalizeFieldOccurrences(editor, entries, fieldDefinitions)) return true;
-
   for (const [node, path] of entries) {
-    const definition = node.tanaFieldDefinition;
-
-    if (definition?.type === 'from-supertag') {
-      if (
-        definition.sourceSupertagId !== null &&
-        !nodeIds.has(definition.sourceSupertagId)
-      ) {
-        editor.tf.setNodes(
-          {
-            tanaFieldDefinition: {
-              sourceSupertagId: null,
-              type: 'from-supertag',
-            },
-          },
-          { at: path }
-        );
-        return true;
-      }
-
-      continue;
-    }
-
+    if (repairNode(editor, [node, path], context)) return true;
   }
 
   for (const [node, path] of entries) {
     if (pruneHiddenFieldNodeIds(editor, node, path, nodeIds)) return true;
-  }
-
-  for (const [node, path] of entries) {
-    const definition = node.tanaViewDefinition;
-
-    if (!definition) continue;
-
-    const clauses = definition.clauses.filter((clause) =>
-      isTanaQueryClauseValid(clause, nodeIds)
-    );
-
-    if (clauses.length !== definition.clauses.length) {
-      editor.tf.setNodes({ tanaViewDefinition: { clauses } }, { at: path });
-      return true;
-    }
   }
 
   return false;

@@ -280,7 +280,9 @@ export function getFieldDefinitionCandidatesFromIndex(
   index: TanaIndex
 ): FieldDefinitionCandidate[] {
   return Array.from(index.nodesById.values()).flatMap((node) =>
-    node.fieldDefinition ? [{ ...node, fieldDefinition: node.fieldDefinition }] : []
+    node.semanticTypes.includes('field-definition') && node.fieldDefinition
+      ? [{ ...node, fieldDefinition: node.fieldDefinition }]
+      : []
   );
 }
 
@@ -355,12 +357,18 @@ export function getSupertagTemplateFields(
   index: TanaIndex,
   supertagId: NodeId
 ): ResolvedSupertagTemplateField[] {
-  if (!index.nodesById.get(supertagId)?.supertagDefinition) return [];
+  const supertag = index.nodesById.get(supertagId);
+
+  if (!supertag || !supertag.semanticTypes.includes('supertag-definition')) {
+    return [];
+  }
 
   return (index.fieldNodesByParent.get(supertagId) ?? []).flatMap((template) => {
     const field = index.nodesById.get(template.fieldId);
 
-    if (!field?.fieldDefinition) return [];
+    if (!field?.fieldDefinition || !field.semanticTypes.includes('field-definition')) {
+      return [];
+    }
 
     return [{ definition: field.fieldDefinition, field, template }];
   });

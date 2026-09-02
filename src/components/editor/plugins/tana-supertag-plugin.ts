@@ -8,6 +8,7 @@ import {
 } from '@/lib/tana/constants';
 import { getSupertagTemplateFields } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
+import { hasNodeSemantic } from '@/lib/tana/node-semantic';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 import { TanaFieldPlugin } from './tana-field-plugin';
@@ -27,7 +28,13 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function getDefinitionEntry(editor: PlateEditor, supertagId: NodeId) {
   const entry = getTanaNodeEntry(editor, supertagId);
 
-  return entry?.[0].tanaSupertagDefinition ? entry : undefined;
+  return entry &&
+    hasNodeSemantic(entry[0], 'supertag-definition', {
+      document: editor.children,
+      path: entry[1],
+    })
+    ? entry
+    : undefined;
 }
 
 function normalizeName(name: string) {
@@ -82,7 +89,15 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
 function define(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (!entry || entry[0].tanaSupertagDefinition) return false;
+  if (
+    !entry ||
+    hasNodeSemantic(entry[0], 'supertag-definition', {
+      document: editor.children,
+      path: entry[1],
+    })
+  ) {
+    return false;
+  }
 
   editor.tf.setNodes({ tanaSupertagDefinition: {} }, { at: entry[1] });
 

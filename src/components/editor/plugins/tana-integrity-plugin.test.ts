@@ -21,6 +21,34 @@ function relation(type: string, key: string): TElement {
 }
 
 describe('Tana relation integrity', () => {
+  test('repairs an invalid Supertag definition without changing its Node identity', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+    ]);
+
+    editor.tf.setNodes(
+      { tanaSupertagDefinition: [] as never },
+      { at: [0] }
+    );
+
+    assert.equal(editor.children[0].id, 'project');
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+  });
+
+  test('repairs a malformed View configuration to an empty clause list', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Open tasks' }], id: 'view', type: KEYS.p },
+    ]);
+
+    editor.tf.setNodes(
+      { tanaViewDefinition: { clauses: 'invalid' as never } },
+      { at: [0] }
+    );
+
+    assert.equal(editor.children[0].id, 'view');
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { clauses: [] });
+  });
+
   test('removes dangling inline references and supertags', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },

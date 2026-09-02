@@ -3,6 +3,7 @@ import type { NodeEntry } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { hasNodeSemantic } from '@/lib/tana/node-semantic';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { isTanaQueryClauseValid } from '@/lib/tana/query';
 import type { NodeId, TanaBlockElement, TanaQueryClause } from '@/lib/tana/types';
@@ -22,7 +23,13 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function define(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (!entry || entry[0].tanaViewDefinition) {
+  if (
+    !entry ||
+    hasNodeSemantic(entry[0], 'view', {
+      document: editor.children,
+      path: entry[1],
+    })
+  ) {
     return false;
   }
 
@@ -34,7 +41,15 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 function remove(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (!entry?.[0].tanaViewDefinition) return false;
+  if (
+    !entry ||
+    !hasNodeSemantic(entry[0], 'view', {
+      document: editor.children,
+      path: entry[1],
+    })
+  ) {
+    return false;
+  }
 
   editor.tf.unsetNodes('tanaViewDefinition', { at: entry[1] });
 

@@ -11,7 +11,11 @@ export function getFieldDefinition(
   index: TanaIndex,
   fieldId: FieldId
 ): FieldDefinition | undefined {
-  return index.nodesById.get(fieldId)?.fieldDefinition;
+  const node = index.nodesById.get(fieldId);
+
+  return node?.semanticTypes.includes('field-definition')
+    ? node.fieldDefinition
+    : undefined;
 }
 
 export function getFieldDisplayName(index: TanaIndex, fieldId: FieldId): string {
@@ -25,7 +29,11 @@ export function isTanaQueryClauseValid(
 ): boolean {
   switch (clause.kind) {
     case 'has-supertag':
-      return !!index.nodesById.get(clause.supertagId)?.supertagDefinition;
+      return (
+        index.nodesById
+          .get(clause.supertagId)
+          ?.semanticTypes.includes('supertag-definition') ?? false
+      );
     case 'field-defined':
     case 'field-exists':
       return !!getFieldDefinition(index, clause.fieldId);

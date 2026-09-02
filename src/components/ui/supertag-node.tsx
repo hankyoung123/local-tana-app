@@ -10,6 +10,7 @@ import { PlateElement } from 'platejs/react';
 
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
+  canNavigate as canNavigateNode,
   isTanaNodeElement,
 } from '@/lib/tana';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
@@ -42,12 +43,13 @@ export function SupertagElement(
   const navigateToDefinition = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
+      if (!canNavigateNode(element)) return;
 
       event.preventDefault();
       event.stopPropagation();
       editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
     },
-    [editor, element.key]
+    [editor, element]
   );
 
   return (

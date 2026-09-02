@@ -16,6 +16,7 @@ import {
 import { TanaIndexProvider, useTanaIndex } from './tana-index-context';
 import { TanaInspector } from './tana-inspector';
 import { TanaNodeViewHost } from './tana-node-view-host';
+import { getNodeRenderer } from './node-renderer-registry';
 import { TanaOutlinerOpenState } from './tana-outliner-open-state';
 import { TanaSidebar } from './tana-sidebar';
 
@@ -101,6 +102,7 @@ function TanaWorkspaceContent({
     return node ? [node] : [];
   });
   const searchResults = searchTanaNodes(index, search);
+  const SearchResultRenderer = getNodeRenderer('search').SearchResult;
   const activeNodeId = focusedNodeId ?? selectedNodeId;
 
   const navigateToSearchResult = (nodeId: string) => {
@@ -214,16 +216,15 @@ function TanaWorkspaceContent({
                   {searchResults.length === 0 ? (
                     <p className="px-2 py-2 text-[#7b827d] text-xs">没有匹配的节点</p>
                   ) : (
-                    searchResults.map((node) => (
-                      <button
-                        key={node.id}
-                        className="block w-full truncate px-2 py-1.5 text-left text-xs hover:bg-[#f1f5f2]"
-                        type="button"
-                        onClick={() => navigateToSearchResult(node.id)}
-                      >
-                        {node.text || '未命名节点'}
-                      </button>
-                    ))
+                    searchResults.map((node) =>
+                      SearchResultRenderer ? (
+                        <SearchResultRenderer
+                          key={node.id}
+                          node={node}
+                          onNavigate={navigateToSearchResult}
+                        />
+                      ) : null
+                    )
                   )}
                 </div>
               )}

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
 import {
   getNodeDisplayNameFromIndex,
   getNodeReferenceCandidatesFromIndex,
@@ -48,6 +49,7 @@ export function MentionElement(
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
+      if (!canNavigateNode(element)) return;
 
       const targetNodeId = element.key;
 
@@ -60,7 +62,7 @@ export function MentionElement(
 
       props.editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
     },
-    [element.key, props.editor]
+    [element, props.editor]
   );
 
   return (
