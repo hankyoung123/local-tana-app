@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
+import { BlockSelectionPlugin } from '@platejs/selection/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
@@ -16,10 +17,10 @@ import {
   isFieldSet,
   isFieldValueCompatible,
   isSupertagFieldInputNode,
-  getFieldValueCandidates,
+  getFieldValueCandidates
 } from './fields';
 import { buildTanaIndex } from './index';
-import { isTanaNodeInteractable } from './outliner';
+import { getTanaNodePath, isTanaNodeInteractable } from './outliner';
 
 globalThis.requestAnimationFrame ??= () => 0;
 
@@ -30,10 +31,10 @@ function createEditor(value: Value) {
     nodeId: {
       filter: isTanaNodeElement,
       idCreator: () => `node-${++nextId}`,
-      initialValueIds: 'always',
+      initialValueIds: 'always'
     },
     plugins: EditorKit,
-    value,
+    value
   });
 }
 
@@ -49,24 +50,25 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Estimate' }],
         id: 'estimate',
         tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
+        type: KEYS.p
       },
-      { children: [{ text: 'SQLite 在本地持久化文档。' }], id: 'sqlite', type: KEYS.p },
+      {
+        children: [{ text: 'SQLite 在本地持久化文档。' }],
+        id: 'sqlite',
+        type: KEYS.p
+      }
     ]);
 
     const occurrenceId = field(editor).materialize('task', 'estimate');
     assert.ok(occurrenceId);
-    assert.equal(
-      field(editor).setValue('task', 'estimate', { type: 'plain', value: '8' }),
-      true
-    );
+    assert.equal(field(editor).setValue('task', 'estimate', { type: 'plain', value: '8' }), true);
 
     const beforeFieldEditing = structuredClone(editor.children);
 
     // Field: Enter cannot split it or merge its Value child.
     editor.tf.select({
       anchor: { offset: 0, path: [1, 0] },
-      focus: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] }
     });
     editor.tf.insertBreak();
     editor.tf.deleteBackward('character');
@@ -77,7 +79,7 @@ describe('Field occurrence Nodes', () => {
     // the Value with its Field or the following ordinary Node.
     editor.tf.select({
       anchor: { offset: 0, path: [2, 0] },
-      focus: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] }
     });
     editor.tf.insertBreak();
     editor.tf.deleteBackward('character');
@@ -85,7 +87,7 @@ describe('Field occurrence Nodes', () => {
 
     editor.tf.select({
       anchor: { offset: 1, path: [2, 0] },
-      focus: { offset: 1, path: [2, 0] },
+      focus: { offset: 1, path: [2, 0] }
     });
     editor.tf.deleteForward('character');
     assert.deepEqual(editor.children, beforeFieldEditing);
@@ -94,13 +96,13 @@ describe('Field occurrence Nodes', () => {
     const valueIndent = editor.children[2].indent;
     editor.tf.select({
       anchor: { offset: 0, path: [1, 0] },
-      focus: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] }
     });
     assert.equal(editor.tf.tab({ reverse: false }), true);
     assert.equal(editor.tf.tab({ reverse: true }), true);
     editor.tf.select({
       anchor: { offset: 0, path: [2, 0] },
-      focus: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] }
     });
     assert.equal(editor.tf.tab({ reverse: false }), true);
     assert.equal(editor.tf.tab({ reverse: true }), true);
@@ -110,7 +112,7 @@ describe('Field occurrence Nodes', () => {
     // A normal block still receives Plate's unmodified structural behavior.
     editor.tf.select({
       anchor: { offset: 0, path: [4, 0] },
-      focus: { offset: 0, path: [4, 0] },
+      focus: { offset: 0, path: [4, 0] }
     });
     editor.tf.insertBreak();
     assert.equal(editor.children.length, beforeFieldEditing.length + 1);
@@ -118,18 +120,15 @@ describe('Field occurrence Nodes', () => {
     // Editing Field structure cannot make a zoom-external sibling eligible
     // for interaction. The SQLite node is part of the source document, not
     // part of Task's Field subtree.
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [5], new Set(), 'task'),
-      false
-    );
+    assert.equal(isTanaNodeInteractable(editor.children, [5], new Set(), 'task'), false);
 
     const normalEditor = createEditor([
       { children: [{ text: 'First' }], id: 'first', type: KEYS.p },
-      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p }
     ]);
     normalEditor.tf.select({
       anchor: { offset: 0, path: [1, 0] },
-      focus: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] }
     });
     normalEditor.tf.deleteBackward('character');
     assert.equal(normalEditor.children.length, 1);
@@ -137,14 +136,96 @@ describe('Field occurrence Nodes', () => {
 
     const normalTabEditor = createEditor([
       { children: [{ text: 'First' }], id: 'first', type: KEYS.p },
-      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p }
     ]);
     normalTabEditor.tf.select({
       anchor: { offset: 0, path: [1, 0] },
-      focus: { offset: 0, path: [1, 0] },
+      focus: { offset: 0, path: [1, 0] }
     });
     assert.equal(normalTabEditor.tf.tab({ reverse: false }), true);
     assert.equal(normalTabEditor.children[1].indent, 1);
+  });
+
+  test('blocks expanded text deletion that crosses a Field subtree', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'task-status',
+        indent: 1,
+        tanaFieldId: 'status',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Ready' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p
+      },
+      { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p
+      }
+    ]);
+    const before = structuredClone(editor.children);
+
+    editor.tf.select({
+      anchor: { offset: 2, path: [0, 0] },
+      focus: { offset: 3, path: [3, 0] }
+    });
+    editor.tf.deleteForward('character');
+    assert.deepEqual(editor.children, before);
+
+    editor.tf.select({
+      anchor: { offset: 2, path: [0, 0] },
+      focus: { offset: 3, path: [3, 0] }
+    });
+    editor.tf.deleteBackward('character');
+    assert.deepEqual(editor.children, before);
+    assert.deepEqual(
+      buildTanaIndex(editor.children)
+        .fieldNodesByParent.get('task')
+        ?.map(({ id }) => id),
+      ['task-status']
+    );
+  });
+
+  test('deletes a block-selected Field together with its complete Value subtree', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'task-status',
+        indent: 1,
+        tanaFieldId: 'status',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Ready' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p
+      },
+      { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p
+      }
+    ]);
+
+    editor.getApi(BlockSelectionPlugin).blockSelection.set('task-status');
+    editor.getTransforms(BlockSelectionPlugin).blockSelection.removeNodes();
+
+    assert.equal(getTanaNodePath(editor.children, 'task-status'), undefined);
+    assert.equal(getTanaNodePath(editor.children, 'task-status-value'), undefined);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task') ?? [], []);
   });
 
   test('materializes a normal Field Node and a typed value child without a parent map', () => {
@@ -154,15 +235,13 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Estimate' }],
         id: 'estimate',
         tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
+        type: KEYS.p
+      }
     ]);
 
     const occurrenceId = field(editor).materialize('task', 'estimate');
     const index = buildTanaIndex(editor.children);
-    const occurrence = occurrenceId
-      ? index.fieldNodesById.get(occurrenceId)
-      : undefined;
+    const occurrence = occurrenceId ? index.fieldNodesById.get(occurrenceId) : undefined;
 
     assert.ok(occurrenceId);
     assert.equal(occurrence?.fieldId, 'estimate');
@@ -183,20 +262,18 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Estimate' }],
         id: 'estimate',
         tanaFieldDefinition: { type: 'number' },
-        type: KEYS.p,
-      },
+        type: KEYS.p
+      }
     ]);
 
     field(editor).materialize('task', 'estimate');
     const before = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0];
 
-    assert.equal(
-      field(editor).setValue('task', 'estimate', { type: 'number', value: 8 }),
-      true
+    assert.equal(field(editor).setValue('task', 'estimate', { type: 'number', value: 8 }), true);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldValues.get('task'),
+      new Map([['estimate', { type: 'number', value: 8 }]])
     );
-    assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
-      ['estimate', { type: 'number', value: 8 }],
-    ]));
     assert.equal(field(editor).clearValue('task', 'estimate'), true);
 
     const after = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0];
@@ -204,8 +281,7 @@ describe('Field occurrence Nodes', () => {
     assert.equal(after.valueNodeId, before.valueNodeId);
     assert.equal(editor.children.length, 4);
     assert.equal(
-      buildTanaIndex(editor.children).fieldValues.get('task')?.has('estimate') ??
-        false,
+      buildTanaIndex(editor.children).fieldValues.get('task')?.has('estimate') ?? false,
       false
     );
   });
@@ -217,10 +293,10 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Status' }],
         id: 'status',
         tanaFieldDefinition: { type: 'options' },
-        type: KEYS.p,
+        type: KEYS.p
       },
       { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Other' }], id: 'other', type: KEYS.p },
+      { children: [{ text: 'Other' }], id: 'other', type: KEYS.p }
     ]);
 
     field(editor).materialize('task', 'status');
@@ -229,7 +305,7 @@ describe('Field occurrence Nodes', () => {
     assert.equal(
       field(editor).setValue('task', 'status', {
         type: 'options',
-        value: 'other',
+        value: 'other'
       }),
       false
     );
@@ -238,10 +314,15 @@ describe('Field occurrence Nodes', () => {
 
   test('derives Options candidates from ordered direct child Nodes', () => {
     const editor = createEditor([
-      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'options' },
+        type: KEYS.p
+      },
       { children: [{ text: 'Todo' }], id: 'todo', indent: 1, type: KEYS.p },
       { children: [{ text: 'Doing' }], id: 'doing', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p }
     ]);
 
     assert.deepEqual(
@@ -259,19 +340,27 @@ describe('Field occurrence Nodes', () => {
       getFieldValueCandidates(buildTanaIndex(editor.children), 'status').map(({ id }) => id),
       ['doing', doneId]
     );
-    assert.deepEqual(editor.children[0].tanaFieldDefinition, { type: 'options' });
+    assert.deepEqual(editor.children[0].tanaFieldDefinition, {
+      type: 'options'
+    });
   });
 
   test('refuses to materialize a Field below Field or Value structure', () => {
     const editor = createEditor([
-      { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p }
     ]);
 
     const occurrenceId = field(editor).materialize('task', 'priority');
     assert.ok(occurrenceId);
-    const valueNodeId = buildTanaIndex(editor.children).fieldNodesById.get(occurrenceId)
-      ?.valueNodeId;
+    const valueNodeId = buildTanaIndex(editor.children).fieldNodesById.get(
+      occurrenceId
+    )?.valueNodeId;
     assert.ok(valueNodeId);
 
     assert.equal(field(editor).materialize('priority', 'priority'), undefined);
@@ -281,9 +370,14 @@ describe('Field occurrence Nodes', () => {
 
   test('uses the transient blank child itself as the ad-hoc Field occurrence', () => {
     const editor = createEditor([
-      { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p
+      },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
-      { children: [{ text: '' }], id: 'temporary', indent: 1, type: KEYS.p },
+      { children: [{ text: '' }], id: 'temporary', indent: 1, type: KEYS.p }
     ]);
 
     assert.equal(isAdHocFieldInputNode(editor.children, [2]), true);
@@ -306,27 +400,32 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Project' }],
         id: 'project',
         tanaSupertagDefinition: {},
-        type: KEYS.p,
+        type: KEYS.p
       },
-      { children: [{ text: '' }], id: 'template-input', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'template-input',
+        indent: 1,
+        type: KEYS.p
+      }
     ]);
 
     assert.equal(isSupertagFieldInputNode(editor.children, [1]), true);
     const fieldId = field(editor).completeTemplateInput('template-input', 'project', {
       name: 'Priority',
-      type: 'create',
+      type: 'create'
     });
-    const definition = fieldId
-      ? buildTanaIndex(editor.children).nodesById.get(fieldId)
-      : undefined;
+    const definition = fieldId ? buildTanaIndex(editor.children).nodesById.get(fieldId) : undefined;
 
     assert.ok(fieldId);
     assert.equal(definition?.fieldDefinition?.type, 'plain');
     assert.equal(definition?.node.indent, undefined);
-    assert.equal(editor.children.find((node) => node.id === 'template-input')?.tanaFieldId, fieldId);
     assert.equal(
-      buildTanaIndex(editor.children).fieldNodesById.get('template-input')
-        ?.parentNodeId,
+      editor.children.find((node) => node.id === 'template-input')?.tanaFieldId,
+      fieldId
+    );
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesById.get('template-input')?.parentNodeId,
       'project'
     );
     assert.equal(isSupertagFieldInputNode(editor.children, [1]), false);
@@ -338,38 +437,73 @@ describe('Field occurrence Nodes', () => {
         children: [{ text: 'Project' }],
         id: 'project',
         tanaSupertagDefinition: {},
-        type: KEYS.p,
+        type: KEYS.p
       },
-      { children: [{ text: '' }], id: 'template-title', indent: 1, tanaFieldId: 'title', type: KEYS.p },
-      { children: [{ text: 'Untitled' }], id: 'template-title-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
-      { children: [{ text: '' }], id: 'template-estimate', indent: 1, tanaFieldId: 'estimate', type: KEYS.p },
-      { children: [{ text: '' }], id: 'template-estimate-value', indent: 2, tanaFieldValueType: 'number', type: KEYS.p },
-      { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
-      { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'template-title',
+        indent: 1,
+        tanaFieldId: 'title',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Untitled' }],
+        id: 'template-title-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: '' }],
+        id: 'template-estimate',
+        indent: 1,
+        tanaFieldId: 'estimate',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: '' }],
+        id: 'template-estimate-value',
+        indent: 2,
+        tanaFieldValueType: 'number',
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Title' }],
+        id: 'title',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { type: 'number' },
+        type: KEYS.p
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p }
     ]);
 
-    assert.equal(
-      editor.getTransforms(TanaSupertagPlugin).supertag.apply('task', 'project'),
-      true
-    );
+    assert.equal(editor.getTransforms(TanaSupertagPlugin).supertag.apply('task', 'project'), true);
 
     const index = buildTanaIndex(editor.children);
     const fields = index.fieldNodesByParent.get('task') ?? [];
     const descriptors = getNodeFieldDescriptors(index, 'task');
 
-    assert.deepEqual(fields.map(({ fieldId }) => fieldId), ['title', 'estimate']);
-    assert.deepEqual(index.fieldValues.get('task'), new Map([
-      ['title', { type: 'plain', value: 'Untitled' }],
-    ]));
     assert.deepEqual(
-      descriptors.filter((descriptor) => descriptor.source !== 'system').map(
-        ({ fieldNodeId, key, label }) => ({ fieldNodeId, key, label })
-      ),
+      fields.map(({ fieldId }) => fieldId),
+      ['title', 'estimate']
+    );
+    assert.deepEqual(
+      index.fieldValues.get('task'),
+      new Map([['title', { type: 'plain', value: 'Untitled' }]])
+    );
+    assert.deepEqual(
+      descriptors
+        .filter((descriptor) => descriptor.source !== 'system')
+        .map(({ fieldNodeId, key, label }) => ({ fieldNodeId, key, label })),
       fields.map((fieldNode) => ({
         fieldNodeId: fieldNode.id,
         key: fieldNode.id,
-        label: index.nodesById.get(fieldNode.fieldId)?.text,
+        label: index.nodesById.get(fieldNode.fieldId)?.text
       }))
     );
   });
@@ -382,38 +516,33 @@ describe('Field occurrence Nodes', () => {
         id: 'task-status',
         indent: 1,
         tanaFieldId: 'status',
-        type: KEYS.p,
+        type: KEYS.p
       },
       {
         children: [{ text: '' }],
         id: 'task-status-value',
         indent: 2,
         tanaFieldValueType: 'options',
-        type: KEYS.p,
+        type: KEYS.p
       },
       { children: [{ text: 'Notes' }], id: 'notes', indent: 1, type: KEYS.p },
       {
         children: [{ text: 'Status' }],
         id: 'status',
         tanaFieldDefinition: { type: 'options' },
-        type: KEYS.p,
-      },
+        type: KEYS.p
+      }
     ]);
 
-    const children = getNodeFieldDescriptors(buildTanaIndex(editor.children), 'task')
-      .find(({ key }) => key === '$system:children');
+    const children = getNodeFieldDescriptors(buildTanaIndex(editor.children), 'task').find(
+      ({ key }) => key === '$system:children'
+    );
 
     assert.equal(children?.systemValue, 'Notes');
   });
 
   test('keeps compatibility a pure type check', () => {
-    assert.equal(
-      isFieldValueCompatible({ type: 'number' }, { type: 'plain', value: '1' }),
-      false
-    );
-    assert.equal(
-      isFieldValueCompatible({ type: 'number' }, { type: 'number', value: 1 }),
-      true
-    );
+    assert.equal(isFieldValueCompatible({ type: 'number' }, { type: 'plain', value: '1' }), false);
+    assert.equal(isFieldValueCompatible({ type: 'number' }, { type: 'number', value: 1 }), true);
   });
 });

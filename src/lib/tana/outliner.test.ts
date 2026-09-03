@@ -11,23 +11,21 @@ import { BlockSelectionKit } from '@/components/editor/plugins/block-selection-k
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   canDropOnInteractableTanaNode,
-  toggleTanaNodeCollapse,
+  toggleTanaNodeCollapse
 } from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from './constants';
-import {
-  buildTanaIndex,
-  getNodeReferenceCandidatesFromIndex,
-} from './index';
+import { buildTanaIndex, getNodeReferenceCandidatesFromIndex } from './index';
 import {
   getTanaAncestorPaths,
   getTanaNodeDescendantPaths,
+  getTanaNodePath,
   getTanaParentPath,
   getTanaParentPaths,
   getTanaZoomRange,
   hasTanaNodeDescendants,
   isTanaNodeCollapsed,
   isTanaNodeHidden,
-  isTanaNodeInteractable,
+  isTanaNodeInteractable
 } from './outliner';
 
 // Plate Navigation schedules browser scrolling; Bun's Node test runtime has no rAF.
@@ -36,7 +34,7 @@ globalThis.requestAnimationFrame ??= () => 0;
 const outliner: Value = [
   { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
   { children: [{ text: 'Child' }], id: 'child', indent: 1, type: 'p' },
-  { children: [{ text: 'Sibling' }], id: 'sibling', type: 'p' },
+  { children: [{ text: 'Sibling' }], id: 'sibling', type: 'p' }
 ];
 
 function navigateToNode(editor: ReturnType<typeof createPlateEditor>, nodeId: string) {
@@ -61,14 +59,19 @@ describe('Tana outliner behavior', () => {
     const document: Value = [
       { children: [{ text: 'Parent' }], id: 'parent', type: KEYS.p },
       { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+      { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p }
     ];
 
     const focusedDocument: Value = [
       document[0],
       document[1],
-      { children: [{ text: 'Inserted' }], id: 'inserted', indent: 1, type: KEYS.p },
-      document[2],
+      {
+        children: [{ text: 'Inserted' }],
+        id: 'inserted',
+        indent: 1,
+        type: KEYS.p
+      },
+      document[2]
     ];
     const openIds = new Set(['parent']);
 
@@ -84,7 +87,7 @@ describe('Tana outliner behavior', () => {
       nodeId: {
         filter: isTanaNodeElement,
         idCreator: () => `node-${++nextId}`,
-        initialValueIds: 'always',
+        initialValueIds: 'always'
       },
       plugins: EditorKit,
       value: [
@@ -92,35 +95,35 @@ describe('Tana outliner behavior', () => {
           children: [{ text: 'Project' }],
           id: 'project',
           tanaSupertagDefinition: {},
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: '' }],
           id: 'project-status',
           indent: 1,
           tanaFieldId: 'status',
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: '' }],
           id: 'project-status-value',
           indent: 2,
           tanaFieldValueType: 'options',
-          type: KEYS.p,
+          type: KEYS.p
         },
         { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
         {
           children: [{ text: 'Status' }],
           id: 'status',
           tanaFieldDefinition: { type: 'options' },
-          type: KEYS.p,
-        },
-      ],
+          type: KEYS.p
+        }
+      ]
     });
 
     editor.tf.select({
       anchor: { offset: 0, path: [0, 0] },
-      focus: { offset: 0, path: [0, 0] },
+      focus: { offset: 0, path: [0, 0] }
     });
     editor.tf.insertBreak();
 
@@ -135,6 +138,95 @@ describe('Tana outliner behavior', () => {
     assert.equal(editor.children[4].id, 'sibling');
   });
 
+  test('keeps Host identity and Field ownership through Enter at every position', () => {
+    for (const [name, offset, expectedHostText] of [
+      ['start', 0, 'Project'],
+      ['middle', 3, 'Pro'],
+      ['end', 7, 'Project']
+    ] as const) {
+      const editor = createPlateEditor({
+        nodeId: {
+          filter: isTanaNodeElement,
+          idCreator: () => 'generated',
+          initialValueIds: 'always'
+        },
+        plugins: EditorKit,
+        value: [
+          { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+          {
+            children: [{ text: '' }],
+            id: 'project-status',
+            indent: 1,
+            tanaFieldId: 'status',
+            type: KEYS.p
+          },
+          {
+            children: [{ text: '' }],
+            id: 'project-status-value',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: KEYS.p
+          },
+          { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain' },
+            type: KEYS.p
+          }
+        ]
+      });
+
+      editor.tf.select({
+        anchor: { offset, path: [0, 0] },
+        focus: { offset, path: [0, 0] }
+      });
+      editor.tf.insertBreak();
+
+      const hostPath = getTanaNodePath(editor.children, 'project');
+      const fieldPath = getTanaNodePath(editor.children, 'project-status');
+      const valuePath = getTanaNodePath(editor.children, 'project-status-value');
+      const index = buildTanaIndex(editor.children);
+
+      assert.ok(hostPath, `${name}: original Host remains`);
+      assert.ok(fieldPath, `${name}: Field remains`);
+      assert.ok(valuePath, `${name}: Value remains`);
+      assert.equal(
+        editor.children[hostPath![0]].children[0].text,
+        expectedHostText,
+        `${name}: original NodeId stays with its original content`
+      );
+      assert.deepEqual(
+        getTanaParentPath(editor.children, fieldPath!),
+        hostPath,
+        `${name}: Field remains under original Host`
+      );
+      assert.deepEqual(
+        getTanaParentPath(editor.children, valuePath!),
+        fieldPath,
+        `${name}: Value remains under Field`
+      );
+      assert.deepEqual(
+        index.fieldNodesByParent.get('project')?.map(({ id }) => id),
+        ['project-status'],
+        `${name}: derived Field owner is unchanged`
+      );
+
+      const splitNode = editor.children.find(
+        (node) =>
+          node.id !== 'project' &&
+          node.id !== 'project-status' &&
+          node.id !== 'project-status-value' &&
+          node.id !== 'sibling' &&
+          node.id !== 'status'
+      );
+
+      assert.ok(splitNode, `${name}: new Node exists`);
+      assert.equal('tanaFieldId' in splitNode!, false);
+      assert.equal('tanaFieldValueType' in splitNode!, false);
+    }
+  });
+
   test('uses one NodeId predicate for every top-level block type', () => {
     let nextId = 0;
     const normalized = normalizeNodeId(
@@ -143,33 +235,30 @@ describe('Tana outliner behavior', () => {
           children: [
             {
               children: [{ text: 'Nested' }],
-              type: KEYS.p,
-            },
+              type: KEYS.p
+            }
           ],
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: 'Display heading' }],
-          type: KEYS.h1,
+          type: KEYS.h1
         },
         {
           children: [{ text: 'Display quote' }],
-          type: KEYS.blockquote,
-        },
+          type: KEYS.blockquote
+        }
       ],
       {
         filter: isTanaNodeElement,
-        idCreator: () => `top-level-id-${++nextId}`,
+        idCreator: () => `top-level-id-${++nextId}`
       }
     );
 
     assert.equal((normalized[0] as { id?: unknown }).id, 'top-level-id-1');
     assert.equal('id' in normalized[0].children[0], false);
     assert.equal(isTanaNodeElement(normalized[0], [0]), true);
-    assert.equal(
-      isTanaNodeElement(normalized[0].children[0] as never, [0, 0]),
-      false
-    );
+    assert.equal(isTanaNodeElement(normalized[0].children[0] as never, [0, 0]), false);
     assert.equal((normalized[1] as { id?: unknown }).id, 'top-level-id-2');
     assert.equal(isTanaNodeElement(normalized[1], [1]), true);
     assert.equal((normalized[2] as { id?: unknown }).id, 'top-level-id-3');
@@ -180,10 +269,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(isTanaNodeElement(outliner[0], [0]), true);
     assert.equal(isTanaNodeElement(outliner[1], [0, 0]), false);
     assert.equal(
-      isTanaNodeElement(
-        { children: [{ text: '' }], id: 'nested-cell', type: 'td' },
-        [3, 0]
-      ),
+      isTanaNodeElement({ children: [{ text: '' }], id: 'nested-cell', type: 'td' }, [3, 0]),
       false
     );
 
@@ -194,15 +280,15 @@ describe('Tana outliner behavior', () => {
         {
           children: [{ text: 'Heading' }],
           id: 'heading',
-          type: KEYS.h1,
+          type: KEYS.h1
         },
         {
           children: [{ text: 'Quote' }],
           id: 'quote',
-          type: KEYS.blockquote,
+          type: KEYS.blockquote
         },
-        outliner[2],
-      ],
+        outliner[2]
+      ]
     });
     const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
 
@@ -221,15 +307,15 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'B' }],
         id: 'b',
         indent: 1,
-        type: KEYS.blockquote,
+        type: KEYS.blockquote
       },
       { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
       { children: [{ text: 'D' }], id: 'd', indent: 1, type: KEYS.p },
-      { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
+      { children: [{ text: 'E' }], id: 'e', type: KEYS.p }
     ];
     const editor = createPlateEditor({
       plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
-      value: structuredClone(nestedOutliner),
+      value: structuredClone(nestedOutliner)
     });
     const originalDocument = structuredClone(editor.children);
     const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
@@ -238,30 +324,14 @@ describe('Tana outliner behavior', () => {
     editor.tf.select([2], { edge: 'start' });
     toggleTanaNodeCollapse(editor, 'a', [0]);
 
-    const collapsedOpenIds =
-      editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+    const collapsedOpenIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
 
     assert.equal(isTanaNodeHidden(editor.children, [1], collapsedOpenIds), true);
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [0], collapsedOpenIds, null),
-      true
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [1], collapsedOpenIds, null),
-      false
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [2], collapsedOpenIds, null),
-      false
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [3], collapsedOpenIds, null),
-      false
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [4], collapsedOpenIds, null),
-      true
-    );
+    assert.equal(isTanaNodeInteractable(editor.children, [0], collapsedOpenIds, null), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [1], collapsedOpenIds, null), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [2], collapsedOpenIds, null), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [3], collapsedOpenIds, null), false);
+    assert.equal(isTanaNodeInteractable(editor.children, [4], collapsedOpenIds, null), true);
     assert.deepEqual(editor.selection?.anchor.path, [0, 0]);
     assert.deepEqual(editor.selection?.focus.path, [0, 0]);
 
@@ -271,12 +341,8 @@ describe('Tana outliner behavior', () => {
       ['a', 'e']
     );
 
-    const bEntry = editor.api.node({ at: [], id: 'b' }) as
-      | NodeEntry<TElement>
-      | undefined;
-    const eEntry = editor.api.node({ at: [], id: 'e' }) as
-      | NodeEntry<TElement>
-      | undefined;
+    const bEntry = editor.api.node({ at: [], id: 'b' }) as NodeEntry<TElement> | undefined;
+    const eEntry = editor.api.node({ at: [], id: 'e' }) as NodeEntry<TElement> | undefined;
 
     assert.ok(bEntry);
     assert.ok(eEntry);
@@ -285,7 +351,7 @@ describe('Tana outliner behavior', () => {
         dragEntry: eEntry,
         dragItem: { editorId: editor.id, element: eEntry[0], id: 'e' },
         dropEntry: bEntry,
-        editor,
+        editor
       }),
       false
     );
@@ -294,30 +360,20 @@ describe('Tana outliner behavior', () => {
         dragEntry: bEntry,
         dragItem: { editorId: editor.id, element: bEntry[0], id: 'b' },
         dropEntry: eEntry,
-        editor,
+        editor
       }),
       false
     );
     assert.equal(navigateToNode(editor, 'b'), true);
 
-    const expandedOpenIds =
-      editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
+    const expandedOpenIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
 
     assert.equal(expandedOpenIds.has('a'), true);
     assert.equal(expandedOpenIds.has('b'), true);
     assert.deepEqual(editor.selection?.anchor.path, [1, 0]);
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [1], expandedOpenIds, null),
-      true
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [2], expandedOpenIds, null),
-      true
-    );
-    assert.equal(
-      isTanaNodeInteractable(editor.children, [3], expandedOpenIds, null),
-      true
-    );
+    assert.equal(isTanaNodeInteractable(editor.children, [1], expandedOpenIds, null), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [2], expandedOpenIds, null), true);
+    assert.equal(isTanaNodeInteractable(editor.children, [3], expandedOpenIds, null), true);
     assert.deepEqual(editor.children, originalDocument);
     assert.equal(editor.children[1].id, 'b');
     assert.equal('tanaFieldId' in editor.children[1], false);
@@ -327,19 +383,53 @@ describe('Tana outliner behavior', () => {
     const editor = createPlateEditor({
       plugins: EditorKit,
       value: [
-        { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { type: 'plain' },
+          type: KEYS.p
+        },
         { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
-        { children: [{ text: '' }], id: 'field', indent: 1, tanaFieldId: 'status', type: KEYS.p },
-        { children: [{ text: '' }], id: 'field-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+        {
+          children: [{ text: '' }],
+          id: 'field',
+          indent: 1,
+          tanaFieldId: 'status',
+          type: KEYS.p
+        },
+        {
+          children: [{ text: '' }],
+          id: 'field-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: KEYS.p
+        },
         { children: [{ text: 'Host' }], id: 'host', type: KEYS.p },
-        { children: [{ text: 'Existing child' }], id: 'host-child', indent: 1, type: KEYS.p },
-      ],
+        {
+          children: [{ text: 'Existing child' }],
+          id: 'host-child',
+          indent: 1,
+          type: KEYS.p
+        }
+      ]
     });
     editor.getApi(TogglePlugin).toggle.toggleIds(['source', 'field', 'host'], true);
-    const fieldEntry = editor.api.node({ at: [], id: 'field' }) as NodeEntry<TElement>;
-    const valueEntry = editor.api.node({ at: [], id: 'field-value' }) as NodeEntry<TElement>;
-    const hostChildEntry = editor.api.node({ at: [], id: 'host-child' }) as NodeEntry<TElement>;
-    const definitionEntry = editor.api.node({ at: [], id: 'status' }) as NodeEntry<TElement>;
+    const fieldEntry = editor.api.node({
+      at: [],
+      id: 'field'
+    }) as NodeEntry<TElement>;
+    const valueEntry = editor.api.node({
+      at: [],
+      id: 'field-value'
+    }) as NodeEntry<TElement>;
+    const hostChildEntry = editor.api.node({
+      at: [],
+      id: 'host-child'
+    }) as NodeEntry<TElement>;
+    const definitionEntry = editor.api.node({
+      at: [],
+      id: 'status'
+    }) as NodeEntry<TElement>;
 
     assert.equal(
       canDropOnInteractableTanaNode({
@@ -347,10 +437,10 @@ describe('Tana outliner behavior', () => {
         dragItem: {
           editorId: editor.id,
           element: fieldEntry[0],
-          id: ['field', 'field-value'],
+          id: ['field', 'field-value']
         },
         dropEntry: hostChildEntry,
-        editor,
+        editor
       }),
       true
     );
@@ -359,25 +449,33 @@ describe('Tana outliner behavior', () => {
         dragEntry: fieldEntry,
         dragItem: { editorId: editor.id, element: fieldEntry[0], id: 'field' },
         dropEntry: definitionEntry,
-        editor,
+        editor
       }),
       false
     );
     assert.equal(
       canDropOnInteractableTanaNode({
         dragEntry: hostChildEntry,
-        dragItem: { editorId: editor.id, element: hostChildEntry[0], id: 'host-child' },
+        dragItem: {
+          editorId: editor.id,
+          element: hostChildEntry[0],
+          id: 'host-child'
+        },
         dropEntry: fieldEntry,
-        editor,
+        editor
       }),
       false
     );
     assert.equal(
       canDropOnInteractableTanaNode({
         dragEntry: valueEntry,
-        dragItem: { editorId: editor.id, element: valueEntry[0], id: 'field-value' },
+        dragItem: {
+          editorId: editor.id,
+          element: valueEntry[0],
+          id: 'field-value'
+        },
         dropEntry: hostChildEntry,
-        editor,
+        editor
       }),
       false
     );
@@ -386,16 +484,35 @@ describe('Tana outliner behavior', () => {
   test('derives hierarchy for every presentation without changing node types', () => {
     const styledOutliner: Value = [
       { children: [{ text: 'Heading parent' }], id: 'heading', type: KEYS.h1 },
-      { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Quote parent' }], id: 'quote', type: KEYS.blockquote },
-      { children: [{ text: 'Quote child' }], id: 'quote-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Heading child' }],
+        id: 'heading-child',
+        indent: 1,
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Quote parent' }],
+        id: 'quote',
+        type: KEYS.blockquote
+      },
+      {
+        children: [{ text: 'Quote child' }],
+        id: 'quote-child',
+        indent: 1,
+        type: KEYS.p
+      },
       {
         children: [{ text: 'Todo parent' }],
         id: 'todo',
         [KEYS.listType]: KEYS.listTodo,
-        type: KEYS.p,
+        type: KEYS.p
       },
-      { children: [{ text: 'Todo child' }], id: 'todo-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Todo child' }],
+        id: 'todo-child',
+        indent: 1,
+        type: KEYS.p
+      }
     ];
 
     assert.deepEqual(getTanaParentPaths(styledOutliner), [[0], [2], [4]]);
@@ -415,33 +532,50 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'Heading parent' }],
         id: 'heading',
         tanaViewDefinition: { clauses: [] },
-        type: KEYS.h1,
+        type: KEYS.h1
       },
-      { children: [{ text: 'Heading child' }], id: 'heading-child', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Quote parent' }], id: 'quote', type: KEYS.blockquote },
-      { children: [{ text: 'Quote child' }], id: 'quote-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Heading child' }],
+        id: 'heading-child',
+        indent: 1,
+        type: KEYS.p
+      },
+      {
+        children: [{ text: 'Quote parent' }],
+        id: 'quote',
+        type: KEYS.blockquote
+      },
+      {
+        children: [{ text: 'Quote child' }],
+        id: 'quote-child',
+        indent: 1,
+        type: KEYS.p
+      },
       {
         children: [{ text: 'Todo parent' }],
         id: 'todo',
         [KEYS.listType]: KEYS.listTodo,
-        type: KEYS.p,
+        type: KEYS.p
       },
-      { children: [{ text: 'Todo child' }], id: 'todo-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Todo child' }],
+        id: 'todo-child',
+        indent: 1,
+        type: KEYS.p
+      },
       {
         children: [{ text: 'Status' }],
         id: 'status',
         tanaFieldDefinition: { type: 'plain' },
-        type: KEYS.p,
-      },
+        type: KEYS.p
+      }
     ];
     const editor = createPlateEditor({
       plugins: EditorKit,
-      value: structuredClone(collapsibleOutliner),
+      value: structuredClone(collapsibleOutliner)
     });
 
-    editor
-      .getApi(TogglePlugin)
-      .toggle.toggleIds(['heading', 'quote', 'todo'], true);
+    editor.getApi(TogglePlugin).toggle.toggleIds(['heading', 'quote', 'todo'], true);
 
     let openIds = editor.getOptions(TogglePlugin).openIds ?? new Set<string>();
 
@@ -477,8 +611,12 @@ describe('Tana outliner behavior', () => {
   test('leaves an existing Plate Toggle presentation untouched', () => {
     assert.deepEqual(
       getTanaParentPaths([
-        { children: [{ text: 'Toggle parent' }], id: 'toggle', type: KEYS.toggle },
-        { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p },
+        {
+          children: [{ text: 'Toggle parent' }],
+          id: 'toggle',
+          type: KEYS.toggle
+        },
+        { children: [{ text: 'Child' }], id: 'child', indent: 1, type: KEYS.p }
       ]),
       [[0]]
     );
@@ -491,50 +629,24 @@ describe('Tana outliner behavior', () => {
         children: [{ text: 'B' }],
         id: 'b',
         indent: 1,
-        type: KEYS.blockquote,
+        type: KEYS.blockquote
       },
       { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
       { children: [{ text: 'D' }], id: 'd', indent: 1, type: KEYS.p },
-      { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
+      { children: [{ text: 'E' }], id: 'e', type: KEYS.p }
     ];
     const originalDocument = structuredClone(zoomOutliner);
-    const ids = (paths: number[][]) =>
-      paths.map((path) => zoomOutliner[path[0]].id);
+    const ids = (paths: number[][]) => paths.map((path) => zoomOutliner[path[0]].id);
 
     assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, 'b')), ['b', 'c']);
     assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, 'c')), ['c']);
     assert.deepEqual(getTanaAncestorPaths(zoomOutliner, [2]), [[0], [1]]);
-    assert.equal(
-      zoomOutliner[
-        getTanaAncestorPaths(zoomOutliner, [2]).at(-1)?.[0] ?? -1
-      ]?.id,
-      'b'
-    );
-    assert.equal(
-      isTanaNodeInteractable(zoomOutliner, [0], new Set(['a', 'b']), 'b'),
-      false
-    );
-    assert.equal(
-      isTanaNodeInteractable(zoomOutliner, [1], new Set(['a', 'b']), 'b'),
-      true
-    );
-    assert.equal(
-      isTanaNodeInteractable(zoomOutliner, [2], new Set(['a', 'b']), 'b'),
-      true
-    );
-    assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, 'a')), [
-      'a',
-      'b',
-      'c',
-      'd',
-    ]);
-    assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, null)), [
-      'a',
-      'b',
-      'c',
-      'd',
-      'e',
-    ]);
+    assert.equal(zoomOutliner[getTanaAncestorPaths(zoomOutliner, [2]).at(-1)?.[0] ?? -1]?.id, 'b');
+    assert.equal(isTanaNodeInteractable(zoomOutliner, [0], new Set(['a', 'b']), 'b'), false);
+    assert.equal(isTanaNodeInteractable(zoomOutliner, [1], new Set(['a', 'b']), 'b'), true);
+    assert.equal(isTanaNodeInteractable(zoomOutliner, [2], new Set(['a', 'b']), 'b'), true);
+    assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, 'a')), ['a', 'b', 'c', 'd']);
+    assert.deepEqual(ids(getTanaZoomRange(zoomOutliner, null)), ['a', 'b', 'c', 'd', 'e']);
     assert.deepEqual(getTanaZoomRange(zoomOutliner, 'missing-node'), []);
     assert.deepEqual(zoomOutliner, originalDocument);
     assert.equal(zoomOutliner[1].id, 'b');
@@ -552,9 +664,9 @@ describe('Tana outliner behavior', () => {
           children: [{ text: 'C' }],
           id: 'c',
           indent: 2,
-          type: KEYS.blockquote,
-        },
-      ],
+          type: KEYS.blockquote
+        }
+      ]
     });
     const originalDocument = structuredClone(editor.children);
     const selectionBeforeZoom = structuredClone(editor.selection);
@@ -583,8 +695,8 @@ describe('Tana outliner behavior', () => {
         { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
         { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
         { children: [{ text: 'D' }], id: 'd', indent: 1, type: KEYS.p },
-        { children: [{ text: 'E' }], id: 'e', type: KEYS.p },
-      ],
+        { children: [{ text: 'E' }], id: 'e', type: KEYS.p }
+      ]
     });
     const blockSelection = editor.getApi(BlockSelectionPlugin).blockSelection;
 
@@ -612,7 +724,7 @@ describe('Tana outliner behavior', () => {
         dragEntry: eEntry,
         dragItem: { editorId: editor.id, element: eEntry[0], id: 'e' },
         dropEntry: bEntry,
-        editor,
+        editor
       }),
       false
     );
@@ -623,8 +735,8 @@ describe('Tana outliner behavior', () => {
       plugins: [TanaZoomPlugin, TogglePlugin, ...BlockSelectionKit],
       value: [
         { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
-        { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
-      ],
+        { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p }
+      ]
     });
 
     assert.equal(zoomToTanaNode(editor, 'b'), true);
@@ -642,8 +754,8 @@ describe('Tana outliner behavior', () => {
       value: [
         { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
         { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
-        { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p },
-      ],
+        { children: [{ text: 'C' }], id: 'c', indent: 2, type: KEYS.p }
+      ]
     });
     const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
 
@@ -665,7 +777,7 @@ describe('Tana outliner behavior', () => {
     const editor = createPlateEditor({
       nodeId: {
         filter: isTanaNodeElement,
-        initialValueIds: 'always',
+        initialValueIds: 'always'
       },
       plugins: EditorKit,
       value: [
@@ -673,7 +785,7 @@ describe('Tana outliner behavior', () => {
           children: [{ text: 'Project tag' }],
           id: 'project-tag',
           tanaSupertagDefinition: {},
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [
@@ -681,25 +793,25 @@ describe('Tana outliner behavior', () => {
             {
               children: [{ text: '' }],
               key: 'project-tag',
-              type: 'tana_supertag',
-            },
+              type: 'tana_supertag'
+            }
           ],
           id: 'project',
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: '' }],
           id: 'project-status',
           indent: 1,
           tanaFieldId: 'status',
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: 'Active' }],
           id: 'project-status-value',
           indent: 2,
           tanaFieldValueType: 'plain',
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [
@@ -707,25 +819,25 @@ describe('Tana outliner behavior', () => {
             {
               children: [{ text: '' }],
               key: 'project',
-              type: KEYS.mention,
-            },
+              type: KEYS.mention
+            }
           ],
           id: 'task',
-          type: KEYS.p,
+          type: KEYS.p
         },
         {
           children: [{ text: 'Status' }],
           id: 'status',
           tanaFieldDefinition: { type: 'plain' },
-          type: KEYS.p,
-        },
-      ],
+          type: KEYS.p
+        }
+      ]
     });
     const transitions = [
       { type: KEYS.h1 },
       { type: KEYS.blockquote },
       { [KEYS.listType]: KEYS.listTodo, type: KEYS.p },
-      { type: KEYS.toggle },
+      { type: KEYS.toggle }
     ];
 
     for (const props of transitions) {
@@ -736,16 +848,17 @@ describe('Tana outliner behavior', () => {
 
       assert.equal(project.id, 'project');
       assert.equal(index.nodesById.get('project')?.id, 'project');
-      assert.deepEqual(index.fieldValues.get('project'), new Map([
-        ['status', { type: 'plain', value: 'Active' }],
-      ]));
+      assert.deepEqual(
+        index.fieldValues.get('project'),
+        new Map([['status', { type: 'plain', value: 'Active' }]])
+      );
       assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project']);
       assert.deepEqual(index.backlinks.get('project'), [
         {
           path: [4, 1],
           sourceNodeId: 'task',
-          targetNodeId: 'project',
-        },
+          targetNodeId: 'project'
+        }
       ]);
       assert.equal(
         getNodeReferenceCandidatesFromIndex(buildTanaIndex(editor.children)).some(

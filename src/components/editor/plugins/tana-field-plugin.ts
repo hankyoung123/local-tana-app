@@ -1,6 +1,7 @@
 import { ElementApi, KEYS } from 'platejs';
 import type { Descendant, NodeEntry, Path } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
+import { BlockSelectionPlugin } from '@platejs/selection/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
@@ -10,7 +11,7 @@ import {
   isTanaFieldHostNode,
   isFieldValueValid,
   isSupertagFieldInputNode,
-  getSupertagFieldInputParentId,
+  getSupertagFieldInputParentId
 } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
@@ -18,21 +19,19 @@ import {
   getTanaNodeDescendantPaths,
   getTanaDirectChildPaths,
   getTanaNodePath,
-  getTanaParentPath,
+  getTanaParentPath
 } from '@/lib/tana/outliner';
 import type {
   FieldDefinition,
   FieldValue,
   NodeId,
   TanaBlockElement,
-  TanaFieldNode,
+  TanaFieldNode
 } from '@/lib/tana/types';
 
 export const TANA_FIELD_PLUGIN_KEY = 'tanaField' as const;
 
-export type FieldInputChoice =
-  | { fieldId: NodeId }
-  | { name: string; type: 'create' };
+export type FieldInputChoice = { fieldId: NodeId } | { name: string; type: 'create' };
 
 type FieldStructureEntry = NodeEntry<TanaBlockElement> & {
   0: TanaBlockElement;
@@ -47,17 +46,13 @@ type FieldStructureEntry = NodeEntry<TanaBlockElement> & {
 function getActiveFieldStructureEntry(editor: PlateEditor): FieldStructureEntry | undefined {
   const entry = editor.api.block();
 
-  if (
-    !entry ||
-    !ElementApi.isElement(entry[0]) ||
-    !isTanaNodeElement(entry)
-  ) {
+  if (!entry || !ElementApi.isElement(entry[0]) || !isTanaNodeElement(entry)) {
     return;
   }
 
   const semanticTypes = getNodeSemanticTypes(entry[0] as TanaBlockElement, {
     document: editor.children,
-    path: entry[1],
+    path: entry[1]
   });
 
   return semanticTypes.some((semantic) => semantic === 'field' || semantic === 'value')
@@ -79,14 +74,105 @@ function isAtFieldStructureEdge(
     : editor.api.isEnd(selection.anchor, entry[1]);
 }
 
+function selectionCrossesFieldStructure(editor: PlateEditor): boolean {
+  const selection = editor.selection;
+
+  if (!selection || !editor.api.isExpanded()) return false;
+
+  const start = Math.min(selection.anchor.path[0], selection.focus.path[0]);
+  const end = Math.max(selection.anchor.path[0], selection.focus.path[0]);
+
+  if (start === end) return false;
+
+  return editor.children.slice(start, end + 1).some((node, offset) => {
+    const path = [start + offset];
+
+    return (
+      ElementApi.isElement(node) &&
+      getNodeSemanticTypes(node as TanaBlockElement, {
+        document: editor.children,
+        path
+      }).some((semantic) => semantic === 'field' || semantic === 'value')
+    );
+  });
+}
+
+function getBlockSelectionIds(editor: PlateEditor): ReadonlySet<string> {
+  if (!editor.plugins[BlockSelectionPlugin.key]) return new Set();
+
+  return editor.getOption(BlockSelectionPlugin, 'selectedIds') ?? new Set();
+}
+
+function getDirectFieldPaths(editor: PlateEditor, hostPath: Path): Path[] {
+  return getTanaDirectChildPaths(editor.children, hostPath).filter((path) => {
+    const node = editor.api.node(path)?.[0] as TanaBlockElement | undefined;
+
+    return typeof node?.tanaFieldId === 'string';
+  });
+}
+
+function addFieldSubtreeIds(editor: PlateEditor, fieldPath: Path, targetIds: Set<string>) {
+  [fieldPath, ...getTanaNodeDescendantPaths(editor.children, fieldPath)].forEach((path) => {
+    const node = editor.api.node(path)?.[0] as TanaBlockElement | undefined;
+
+    if (typeof node?.id === 'string') targetIds.add(node.id);
+  });
+}
+
+/**
+ * Plate Block Selection stays the selection owner. This derives the smallest
+ * deletion closure that never removes a Value without its Field, or a Field
+ * without its Value. A selected Value alone is left intact; a selected Field
+ * (or its selected Host) removes the complete Field subtree.
+ */
+function getBlockSelectionRemovalIds(editor: PlateEditor) {
+  const selectedIds = getBlockSelectionIds(editor);
+  const removalIds = new Set(selectedIds);
+
+  for (const nodeId of selectedIds) {
+    const entry = getTanaNodeEntry(editor, nodeId);
+
+    if (!entry) continue;
+
+    const [node, path] = entry;
+    const semantics = getNodeSemanticTypes(node, {
+      document: editor.children,
+      path
+    });
+
+    if (semantics.includes('value')) {
+      const ownerPath = getTanaParentPath(editor.children, path);
+      const ownerId = ownerPath
+        ? (editor.api.node(ownerPath)?.[0] as TanaBlockElement | undefined)?.id
+        : undefined;
+
+      if (typeof ownerId !== 'string' || !selectedIds.has(ownerId)) {
+        removalIds.delete(nodeId);
+      }
+      continue;
+    }
+
+    if (semantics.includes('field')) {
+      addFieldSubtreeIds(editor, path, removalIds);
+      continue;
+    }
+
+    if (isTanaFieldHostNode(editor.children, path)) {
+      getDirectFieldPaths(editor, path).forEach((fieldPath) =>
+        addFieldSubtreeIds(editor, fieldPath, removalIds)
+      );
+    }
+  }
+
+  return removalIds;
+}
+
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
 
   if (!entry || !ElementApi.isElement(entry[0])) return;
 
-  return isTanaNodeElement(entry)
-    ? (entry as NodeEntry<TanaBlockElement>)
-    : undefined;
+  return isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
 }
 
 function getDirectChildEntry(
@@ -99,9 +185,7 @@ function getDirectChildEntry(
 
   const entry = editor.api.node(directChildPath);
 
-  return entry && isTanaNodeElement(entry)
-    ? (entry as NodeEntry<TanaBlockElement>)
-    : undefined;
+  return entry && isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
 }
 
 function createValueChildren(value?: FieldValue): Descendant[] {
@@ -112,8 +196,8 @@ function createValueChildren(value?: FieldValue): Descendant[] {
       {
         children: [{ text: '' }],
         key: value.value,
-        type: KEYS.mention,
-      },
+        type: KEYS.mention
+      }
     ];
   }
 
@@ -129,14 +213,13 @@ function createValueNode(
   return editor.api.create.block({
     children: createValueChildren(value),
     indent,
-    tanaFieldValueType: definition.type,
+    tanaFieldValueType: definition.type
   });
 }
 
 function getFieldInsertionPath(editor: PlateEditor, parentPath: Path): Path {
   const parentEntry = editor.api.node(parentPath) as NodeEntry<TanaBlockElement>;
-  const parentIndent =
-    typeof parentEntry[0].indent === 'number' ? parentEntry[0].indent : 0;
+  const parentIndent = typeof parentEntry[0].indent === 'number' ? parentEntry[0].indent : 0;
   let insertionIndex = parentPath[0] + 1;
 
   for (let index = parentPath[0] + 1; index < editor.children.length; index += 1) {
@@ -171,11 +254,7 @@ function getFieldNode(
     ?.find((fieldNode) => fieldNode.fieldId === fieldId);
 }
 
-function getFieldNodeEntry(
-  editor: PlateEditor,
-  parentNodeId: NodeId,
-  fieldId: NodeId
-) {
+function getFieldNodeEntry(editor: PlateEditor, parentNodeId: NodeId, fieldId: NodeId) {
   const fieldNode = getFieldNode(editor, parentNodeId, fieldId);
 
   return fieldNode ? getTanaNodeEntry(editor, fieldNode.id) : undefined;
@@ -191,7 +270,7 @@ function insertValueChild(
   const indent = typeof fieldNode.indent === 'number' ? fieldNode.indent + 1 : 1;
 
   editor.tf.insertNodes(createValueNode(editor, indent, definition, value), {
-    at: [fieldPath[0] + 1],
+    at: [fieldPath[0] + 1]
   });
 
   return getDirectChildEntry(editor, fieldPath);
@@ -226,18 +305,16 @@ function materialize(
       editor.api.create.block({
         children: [{ text: '' }],
         indent: parentIndent + 1,
-        tanaFieldId: fieldId,
+        tanaFieldId: fieldId
       }),
-      createValueNode(editor, parentIndent + 2, definition),
+      createValueNode(editor, parentIndent + 2, definition)
     ],
     { at: insertionPath }
   );
 
   const occurrence = editor.api.node(insertionPath);
 
-  return occurrence &&
-    isTanaNodeElement(occurrence) &&
-    typeof occurrence[0].id === 'string'
+  return occurrence && isTanaNodeElement(occurrence) && typeof occurrence[0].id === 'string'
     ? occurrence[0].id
     : undefined;
 }
@@ -262,16 +339,12 @@ function writeValue(
   ) {
     return false;
   }
-  if (
-    value !== undefined &&
-    !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)
-  ) {
+  if (value !== undefined && !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)) {
     return false;
   }
 
   const valueEntry =
-    getDirectChildEntry(editor, fieldEntry[1]) ??
-    insertValueChild(editor, fieldEntry, definition);
+    getDirectChildEntry(editor, fieldEntry[1]) ?? insertValueChild(editor, fieldEntry, definition);
 
   if (!valueEntry) return false;
 
@@ -287,7 +360,7 @@ function writeValue(
       {
         ...valueNode,
         children: createValueChildren(value),
-        tanaFieldValueType: definition.type,
+        tanaFieldValueType: definition.type
       },
       { at: valuePath }
     );
@@ -296,22 +369,12 @@ function writeValue(
   return true;
 }
 
-function setValue(
-  editor: PlateEditor,
-  nodeId: NodeId,
-  fieldId: NodeId,
-  value: FieldValue
-) {
+function setValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: FieldValue) {
   return writeValue(editor, nodeId, fieldId, value);
 }
 
 /** Applies a valid template default only when the real Field Node is unset. */
-function applyDefault(
-  editor: PlateEditor,
-  nodeId: NodeId,
-  fieldId: NodeId,
-  value: FieldValue
-) {
+function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: FieldValue) {
   const index = buildTanaIndex(editor.children);
   if (!isFieldValueValid(index, fieldId, value)) return false;
 
@@ -367,25 +430,19 @@ function createDefinition(
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
-      tanaFieldDefinition: definition,
+      tanaFieldDefinition: definition
     }),
     { at: path }
   );
 
   const entry = editor.api.node(path);
 
-  return entry &&
-    isTanaNodeElement(entry) &&
-    typeof entry[0].id === 'string'
+  return entry && isTanaNodeElement(entry) && typeof entry[0].id === 'string'
     ? entry[0].id
     : undefined;
 }
 
-function updateDefinition(
-  editor: PlateEditor,
-  fieldId: NodeId,
-  definition: FieldDefinition
-) {
+function updateDefinition(editor: PlateEditor, fieldId: NodeId, definition: FieldDefinition) {
   const entry = getTanaNodeEntry(editor, fieldId);
 
   if (!entry?.[0].tanaFieldDefinition) return false;
@@ -410,16 +467,14 @@ function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
-      indent: parentIndent + 1,
+      indent: parentIndent + 1
     }),
     { at: path }
   );
 
   const optionEntry = editor.api.node(path);
 
-  return optionEntry &&
-    isTanaNodeElement(optionEntry) &&
-    typeof optionEntry[0].id === 'string'
+  return optionEntry && isTanaNodeElement(optionEntry) && typeof optionEntry[0].id === 'string'
     ? optionEntry[0].id
     : undefined;
 }
@@ -435,10 +490,7 @@ function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
   const optionPath = getTanaNodePath(editor.children, optionId);
   const [, fieldPath] = fieldEntry;
 
-  if (
-    !optionPath ||
-    getTanaParentPath(editor.children, optionPath)?.[0] !== fieldPath[0]
-  ) {
+  if (!optionPath || getTanaParentPath(editor.children, optionPath)?.[0] !== fieldPath[0]) {
     return false;
   }
 
@@ -469,25 +521,22 @@ function materializeInputNode(
     return;
   }
 
-  const inputIndent =
-    typeof inputEntry[0].indent === 'number' ? inputEntry[0].indent : 0;
+  const inputIndent = typeof inputEntry[0].indent === 'number' ? inputEntry[0].indent : 0;
 
   editor.tf.setNodes(
     {
       children: [{ text: '' }],
-      tanaFieldId: fieldId,
+      tanaFieldId: fieldId
     },
     { at: inputPath }
   );
   editor.tf.insertNodes(createValueNode(editor, inputIndent + 1, definition), {
-    at: [inputPath[0] + 1],
+    at: [inputPath[0] + 1]
   });
 
   const fieldEntry = editor.api.node(inputPath);
 
-  return fieldEntry &&
-    isTanaNodeElement(fieldEntry) &&
-    typeof fieldEntry[0].id === 'string'
+  return fieldEntry && isTanaNodeElement(fieldEntry) && typeof fieldEntry[0].id === 'string'
     ? fieldEntry[0].id
     : undefined;
 }
@@ -511,8 +560,8 @@ function completeTemplateInput(
   const fieldId =
     'fieldId' in choice
       ? choice.fieldId
-      : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)
-          ?.id ?? createDefinition(editor, choice.name, { type: 'plain' }));
+      : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)?.id ??
+        createDefinition(editor, choice.name, { type: 'plain' }));
 
   if (!fieldId) return;
 
@@ -537,18 +586,14 @@ function completeTemplateInput(
       focus: true,
       scroll: true,
       select: point,
-      target: { path: supertagPath, type: 'node' },
+      target: { path: supertagPath, type: 'node' }
     });
   }
 
   return fieldId;
 }
 
-function completeAdHocInput(
-  editor: PlateEditor,
-  nodeId: NodeId,
-  choice: FieldInputChoice
-) {
+function completeAdHocInput(editor: PlateEditor, nodeId: NodeId, choice: FieldInputChoice) {
   const nodePath = getTanaNodePath(editor.children, nodeId);
 
   if (!nodePath || !isAdHocFieldInputNode(editor.children, nodePath)) return;
@@ -574,64 +619,141 @@ function completeAdHocInput(
 
 /** Owns all document writes for Field definitions, occurrences, and values. */
 export const TanaFieldPlugin = createPlatePlugin({
-  key: TANA_FIELD_PLUGIN_KEY,
-}).extendEditorTransforms(({ editor }) => ({
-  field: {
-    applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
-      applyDefault(editor, nodeId, fieldId, value),
-    clearValue: (nodeId: NodeId, fieldId: NodeId) =>
-      clearValue(editor, nodeId, fieldId),
-    completeAdHocInput: (nodeId: NodeId, choice: FieldInputChoice) =>
-      completeAdHocInput(editor, nodeId, choice),
-    completeTemplateInput: (
-      temporaryNodeId: NodeId,
-      supertagId: NodeId,
-      choice: FieldInputChoice
-    ) => completeTemplateInput(editor, temporaryNodeId, supertagId, choice),
-    createDefinition: (name: string, definition: FieldDefinition) =>
-      createDefinition(editor, name, definition),
-    createOption: (fieldId: NodeId, name: string) =>
-      createOption(editor, fieldId, name),
-    deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) =>
-      deleteAdHoc(editor, nodeId, fieldId),
-    materialize: (nodeId: NodeId, fieldId: NodeId) =>
-      materialize(editor, nodeId, fieldId),
-    removeOption: (fieldId: NodeId, optionId: NodeId) =>
-      removeOption(editor, fieldId, optionId),
-    setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
-      setValue(editor, nodeId, fieldId, value),
-    updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
-      updateDefinition(editor, fieldId, definition),
-  },
-})).overrideEditor(({ editor, tf: { deleteBackward, deleteForward, insertBreak, tab } }) => ({
-  transforms: {
-    deleteBackward(unit) {
-      const entry = getActiveFieldStructureEntry(editor);
+  key: TANA_FIELD_PLUGIN_KEY
+})
+  .extendEditorTransforms(({ editor }) => ({
+    field: {
+      applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
+        applyDefault(editor, nodeId, fieldId, value),
+      clearValue: (nodeId: NodeId, fieldId: NodeId) => clearValue(editor, nodeId, fieldId),
+      completeAdHocInput: (nodeId: NodeId, choice: FieldInputChoice) =>
+        completeAdHocInput(editor, nodeId, choice),
+      completeTemplateInput: (
+        temporaryNodeId: NodeId,
+        supertagId: NodeId,
+        choice: FieldInputChoice
+      ) => completeTemplateInput(editor, temporaryNodeId, supertagId, choice),
+      createDefinition: (name: string, definition: FieldDefinition) =>
+        createDefinition(editor, name, definition),
+      createOption: (fieldId: NodeId, name: string) => createOption(editor, fieldId, name),
+      deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) => deleteAdHoc(editor, nodeId, fieldId),
+      materialize: (nodeId: NodeId, fieldId: NodeId) => materialize(editor, nodeId, fieldId),
+      removeOption: (fieldId: NodeId, optionId: NodeId) => removeOption(editor, fieldId, optionId),
+      setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
+        setValue(editor, nodeId, fieldId, value),
+      updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
+        updateDefinition(editor, fieldId, definition)
+    }
+  }))
+  .overrideEditor(
+    ({
+      editor,
+      tf: { deleteBackward, deleteForward, deleteFragment, insertBreak, removeNodes, tab }
+    }) => {
+      const removeFieldSubtree = (fieldPath: Path) => {
+        getTanaNodeDescendantPaths(editor.children, fieldPath)
+          .reverse()
+          .forEach((path) => removeNodes({ at: path }));
+        removeNodes({ at: fieldPath });
+      };
 
-      if (entry && isAtFieldStructureEdge(editor, entry, 'start')) return;
+      return {
+        transforms: {
+          deleteBackward(unit) {
+            const entry = getActiveFieldStructureEntry(editor);
 
-      return deleteBackward(unit);
-    },
-    deleteForward(unit) {
-      const entry = getActiveFieldStructureEntry(editor);
+            if (selectionCrossesFieldStructure(editor)) return;
+            if (entry && isAtFieldStructureEdge(editor, entry, 'start')) return;
 
-      if (entry && isAtFieldStructureEdge(editor, entry, 'end')) return;
+            return deleteBackward(unit);
+          },
+          deleteForward(unit) {
+            const entry = getActiveFieldStructureEntry(editor);
 
-      return deleteForward(unit);
-    },
-    insertBreak() {
-      // A Field cannot split, and a Value must stay its Field's only direct
-      // Value child. Text editing remains available through insertText.
-      if (getActiveFieldStructureEntry(editor)) return;
+            if (selectionCrossesFieldStructure(editor)) return;
+            if (entry && isAtFieldStructureEdge(editor, entry, 'end')) return;
 
-      return insertBreak();
-    },
-    tab(options) {
-      // Plate owns Tab/Shift+Tab. Claim the shortcut only for Field structure
-      // so neither a Field nor its Value can move independently.
-      if (getActiveFieldStructureEntry(editor)) return true;
+            return deleteForward(unit);
+          },
+          deleteFragment(options) {
+            if (selectionCrossesFieldStructure(editor)) return;
 
-      return tab(options);
-    },
-  },
-}));
+            return deleteFragment(options);
+          },
+          insertBreak() {
+            // A Field cannot split, and a Value must stay its Field's only direct
+            // Value child. Text editing remains available through insertText.
+            if (getActiveFieldStructureEntry(editor)) return;
+
+            return insertBreak();
+          },
+          tab(options) {
+            // Plate owns Tab/Shift+Tab. Claim the shortcut only for Field structure
+            // so neither a Field nor its Value can move independently.
+            if (getActiveFieldStructureEntry(editor)) return true;
+
+            return tab(options);
+          },
+          removeNodes(options = {}) {
+            const selectedIds = getBlockSelectionIds(editor);
+
+            if (selectedIds.size === 0) return removeNodes(options);
+
+            const at = Array.isArray(options.at) ? options.at : undefined;
+
+            // Plate's public BlockSelection transform removes an id-matched set at
+            // the root. Expand that set before Plate applies the removal, in one
+            // normalizing transaction, so Integrity never observes a half subtree.
+            if (at?.length === 0 && options.block === true && typeof options.match === 'function') {
+              const removalIds = getBlockSelectionRemovalIds(editor);
+
+              return editor.tf.withoutNormalizing(() =>
+                removeNodes({
+                  ...options,
+                  match: (node) => typeof node.id === 'string' && removalIds.has(node.id)
+                })
+              );
+            }
+
+            if (!at || at.length !== 1) return removeNodes(options);
+
+            const entry = editor.api.node(at);
+
+            if (
+              !entry ||
+              !ElementApi.isElement(entry[0]) ||
+              typeof entry[0].id !== 'string' ||
+              !selectedIds.has(entry[0].id)
+            ) {
+              return removeNodes(options);
+            }
+
+            const [node, path] = entry as NodeEntry<TanaBlockElement>;
+            const semantics = getNodeSemanticTypes(node, {
+              document: editor.children,
+              path
+            });
+
+            if (semantics.includes('value')) {
+              // A Value selected without its Field is not an independently deletable
+              // block. If the Field is also selected, its removal handles this Value.
+              return;
+            }
+
+            if (semantics.includes('field')) {
+              return editor.tf.withoutNormalizing(() => removeFieldSubtree(path));
+            }
+
+            if (isTanaFieldHostNode(editor.children, path)) {
+              return editor.tf.withoutNormalizing(() => {
+                getDirectFieldPaths(editor, path).reverse().forEach(removeFieldSubtree);
+                removeNodes(options);
+              });
+            }
+
+            return removeNodes(options);
+          }
+        }
+      };
+    }
+  );

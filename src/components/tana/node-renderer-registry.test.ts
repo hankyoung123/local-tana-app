@@ -3,10 +3,7 @@ import { describe, test } from 'node:test';
 
 import { KEYS } from 'platejs';
 
-import {
-  getNodeSemanticType,
-  TANA_NODE_SEMANTIC_TYPES,
-} from '@/lib/tana/node-semantic';
+import { getNodeSemanticType, TANA_NODE_SEMANTIC_TYPES } from '@/lib/tana/node-semantic';
 
 import { getNodeRenderer, NodeRendererRegistry } from './node-renderer-registry';
 
@@ -22,8 +19,8 @@ describe('Node renderer registry', () => {
     assert.ok(NodeRendererRegistry.value.Block);
   });
 
-  test('renders a Supertag Definition through its derived instance page', () => {
-    assert.notEqual(
+  test('renders a Supertag Definition through its editable outline', () => {
+    assert.equal(
       NodeRendererRegistry['supertag-definition'].Workspace,
       NodeRendererRegistry.content.Workspace
     );
@@ -35,7 +32,7 @@ describe('Node renderer registry', () => {
       children: [{ text: 'Project view' }],
       tanaSupertagDefinition: {},
       tanaViewDefinition: { clauses: [] },
-      type: KEYS.p,
+      type: KEYS.p
     };
 
     assert.equal(getNodeSemanticType(node), 'view');

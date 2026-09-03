@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  ArrowUpRightIcon,
-  EyeOffIcon,
-  HashIcon,
-  ListFilterIcon,
-  SlidersHorizontalIcon,
-  XIcon,
-} from 'lucide-react';
+import { EyeOffIcon, HashIcon, ListFilterIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import type { TElement } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
@@ -20,15 +13,9 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from '@/components/ui/select';
-import type {
-  FieldValue,
-  NodeId,
-  TanaIndex,
-  TanaNode,
-  TanaNodeSemanticType,
-} from '@/lib/tana';
+import type { FieldValue, NodeId, TanaIndex, TanaNode, TanaNodeSemanticType } from '@/lib/tana';
 import { getFieldValueCandidates } from '@/lib/tana';
 
 import { OutlineNodeView } from './outline-node-view';
@@ -51,13 +38,7 @@ export type TanaNodeRenderer = {
   Workspace: React.ComponentType<TanaNodeWorkspaceRendererProps>;
 };
 
-function NodeSemanticHint({
-  icon,
-  label,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-}) {
+function NodeSemanticHint({ icon, label }: { icon?: React.ReactNode; label: string }) {
   return (
     <span
       aria-hidden="true"
@@ -71,9 +52,11 @@ function NodeSemanticHint({
 }
 
 function FieldDefinitionHint({ element }: TanaNodeBlockRendererProps) {
-  const definition = (element as TElement & {
-    tanaFieldDefinition?: { type?: string };
-  }).tanaFieldDefinition;
+  const definition = (
+    element as TElement & {
+      tanaFieldDefinition?: { type?: string };
+    }
+  ).tanaFieldDefinition;
 
   return (
     <NodeSemanticHint
@@ -91,16 +74,8 @@ function ViewHint() {
   return <NodeSemanticHint icon={<ListFilterIcon />} label="视图" />;
 }
 
-function OutlineRenderer({
-  focusedNodeId,
-  selectedNodeId,
-}: TanaNodeWorkspaceRendererProps) {
-  return (
-    <OutlineNodeView
-      focusedNodeId={focusedNodeId}
-      selectedNodeId={selectedNodeId}
-    />
-  );
+function OutlineRenderer({ focusedNodeId, selectedNodeId }: TanaNodeWorkspaceRendererProps) {
+  return <OutlineNodeView focusedNodeId={focusedNodeId} selectedNodeId={selectedNodeId} />;
 }
 
 function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps) {
@@ -111,61 +86,11 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
   );
 }
 
-/** A Supertag Definition defaults to its derived instance list, not its outline. */
-function SupertagInstancesRenderer({
-  index,
-  node,
-}: TanaNodeWorkspaceRendererProps) {
-  const editor = useEditorRef();
-
-  if (!node) return <OutlineRenderer focusedNodeId={null} index={index} selectedNodeId={null} />;
-
-  const instanceIds = index.nodesBySupertag.get(node.id) ?? [];
-
-  return (
-    <section className="min-w-0 flex-1 overflow-y-auto bg-white px-8 pt-10 pb-40 sm:px-[max(64px,calc(50%-374px))]">
-      <p className="text-[#7b827d] text-xs">超级标签</p>
-      <h1 className="mt-1 font-semibold text-2xl text-[#242a26]">#{node.text || '未命名超级标签'}</h1>
-      <p className="mt-2 text-[#7b827d] text-sm">实例 · {instanceIds.length}</p>
-
-      {instanceIds.length === 0 ? (
-        <p className="mt-8 text-[#7b827d] text-sm">暂无实例。</p>
-      ) : (
-        <div className="mt-6 space-y-1">
-          {instanceIds.map((instanceId) => {
-            const instance = index.nodesById.get(instanceId);
-
-            if (!instance) return null;
-
-            return (
-              <button
-                key={instance.id}
-                className="group flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-[#f1f5f2]"
-                type="button"
-                onClick={() =>
-                  editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
-                }
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {instance.text || '未命名节点'}
-                </span>
-                <ArrowUpRightIcon className="size-3.5 shrink-0 text-[#9aa19d] opacity-0 transition-opacity group-hover:opacity-100" />
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 /** Field occurrence labels are derived from their Field Definition Node. */
 function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const editor = useEditorRef();
   const fieldNodeId = typeof element.id === 'string' ? element.id : undefined;
-  const fieldNode = fieldNodeId
-    ? index.fieldNodesById.get(fieldNodeId)
-    : undefined;
+  const fieldNode = fieldNodeId ? index.fieldNodesById.get(fieldNodeId) : undefined;
   const fieldId = fieldNode?.fieldId;
 
   if (!fieldNode || typeof fieldId !== 'string') return null;
@@ -199,13 +124,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-white/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
         <FieldAction
           label="在正文中隐藏"
-          onClick={() =>
-            presentation.setFieldVisible(
-              fieldNode.parentNodeId,
-              fieldNode.id,
-              false
-            )
-          }
+          onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
         >
           <EyeOffIcon />
         </FieldAction>
@@ -217,7 +136,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
 function FieldAction({
   children,
   label,
-  onClick,
+  onClick
 }: {
   children: React.ReactNode;
   label: string;
@@ -265,8 +184,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const setValue = (value: FieldValue) =>
     fieldTransforms.setValue(fieldNode.parentNodeId, fieldNode.fieldId, value);
-  const clearValue = () =>
-    fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
+  const clearValue = () => fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
 
   if (definition.type === 'plain' || definition.type === 'number') {
     const text = fieldNode.valueNodeId
@@ -277,8 +195,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   }
 
   if (definition.type === 'checkbox') {
-    const value =
-      fieldNode.value?.type === 'checkbox' ? fieldNode.value.value : undefined;
+    const value = fieldNode.value?.type === 'checkbox' ? fieldNode.value.value : undefined;
 
     return (
       <ValueControl>
@@ -335,7 +252,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         onValueChange={(value) =>
           setValue({
             type: definition.type,
-            value,
+            value
           } as Extract<FieldValue, { type: 'from-supertag' | 'options' }>)
         }
       >
@@ -347,9 +264,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         </SelectTrigger>
         <SelectContent align="start">
           {candidates.length === 0 ? (
-            <div className="px-2 py-2 text-muted-foreground text-xs">
-              暂无可选节点
-            </div>
+            <div className="px-2 py-2 text-muted-foreground text-xs">暂无可选节点</div>
           ) : (
             candidates.map((candidate) => (
               <SelectItem key={candidate.id} value={candidate.id}>
@@ -358,9 +273,9 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
             ))
           )}
         </SelectContent>
-        </Select>
-        {currentValue && <ValueClearButton onClear={clearValue} />}
-      </ValueControl>
+      </Select>
+      {currentValue && <ValueClearButton onClear={clearValue} />}
+    </ValueControl>
   );
 }
 
@@ -414,23 +329,20 @@ function UnsetValuePlaceholder() {
  * The registry selects presentation only. It owns neither document mutation
  * nor editor interaction state; both remain in Plate and semantic plugins.
  */
-export const NodeRendererRegistry: Record<
-  TanaNodeSemanticType,
-  TanaNodeRenderer
-> = {
+export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer> = {
   content: { Workspace: OutlineRenderer },
   'field-definition': {
     Block: FieldDefinitionHint,
-    Workspace: OutlineRenderer,
+    Workspace: OutlineRenderer
   },
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
   option: { Workspace: OutlineRenderer },
   'supertag-definition': {
     Block: SupertagHint,
-    Workspace: SupertagInstancesRenderer,
+    Workspace: OutlineRenderer
   },
   value: { Block: ValueRenderer, Workspace: OutlineRenderer },
-  view: { Block: ViewHint, Workspace: ViewRenderer },
+  view: { Block: ViewHint, Workspace: ViewRenderer }
 };
 
 export function getNodeRenderer(semanticType: TanaNodeSemanticType): TanaNodeRenderer {
