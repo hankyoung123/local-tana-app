@@ -59,23 +59,37 @@ function getSystemNodeAtPath(editor: PlateEditor, path: Path | undefined) {
   return entry && isSystemNode(entry[0]) ? (entry as [TanaBlockElement, Path]) : undefined;
 }
 
-function getNodeIndentAtPath(editor: PlateEditor, path: Path): number | undefined {
-  const node = editor.api.node(path)?.[0];
-
-  return ElementApi.isElement(node) && typeof node.indent === 'number'
-    ? node.indent
-    : ElementApi.isElement(node)
-      ? 0
-      : undefined;
-}
-
 function getCurrentBlockPath(editor: PlateEditor): Path | undefined {
   const entry = editor.api.block();
 
   return entry && isTanaNodeElement(entry) ? entry[1] : undefined;
 }
 
+function getPageRootIndent(editor: PlateEditor): number | undefined {
+  const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+  const focusedEntry =
+    typeof focusedNodeId === 'string'
+      ? editor.api.node({ at: [], id: focusedNodeId })
+      : undefined;
+  const workspaceEntry = editor.children.find(
+    (node) =>
+      ElementApi.isElement(node) &&
+      (node as TanaBlockElement).tanaSystemNode === 'workspace'
+  );
+  const root = focusedEntry?.[0] ?? workspaceEntry;
+
+  if (!ElementApi.isElement(root)) return;
+
+  return typeof root.indent === 'number' ? root.indent : 0;
+}
+
 function selectionHasProtectedOutdentNode(editor: PlateEditor): boolean {
+  const pageRootIndent = getPageRootIndent(editor);
+
+  // A missing page boundary is an invalid runtime state. Do not let a Tab
+  // mutation widen that failure into a second root.
+  if (pageRootIndent === undefined) return true;
+
   return Array.from(
     editor.api.nodes({ block: true, mode: 'lowest' })
   ).some(([node, path]) => {
@@ -85,7 +99,7 @@ function selectionHasProtectedOutdentNode(editor: PlateEditor): boolean {
 
     if (isSystemNode(node)) return true;
 
-    return (typeof node.indent === 'number' ? node.indent : 0) <= 1;
+    return (typeof node.indent === 'number' ? node.indent : 0) <= pageRootIndent + 1;
   });
 }
 
@@ -300,18 +314,6 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       }
 
       if (getSystemNodeAtPath(editor, getCurrentBlockPath(editor))) return true;
-
-      const path = getCurrentBlockPath(editor);
-
-      // Keep Workspace as the unique root. Plate owns ordinary indentation,
-      // except that Shift+Tab cannot outdent a non-workspace root child.
-      if (
-        options?.reverse === true &&
-        path &&
-        (getNodeIndentAtPath(editor, path) ?? 0) <= 1
-      ) {
-        return true;
-      }
 
       return tab(options);
     },

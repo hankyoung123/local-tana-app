@@ -8,6 +8,7 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { isTanaNodeElement } from './constants';
 import { initialDocument } from './initial-document';
 import { buildTanaIndex } from './index';
@@ -347,6 +348,33 @@ describe('canonical Tana workspace document', () => {
     assert.equal(editor.tf.tab({ reverse: true }), true);
     assert.equal(editor.children.find((node) => node.id === 'parent')?.indent, 1);
     assert.equal(editor.children.find((node) => node.id === 'child')?.indent, 2);
+  });
+
+  test('uses the focused page root as the multi-selection outdent boundary', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Page' }], id: 'page', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Direct child' }], id: 'direct-child', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Nested child' }], id: 'nested-child', indent: 3, type: KEYS.p },
+    ]);
+
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to('page'), true);
+    editor.tf.select({
+      anchor: { offset: 0, path: [8, 0] },
+      focus: { offset: 12, path: [9, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'direct-child')?.indent, 2);
+    assert.equal(editor.children.find((node) => node.id === 'nested-child')?.indent, 3);
+
+    editor.tf.select({
+      anchor: { offset: 12, path: [9, 0] },
+      focus: { offset: 12, path: [9, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'nested-child')?.indent, 2);
   });
 
   test('rejects an ordinary root outside Workspace at the persistence gate', () => {
