@@ -106,8 +106,7 @@ function hasSystemMergeBoundary(
 
   return (
     neighborIndex >= 0 &&
-    !!getSystemNodeAtPath(editor, neighborPath) &&
-    getNodeIndentAtPath(editor, path) === getNodeIndentAtPath(editor, neighborPath)
+    !!getSystemNodeAtPath(editor, neighborPath)
   );
 }
 
@@ -153,7 +152,10 @@ function removeTargetsSystemNode(
  * presentation, so Enter there deliberately leaves the document unchanged.
  */
 export const TanaNodeIdentityPlugin = createPlatePlugin({
-  key: TANA_NODE_IDENTITY_PLUGIN_KEY
+  key: TANA_NODE_IDENTITY_PLUGIN_KEY,
+  // Run after Plate's indent transform so this narrow root-boundary guard can
+  // decide before Shift+Tab applies its native outdent.
+  priority: 1,
 }).overrideEditor(({
   editor,
   tf: {
@@ -225,9 +227,7 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
         getSystemNodeAtPath(editor, path) ||
         (path &&
           path.length === 1 &&
-          !!getSystemNodeAtPath(editor, [path[0] + (reverse ? 1 : -1)]) &&
-          getNodeIndentAtPath(editor, path) ===
-            getNodeIndentAtPath(editor, [path[0] + (reverse ? 1 : -1)]))
+          !!getSystemNodeAtPath(editor, [path[0] + (reverse ? 1 : -1)]))
       ) {
         return;
       }
@@ -257,6 +257,18 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
     },
     tab(options) {
       if (getSystemNodeAtPath(editor, getCurrentBlockPath(editor))) return true;
+
+      const path = getCurrentBlockPath(editor);
+
+      // Keep Workspace as the unique root. Plate owns ordinary indentation,
+      // except that Shift+Tab cannot outdent a non-workspace root child.
+      if (
+        options?.reverse === true &&
+        path &&
+        (getNodeIndentAtPath(editor, path) ?? 0) <= 1
+      ) {
+        return true;
+      }
 
       return tab(options);
     },

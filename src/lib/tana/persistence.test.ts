@@ -24,7 +24,13 @@ const minimalWorkspace = (): Value => [
   { children: [{ text: 'Trash' }], id: 'ws-trash', indent: 1, tanaSystemNode: 'trash', type: 'p' },
 ];
 
-const withWorkspace = (extra: Value): Value => [...minimalWorkspace(), ...extra];
+const withWorkspace = (extra: Value): Value => [
+  ...minimalWorkspace(),
+  ...extra.map((node) => ({
+    ...node,
+    indent: typeof node.indent === 'number' ? node.indent + 1 : 1,
+  })),
+];
 
 describe('Plate document persistence', () => {
   test('validates Plate structure and Tana node invariants', () => {

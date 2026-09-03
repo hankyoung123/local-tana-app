@@ -253,6 +253,82 @@ describe('canonical Tana workspace document', () => {
     assert.equal(editor.children.find((node) => node.id === 'daily')?.tanaSystemNode, 'daily-notes');
   });
 
+  test('blocks Backspace from a Home child before its system parent', () => {
+    const editor = createEditor([
+      ...minimalWorkspace().slice(0, 2),
+      { children: [{ text: 'First child' }], id: 'first-child', indent: 2, type: KEYS.p },
+      ...minimalWorkspace().slice(2),
+    ]);
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] },
+    });
+    editor.tf.deleteBackward('character');
+
+    assert.equal(editor.children.find((node) => node.id === 'home')?.tanaSystemNode, 'home');
+    assert.equal(editor.children.find((node) => node.id === 'first-child')?.children[0].text, 'First child');
+  });
+
+  test('blocks Delete from a Home child toward the next system Node', () => {
+    const editor = createEditor([
+      ...minimalWorkspace().slice(0, 2),
+      { children: [{ text: 'Last child' }], id: 'last-child', indent: 2, type: KEYS.p },
+      ...minimalWorkspace().slice(2),
+    ]);
+
+    editor.tf.select({
+      anchor: { offset: 10, path: [2, 0] },
+      focus: { offset: 10, path: [2, 0] },
+    });
+    editor.tf.deleteForward('character');
+
+    assert.equal(editor.children.find((node) => node.id === 'last-child')?.children[0].text, 'Last child');
+    assert.equal(editor.children.find((node) => node.id === 'daily')?.tanaSystemNode, 'daily-notes');
+  });
+
+  test('blocks Shift+Tab for an ordinary Workspace direct child', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Root child' }], id: 'root-child', indent: 1, type: KEYS.p },
+    ]);
+    const path = editor.children.findIndex((node) => node.id === 'root-child');
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [path, 0] },
+      focus: { offset: 0, path: [path, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'root-child')?.indent, 1);
+  });
+
+  test('allows Shift+Tab from indent 2 to the Workspace direct-child level', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Nested child' }], id: 'nested-child', indent: 2, type: KEYS.p },
+    ]);
+    const path = editor.children.findIndex((node) => node.id === 'nested-child');
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [path, 0] },
+      focus: { offset: 0, path: [path, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'nested-child')?.indent, 1);
+  });
+
+  test('rejects an ordinary root outside Workspace at the persistence gate', () => {
+    const document: Value = [
+      ...minimalWorkspace(),
+      { children: [{ text: 'Orphan root' }], id: 'orphan-root', type: KEYS.p },
+    ];
+
+    assert.equal(check(document), false);
+    assert.equal(isValidTanaDocument(document), false);
+  });
+
   test('blocks moveNodes for a system Node', () => {
     const editor = createEditor(minimalWorkspace());
     const before = structuredClone(editor.children);

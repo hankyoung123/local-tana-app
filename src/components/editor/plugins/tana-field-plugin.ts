@@ -691,7 +691,10 @@ function completeAdHocInput(editor: PlateEditor, nodeId: NodeId, choice: FieldIn
 
 /** Owns all document writes for Field definitions, occurrences, and values. */
 export const TanaFieldPlugin = createPlatePlugin({
-  key: TANA_FIELD_PLUGIN_KEY
+  key: TANA_FIELD_PLUGIN_KEY,
+  // Field's structural guard wraps Node Identity so block-selection removal
+  // still passes through the latter's system-node boundary.
+  priority: 0,
 })
   .extendEditorTransforms(({ editor }) => ({
     field: {

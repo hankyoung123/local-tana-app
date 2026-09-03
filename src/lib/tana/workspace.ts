@@ -25,6 +25,8 @@ export const CANONICAL_SYSTEM_NODES: readonly TanaSystemNode[] = [
  *
  * - exactly 1 workspace + exactly 1 of each of the six system children
  * - parent(home/daily-notes/schema/library/settings/trash) = workspace
+ * - Workspace is the only root: every other Tana Node reaches it through
+ *   the derived parent chain
  *
  * It never validates title text and never relies on NodeId strings such as
  * `id === 'schema'` — only the `tanaSystemNode` marker counts.
@@ -69,6 +71,23 @@ export function validateWorkspaceStructure(
 
   // Workspace is the single root; it must not be nested under another Node.
   if (index.parentNodeIds.get(workspaceId) !== undefined) return false;
+
+  // A flat document can otherwise contain an ordinary indent-0 Node after
+  // the Workspace subtree. Parentage is derived by the outliner, so validate
+  // that each non-workspace Node has a complete chain back to Workspace.
+  for (const nodeId of index.parentNodeIds.keys()) {
+    if (nodeId === workspaceId) continue;
+
+    const seen = new Set<NodeId>([nodeId]);
+    let ancestorId = index.parentNodeIds.get(nodeId);
+
+    while (ancestorId !== workspaceId) {
+      if (!ancestorId || seen.has(ancestorId)) return false;
+
+      seen.add(ancestorId);
+      ancestorId = index.parentNodeIds.get(ancestorId);
+    }
+  }
 
   for (const child of WORKSPACE_DIRECT_CHILD_SYSTEM_NODES) {
     const childId = ids.get(child);
