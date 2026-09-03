@@ -9,6 +9,7 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import { isFieldValueValid } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { isValidTanaDocument } from '@/lib/tana/persistence';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 import { TanaTimePlugin } from './tana-time-plugin';
 
@@ -65,6 +66,30 @@ describe('Tana time semantics', () => {
     assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), second);
     assert.equal(buildTanaIndex(editor.children).timeNodeIds.get('day:2026-01-02'), second);
     assert.equal(isValidTanaDocument(editor.children), true);
+  });
+
+  test('restores a trashed canonical Day Node to Daily Notes instead of creating a duplicate', () => {
+    const editor = createEditor(workspace());
+    const time = editor.getTransforms(TanaTimePlugin).time;
+    const lifecycle = editor.getTransforms(TanaNodeLifecyclePlugin).node;
+    const day = time.goToDay('2026-01-02');
+
+    assert.ok(day);
+    assert.equal(lifecycle.trash(day), true);
+    assert.equal(buildTanaIndex(editor.children).parentNodeIds.get(day), 'trash');
+    assert.equal(time.goToDay('2026-01-02'), day);
+
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(index.parentNodeIds.get(day), 'daily');
+    assert.equal(index.timeNodeIds.get('day:2026-01-02'), day);
+    assert.equal(
+      editor.children.filter(
+        (node) => (node as { tanaTime?: { value?: string } }).tanaTime?.value === '2026-01-02'
+      ).length,
+      1
+    );
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), day);
   });
 
   test('uses the same strict calendar-day identity for Date Fields and Day Nodes', () => {

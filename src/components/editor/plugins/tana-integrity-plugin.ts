@@ -508,13 +508,15 @@ export function repairNode(
           !supertagParentReaches(parentId, node.id, context)
       );
 
-      editor.tf.setNodes(
-        {
-          tanaSupertagDefinition:
-            safeParents.length > 0 ? { extends: safeParents } : {},
-        },
-        { at: path }
-      );
+      const definition = { ...node.tanaSupertagDefinition };
+
+      if (safeParents.length > 0) {
+        definition.extends = safeParents;
+      } else {
+        delete definition.extends;
+      }
+
+      editor.tf.setNodes({ tanaSupertagDefinition: definition }, { at: path });
       return true;
     }
     case 'invalid-value-owner':
@@ -528,8 +530,8 @@ export function repairNode(
       editor.tf.setNodes(
         {
           tanaFieldDefinition: {
+            ...node.tanaFieldDefinition,
             sourceSupertagId: null,
-            type: 'from-supertag',
           },
         },
         { at: path }

@@ -308,6 +308,34 @@ describe('Tana Supertag operations', () => {
     assert.deepEqual(editor.children[1].tanaSupertagDefinition, {});
   });
 
+  test('changes inheritance without discarding title or default-child configuration', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Base' }], id: 'base', tanaSupertagDefinition: {}, type: KEYS.p },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagDefinition: {
+          defaultChildSupertagId: 'base',
+          titleExpression: '${name}',
+        },
+        type: KEYS.p,
+      },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    assert.equal(supertag.setExtends('task', ['base']), true);
+    assert.deepEqual(editor.children[1].tanaSupertagDefinition, {
+      defaultChildSupertagId: 'base',
+      extends: ['base'],
+      titleExpression: '${name}',
+    });
+    assert.equal(supertag.setExtends('task', []), true);
+    assert.deepEqual(editor.children[1].tanaSupertagDefinition, {
+      defaultChildSupertagId: 'base',
+      titleExpression: '${name}',
+    });
+  });
+
   test('applies a configured default child SuperTag without a second child-state store', () => {
     const editor = createEditor([
       {

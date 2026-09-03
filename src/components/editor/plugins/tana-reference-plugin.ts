@@ -1,4 +1,4 @@
-import { ElementApi } from 'platejs';
+import { ElementApi, TextApi } from 'platejs';
 import type { Path } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
@@ -34,27 +34,52 @@ function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: N
   return true;
 }
 
-function setTargetTitle(
-  editor: PlateEditor,
-  removeNodes: PlateEditor['tf']['removeNodes'],
-  targetNodeId: NodeId,
-  title: string
-): boolean {
+/**
+ * The first direct text leaf is the canonical editable title segment. Inline
+ * references, Supertag tokens, links, and other rich children stay untouched.
+ */
+function getTitleTextPath(target: [TanaBlockElement, Path]): Path | undefined {
+  const textIndex = target[0].children.findIndex(TextApi.isText);
+
+  return textIndex >= 0 ? [...target[1], textIndex] : undefined;
+}
+
+function setTargetTitle(editor: PlateEditor, targetNodeId: NodeId, title: string): boolean {
   const target = getTanaNodeEntry(editor, targetNodeId);
 
   if (!target || target[0].tanaSystemNode !== undefined) return false;
-  if (target[0].children.length === 1 && target[0].children[0]?.text === title) return false;
 
-  // Slate cannot replace an element's child list with setNodes. Reinsert the
-  // same canonical Plate Node at the same path: its NodeId and all Tana
-  // metadata remain intact, while the reference itself owns no copied title.
-  editor.tf.withoutNormalizing(() => {
-    removeNodes({ at: target[1] });
-    editor.tf.insertNodes(
-      { ...target[0], children: [{ text: title }] },
-      { at: target[1] }
-    );
-  });
+  const titleTextPath = getTitleTextPath(target);
+
+  if (titleTextPath) {
+    const current = editor.api.node(titleTextPath)?.[0];
+
+    if (TextApi.isText(current) && current.text === title) return false;
+
+    if (!TextApi.isText(current)) return false;
+
+    // Plate intentionally excludes `text` from setNodes. Its native text
+    // transforms mutate this one leaf while retaining that leaf's marks, the
+    // canonical Node, and every unrelated rich child.
+    const start = { offset: 0, path: titleTextPath };
+
+    editor.tf.withoutNormalizing(() => {
+      if (current.text.length > 0) {
+        editor.tf.delete({
+          at: {
+            anchor: start,
+            focus: { offset: current.text.length, path: titleTextPath },
+          },
+        });
+      }
+
+      if (title.length > 0) editor.tf.insertText(title, { at: start });
+    });
+  } else {
+    // A Node made exclusively of inline elements receives a new leading text
+    // leaf; none of its existing elements are replaced or removed.
+    editor.tf.insertNodes({ text: title }, { at: [...target[1], 0] });
+  }
 
   return true;
 }
@@ -78,13 +103,13 @@ export const TanaReferencePlugin = createPlatePlugin({
       },
     },
   }))
-  .overrideEditor(({ editor, tf: { removeNodes } }) => ({
+  .overrideEditor(({ editor }) => ({
     transforms: {
       reference: {
         setTarget: (referenceNodeId: NodeId, targetNodeId: NodeId) =>
           setTarget(editor, referenceNodeId, targetNodeId),
         setTargetTitle: (targetNodeId: NodeId, title: string) =>
-          setTargetTitle(editor, removeNodes, targetNodeId, title),
+          setTargetTitle(editor, targetNodeId, title),
       },
     },
   }));

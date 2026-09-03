@@ -35,20 +35,28 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
   });
 
-  test('removes an exceptional dangling SuperTag inheritance relation', () => {
+  test('removes an exceptional dangling SuperTag inheritance relation without discarding other definition properties', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Task' }],
         id: 'task',
-        tanaSupertagDefinition: { extends: ['missing'] },
+        tanaSupertagDefinition: {
+          defaultChildSupertagId: 'child',
+          extends: ['missing'],
+          titleExpression: '${name}',
+        },
         type: KEYS.p,
       },
+      { children: [{ text: 'Child' }], id: 'child', tanaSupertagDefinition: {}, type: KEYS.p },
     ]);
 
     editor.tf.normalize({ force: true });
 
     assert.equal(editor.children[0].id, 'task');
-    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {
+      defaultChildSupertagId: 'child',
+      titleExpression: '${name}',
+    });
   });
 
   test('repairs malformed View presentation without changing Search ownership', () => {
@@ -205,13 +213,25 @@ describe('Tana relation integrity', () => {
 
   test('nulls a deleted From-Supertag source without deleting the Field Definition', () => {
     const editor = createEditor([
-      { children: [{ text: 'Owner' }], id: 'owner', tanaFieldDefinition: { sourceSupertagId: 'project', type: 'from-supertag' }, type: KEYS.p },
+      {
+        children: [{ text: 'Owner' }],
+        id: 'owner',
+        tanaFieldDefinition: {
+          cardinality: 'list',
+          required: true,
+          sourceSupertagId: 'project',
+          type: 'from-supertag',
+        },
+        type: KEYS.p,
+      },
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
     ]);
 
     editor.tf.removeNodes({ at: [1] });
 
     assert.deepEqual(editor.children[0].tanaFieldDefinition, {
+      cardinality: 'list',
+      required: true,
       sourceSupertagId: null,
       type: 'from-supertag',
     });

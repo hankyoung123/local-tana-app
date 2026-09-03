@@ -1,11 +1,18 @@
 'use client';
 
 import { ArrowUpRightIcon, Link2Icon } from 'lucide-react';
+import { TextApi } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { resolveTanaNodeTitle, type NodeId, type TanaFieldNode, type TanaIndex } from '@/lib/tana';
+import {
+  resolveTanaNodeTitle,
+  type NodeId,
+  type TanaFieldNode,
+  type TanaIndex,
+  type TanaNode,
+} from '@/lib/tana';
 
 type ProjectionVariant = 'block-reference' | 'search-result';
 
@@ -24,17 +31,19 @@ export function ProjectionTitleInput({
   targetNodeId,
   title,
   displayTitle = title,
+  readOnly = false,
 }: {
   targetNodeId: NodeId;
   title: string;
   displayTitle?: string;
+  readOnly?: boolean;
 }) {
   const editor = useEditorRef();
 
   // Expressions are computed from Fields, so treating their generated text as
   // the editable canonical title would overwrite user content. The canonical
   // title remains editable when no expression is active.
-  if (displayTitle !== title) {
+  if (readOnly) {
     return <span className="min-w-0 flex-1 truncate px-1 py-0.5 font-medium">{displayTitle}</span>;
   }
 
@@ -57,6 +66,13 @@ export function ProjectionTitleInput({
       }}
     />
   );
+}
+
+/** The projection input changes only a Node's direct canonical text leaf. */
+export function getProjectionEditableTitle(target: TanaNode): string {
+  const text = target.node.children.find(TextApi.isText);
+
+  return text?.text ?? '';
 }
 
 /**
@@ -110,6 +126,8 @@ export function NodeProjection({
       : [{ id: field.id, label: definition?.text || '未命名字段', value }];
   });
   const displayTitle = resolveTanaNodeTitle(index, target.id);
+  const editableTitle = getProjectionEditableTitle(target);
+  const titleIsExpression = target.titleExpression !== undefined;
 
   if (variant === 'block-reference') {
     return (
@@ -133,8 +151,9 @@ export function NodeProjection({
         ) : (
           <ProjectionTitleInput
             displayTitle={displayTitle}
+            readOnly={titleIsExpression}
             targetNodeId={target.id}
-            title={target.text}
+            title={editableTitle}
           />
         )}
         {tags.length > 0 && (
@@ -162,8 +181,9 @@ export function NodeProjection({
         ) : (
           <ProjectionTitleInput
             displayTitle={displayTitle}
+            readOnly={titleIsExpression}
             targetNodeId={target.id}
-            title={target.text}
+            title={editableTitle}
           />
         )}
         {tags.length > 0 && (

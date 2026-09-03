@@ -7,8 +7,9 @@ import { BlockSelectionPlugin } from '@platejs/selection/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { buildTanaIndex } from '@/lib/tana/index';
+import { buildTanaIndex, searchTanaNodes } from '@/lib/tana/index';
 import { getTanaNodePath } from '@/lib/tana/outliner';
+import { createAndQuery, runTanaQuery } from '@/lib/tana/query';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 
 function createEditor(value: Value) {
@@ -122,6 +123,49 @@ describe('Tana Node lifecycle', () => {
     );
     assert.equal(getTanaNodePath(editor.children, 'project-node')?.[0], 3);
     assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('project-node'), 'home');
+  });
+
+  test('keeps Trash subtrees indexed for references while excluding them from ordinary Search and View queries', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+    const query = createAndQuery([{ kind: 'text-contains', text: 'Project' }]);
+
+    assert.equal(
+      runTanaQuery(buildTanaIndex(editor.children), query).some(({ id }) => id === 'project-node'),
+      true
+    );
+    assert.equal(lifecycle(editor).trash('project-node'), true);
+
+    const trashedIndex = buildTanaIndex(editor.children);
+
+    assert.equal(trashedIndex.nodesById.has('project-node'), true);
+    assert.deepEqual(trashedIndex.backlinks.get('project-node')?.map(({ sourceNodeId }) => sourceNodeId), [
+      'project-reference',
+    ]);
+    assert.equal(
+      runTanaQuery(trashedIndex, query).some(({ id }) => id === 'project-node'),
+      false
+    );
+    assert.equal(
+      searchTanaNodes(trashedIndex, 'project').some(({ id }) => id === 'project-node'),
+      false
+    );
+    assert.deepEqual(
+      runTanaQuery(trashedIndex, createAndQuery([{ kind: 'text-contains', text: 'Trash' }])),
+      []
+    );
+
+    assert.equal(lifecycle(editor).restore('project-node'), true);
+
+    const restoredIndex = buildTanaIndex(editor.children);
+
+    assert.equal(
+      runTanaQuery(restoredIndex, query).some(({ id }) => id === 'project-node'),
+      true
+    );
+    assert.equal(
+      searchTanaNodes(restoredIndex, 'project').some(({ id }) => id === 'project-node'),
+      true
+    );
   });
 
   test('permanently deletes only a Trash descendant and leaves its block Reference broken', () => {

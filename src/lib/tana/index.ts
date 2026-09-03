@@ -554,6 +554,28 @@ export function getNodeReferenceCandidatesFromIndex(
     .map(({ id, text }) => ({ id, text }));
 }
 
+/**
+ * Trash is a derived query scope, not persisted Node state. Keep its complete
+ * subtree indexed so canonical references and backlinks remain resolvable.
+ */
+export function isTanaNodeInTrash(index: TanaIndex, nodeId: NodeId): boolean {
+  const trashNodeId = index.systemNodeIds.get('trash');
+
+  if (!trashNodeId) return false;
+
+  const visited = new Set<NodeId>();
+  let currentNodeId: NodeId | undefined = nodeId;
+
+  while (currentNodeId && !visited.has(currentNodeId)) {
+    if (currentNodeId === trashNodeId) return true;
+
+    visited.add(currentNodeId);
+    currentNodeId = index.parentNodeIds.get(currentNodeId);
+  }
+
+  return false;
+}
+
 /** Performs transient document-order node search without writing any state. */
 export function searchTanaNodes(
   index: TanaIndex,
@@ -569,6 +591,8 @@ export function searchTanaNodes(
   const contains: TanaNode[] = [];
 
   for (const node of index.nodesById.values()) {
+    if (isTanaNodeInTrash(index, node.id)) continue;
+
     const text = node.text.toLocaleLowerCase();
 
     if (text === normalizedQuery) {

@@ -22,7 +22,7 @@ import {
   type TanaNode,
 } from '@/lib/tana';
 
-import { ProjectionTitleInput } from './node-projection';
+import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
 
 function FieldCell({
   fieldId,
@@ -140,6 +140,7 @@ function TableRow({
 }) {
   const editor = useEditorRef();
   const displayTitle = resolveTanaNodeTitle(index, node.id);
+  const editableTitle = getProjectionEditableTitle(node);
 
   return (
     <tr className="border-b last:border-0 hover:bg-muted/40">
@@ -155,8 +156,9 @@ function TableRow({
           </button>
           <ProjectionTitleInput
             displayTitle={displayTitle}
+            readOnly={node.titleExpression !== undefined}
             targetNodeId={node.id}
-            title={node.text}
+            title={editableTitle}
           />
         </div>
       </td>

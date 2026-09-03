@@ -5,7 +5,7 @@ import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
-import { isTanaNodeElement } from '@/lib/tana/constants';
+import { isTanaNodeElement, TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { runTanaQuery } from '@/lib/tana/query';
 import type { TanaQueryExpression } from '@/lib/tana/types';
@@ -53,6 +53,67 @@ describe('Tana Reference projection mutations', () => {
     assert.equal(editor.children[2].id, 'project-reference');
     assert.equal(editor.children[2].tanaReferenceTargetId, 'project');
     assert.equal(buildTanaIndex(editor.children).nodesById.get('project')?.text, 'Renamed project');
+  });
+
+  test('edits only the canonical title leaf and preserves rich child content and metadata', () => {
+    const editor = createEditor([
+      {
+        children: [
+          { bold: true, text: 'Draft project' },
+          { text: ' for ' },
+          { children: [{ text: '' }], key: 'related', type: KEYS.mention },
+          { text: ' ' },
+          { children: [{ text: '' }], key: 'project-tag', type: TANA_SUPERTAG_KEY },
+          { text: '' },
+          {
+            children: [{ italic: true, text: 'Documentation' }],
+            type: KEYS.link,
+            url: 'https://example.test/docs',
+          },
+          { text: '' },
+        ],
+        id: 'project',
+        tanaSupertagIds: ['project-tag'],
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Related' }], id: 'related', type: KEYS.p },
+      {
+        children: [{ text: 'Project' }],
+        id: 'project-tag',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Reference projection' }],
+        id: 'project-reference',
+        tanaReferenceTargetId: 'project',
+        type: KEYS.p,
+      },
+    ]);
+    const beforeRichSuffix = structuredClone(editor.children[0].children.slice(1));
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+    assert.equal(reference.setTargetTitle('project', 'Renamed project'), true);
+
+    const project = editor.children.find((node) => node.id === 'project');
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(project?.id, 'project');
+    assert.equal(project?.children[0]?.text, 'Renamed project');
+    assert.equal(project?.children[0]?.bold, true);
+    assert.deepEqual(project?.children.slice(1), beforeRichSuffix);
+    assert.deepEqual(project?.tanaSupertagIds, ['project-tag']);
+    assert.deepEqual(index.backlinks.get('related')?.map(({ sourceNodeId }) => sourceNodeId), ['project']);
+    assert.deepEqual(index.backlinks.get('project')?.map(({ sourceNodeId }) => sourceNodeId), [
+      'project-reference',
+    ]);
+    assert.deepEqual(
+      runTanaQuery(index, {
+        children: [{ predicate: { kind: 'text-contains', text: 'renamed project' }, type: 'predicate' }],
+        type: 'and',
+      }).map(({ id }) => id),
+      ['project']
+    );
   });
 
   test('only creates a block Reference to an existing canonical target', () => {

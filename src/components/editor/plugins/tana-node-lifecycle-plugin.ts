@@ -10,6 +10,7 @@ import type { NodeId, TanaBlockElement, TanaSystemNode } from '@/lib/tana/types'
 export const TANA_NODE_LIFECYCLE_PLUGIN_KEY = 'tanaNodeLifecycle' as const;
 
 type TanaNodeEntry = [TanaBlockElement, Path];
+type TanaRestoreDestination = 'daily-notes' | 'home';
 
 function getIndent(node: TElement): number {
   return typeof node.indent === 'number' ? node.indent : 0;
@@ -78,7 +79,7 @@ function moveSubtreeToSystem(
   editor: PlateEditor,
   removeNodes: PlateEditor['tf']['removeNodes'],
   nodeId: NodeId,
-  destinationSystemNode: 'home' | 'trash',
+  destinationSystemNode: TanaRestoreDestination | 'trash',
   requireDirectSourceParent: boolean
 ): boolean {
   const source = getTanaNodeEntry(editor, nodeId);
@@ -134,7 +135,8 @@ function trash(
 function restore(
   editor: PlateEditor,
   removeNodes: PlateEditor['tf']['removeNodes'],
-  nodeId: NodeId
+  nodeId: NodeId,
+  destination: TanaRestoreDestination = 'home'
 ): boolean {
   const source = getTanaNodeEntry(editor, nodeId);
   const trashNode = getSystemNodeEntry(editor, 'trash');
@@ -143,7 +145,7 @@ function restore(
     return false;
   }
 
-  return moveSubtreeToSystem(editor, removeNodes, nodeId, 'home', false);
+  return moveSubtreeToSystem(editor, removeNodes, nodeId, destination, false);
 }
 
 function deletePermanently(
@@ -241,7 +243,9 @@ function removeSelectedOrdinaryNodes(
 /**
  * Owns the ordinary Node lifecycle without adding placement/history state:
  * removal moves canonical subtrees to the existing Trash Node, restore appends
- * them to Home, and permanent deletion is restricted to Trash descendants.
+ * them to Home by default, and permanent deletion is restricted to Trash
+ * descendants. A semantic caller may restore a canonical Node to another
+ * existing system container without recording placement state.
  */
 export const TanaNodeLifecyclePlugin = createPlatePlugin({
   key: TANA_NODE_LIFECYCLE_PLUGIN_KEY,
@@ -259,8 +263,9 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
         void nodeId;
         return false;
       },
-      restore: (nodeId: NodeId): boolean => {
+      restore: (nodeId: NodeId, destination?: TanaRestoreDestination): boolean => {
         void nodeId;
+        void destination;
         return false;
       },
       trash: (nodeId: NodeId): boolean => {
@@ -273,7 +278,8 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
   transforms: {
     node: {
       deletePermanently: (nodeId: NodeId) => deletePermanently(editor, removeNodes, nodeId),
-      restore: (nodeId: NodeId) => restore(editor, removeNodes, nodeId),
+      restore: (nodeId: NodeId, destination?: TanaRestoreDestination) =>
+        restore(editor, removeNodes, nodeId, destination),
       trash: (nodeId: NodeId) => trash(editor, removeNodes, nodeId),
     },
     removeNodes(options = {}) {

@@ -234,13 +234,15 @@ function setExtends(
     return false;
   }
 
-  editor.tf.setNodes(
-    {
-      tanaSupertagDefinition:
-        uniqueParentIds.length > 0 ? { extends: uniqueParentIds } : {},
-    },
-    { at: entry[1] }
-  );
+  const nextDefinition = { ...entry[0].tanaSupertagDefinition };
+
+  if (uniqueParentIds.length > 0) {
+    nextDefinition.extends = uniqueParentIds;
+  } else {
+    delete nextDefinition.extends;
+  }
+
+  editor.tf.setNodes({ tanaSupertagDefinition: nextDefinition }, { at: entry[1] });
 
   return true;
 }

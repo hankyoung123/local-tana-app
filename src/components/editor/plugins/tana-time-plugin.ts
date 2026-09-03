@@ -11,11 +11,12 @@ import {
   getTanaToday,
   isTanaDay,
 } from '@/lib/tana/time';
-import { buildTanaIndex } from '@/lib/tana/index';
+import { buildTanaIndex, isTanaNodeInTrash } from '@/lib/tana/index';
 import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 import { TanaZoomPlugin } from './tana-zoom-plugin';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 
 export const TANA_TIME_PLUGIN_KEY = 'tanaTime' as const;
 
@@ -66,6 +67,13 @@ function goToDay(editor: PlateEditor, day: string): NodeId | undefined {
   const existingId = getTanaDayNodeId(index.timeNodeIds, day);
 
   if (existingId) {
+    if (
+      isTanaNodeInTrash(index, existingId) &&
+      !editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(existingId, 'daily-notes')
+    ) {
+      return;
+    }
+
     return editor.getTransforms(TanaZoomPlugin).zoom.to(existingId) ? existingId : undefined;
   }
 

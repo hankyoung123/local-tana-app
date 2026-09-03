@@ -8,6 +8,7 @@ import type {
   TanaQueryPredicate,
 } from './types';
 import { isFieldDefined, isFieldValueValid } from './fields';
+import { isTanaNodeInTrash } from './index';
 
 export function getFieldDefinition(index: TanaIndex, fieldId: FieldId): FieldDefinition | undefined {
   const node = index.nodesById.get(fieldId);
@@ -177,7 +178,9 @@ export function matchesTanaQueryExpression(
 
 /** Runs a persisted Search AST exclusively from the read-only derived index. */
 export function runTanaQuery(index: TanaIndex, expression: TanaQueryExpression): TanaNode[] {
-  return Array.from(index.nodesById.values()).filter((node) =>
-    matchesTanaQueryExpression(node, index, expression)
+  return Array.from(index.nodesById.values()).filter(
+    (node) =>
+      !isTanaNodeInTrash(index, node.id) &&
+      matchesTanaQueryExpression(node, index, expression)
   );
 }
