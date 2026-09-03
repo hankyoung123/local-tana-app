@@ -81,67 +81,10 @@ describe('Tana outliner behavior', () => {
     assert.equal(focusedDocument[3].id, 'sibling');
   });
 
-  test('keeps a semantic NodeId and its Field subtree with existing content on Enter', () => {
-    let nextId = 0;
-    const editor = createPlateEditor({
-      nodeId: {
-        filter: isTanaNodeElement,
-        idCreator: () => `node-${++nextId}`,
-        initialValueIds: 'always'
-      },
-      plugins: EditorKit,
-      value: [
-        {
-          children: [{ text: 'Project' }],
-          id: 'project',
-          tanaSupertagDefinition: {},
-          type: KEYS.p
-        },
-        {
-          children: [{ text: '' }],
-          id: 'project-status',
-          indent: 1,
-          tanaFieldId: 'status',
-          type: KEYS.p
-        },
-        {
-          children: [{ text: '' }],
-          id: 'project-status-value',
-          indent: 2,
-          tanaFieldValueType: 'options',
-          type: KEYS.p
-        },
-        { children: [{ text: 'Sibling' }], id: 'sibling', type: KEYS.p },
-        {
-          children: [{ text: 'Status' }],
-          id: 'status',
-          tanaFieldDefinition: { type: 'options' },
-          type: KEYS.p
-        }
-      ]
-    });
-
-    editor.tf.select({
-      anchor: { offset: 0, path: [0, 0] },
-      focus: { offset: 0, path: [0, 0] }
-    });
-    editor.tf.insertBreak();
-
-    assert.notEqual(editor.children[0].id, 'project');
-    assert.equal('tanaSupertagDefinition' in editor.children[0], false);
-    assert.equal(editor.children[1].id, 'project');
-    assert.deepEqual(editor.children[1].tanaSupertagDefinition, {});
-    assert.deepEqual(
-      getTanaZoomRange(editor.children, 'project').map(([index]) => index),
-      [1, 2, 3]
-    );
-    assert.equal(editor.children[4].id, 'sibling');
-  });
-
-  test('keeps Host identity and Field ownership through Enter at every position', () => {
+  test('keeps the focused Host identity and Field ownership through Enter', () => {
     for (const [name, offset, expectedHostText] of [
       ['start', 0, 'Project'],
-      ['middle', 3, 'Pro'],
+      ['middle', 3, 'Project'],
       ['end', 7, 'Project']
     ] as const) {
       const editor = createPlateEditor({
@@ -177,6 +120,7 @@ describe('Tana outliner behavior', () => {
         ]
       });
 
+      assert.equal(zoomToTanaNode(editor, 'project'), true);
       editor.tf.select({
         anchor: { offset, path: [0, 0] },
         focus: { offset, path: [0, 0] }
@@ -225,6 +169,145 @@ describe('Tana outliner behavior', () => {
       assert.equal('tanaFieldId' in splitNode!, false);
       assert.equal('tanaFieldValueType' in splitNode!, false);
     }
+  });
+
+  test('creates ordinary page body children after direct Field subtrees in Zoom', () => {
+    const editor = createPlateEditor({
+      nodeId: {
+        filter: isTanaNodeElement,
+        idCreator: () => 'generated',
+        initialValueIds: 'always'
+      },
+      plugins: EditorKit,
+      value: [
+        { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+        {
+          children: [{ text: '' }],
+          id: 'project-status',
+          indent: 1,
+          tanaFieldId: 'status',
+          type: KEYS.p
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-status-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: KEYS.p
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-priority',
+          indent: 1,
+          tanaFieldId: 'priority',
+          type: KEYS.p
+        },
+        {
+          children: [{ text: '' }],
+          id: 'project-priority-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: KEYS.p
+        },
+        { children: [{ text: 'SQLite 在本地持久化文档。' }], id: 'sqlite', type: KEYS.p },
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { type: 'plain' },
+          type: KEYS.p
+        },
+        {
+          children: [{ text: 'Priority' }],
+          id: 'priority',
+          tanaFieldDefinition: { type: 'plain' },
+          type: KEYS.p
+        }
+      ]
+    });
+
+    assert.equal(zoomToTanaNode(editor, 'project'), true);
+    editor.tf.select({
+      anchor: { offset: 7, path: [0, 0] },
+      focus: { offset: 7, path: [0, 0] }
+    });
+    editor.tf.insertBreak();
+
+    const bodyPath = editor.selection?.anchor.path.slice(0, 1);
+    const body = bodyPath ? editor.children[bodyPath[0]] : undefined;
+    const openIds = editor.getOption(TogglePlugin, 'openIds') ?? new Set<string>();
+
+    assert.ok(bodyPath);
+    assert.ok(body);
+    assert.equal(body?.indent, 1);
+    assert.equal('tanaFieldId' in body!, false);
+    assert.equal('tanaFieldValueType' in body!, false);
+    assert.deepEqual(getTanaParentPath(editor.children, bodyPath!), [0]);
+    assert.deepEqual(
+      getTanaZoomRange(editor.children, 'project').map(([index]) => editor.children[index].id),
+      ['project', 'project-status', 'project-status-value', 'project-priority', 'project-priority-value', body!.id]
+    );
+    assert.equal(isTanaNodeInteractable(editor.children, bodyPath!, openIds, 'project'), true);
+    assert.deepEqual(editor.selection?.anchor.path, [bodyPath![0], 0]);
+    assert.equal(getTanaNodePath(editor.children, 'sqlite')![0] > bodyPath![0], true);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldNodesByParent.get('project')?.map(({ id }) => id),
+      ['project-status', 'project-priority']
+    );
+
+    editor.tf.insertText('Body');
+    editor.tf.insertBreak();
+
+    const secondBodyPath = editor.selection?.anchor.path.slice(0, 1);
+
+    assert.ok(secondBodyPath);
+    assert.notEqual(secondBodyPath![0], bodyPath![0]);
+    assert.equal(editor.children[secondBodyPath![0]].indent, 1);
+    assert.deepEqual(getTanaParentPath(editor.children, secondBodyPath!), [0]);
+    assert.equal(
+      isTanaNodeInteractable(editor.children, secondBodyPath!, openIds, 'project'),
+      true
+    );
+    assert.equal(getTanaZoomRange(editor.children, 'project').some(([index]) => editor.children[index].id === 'sqlite'), false);
+  });
+
+  test('keeps Enter on an ordinary page child as Plate native split behavior', () => {
+    const editor = createPlateEditor({
+      nodeId: {
+        filter: isTanaNodeElement,
+        idCreator: () => 'generated',
+        initialValueIds: 'always'
+      },
+      plugins: EditorKit,
+      value: [
+        { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+        { children: [{ text: 'Notes' }], id: 'notes', indent: 1, type: KEYS.p },
+        { children: [{ text: 'Outside' }], id: 'outside', type: KEYS.p }
+      ]
+    });
+
+    assert.equal(zoomToTanaNode(editor, 'project'), true);
+    editor.tf.select({
+      anchor: { offset: 5, path: [1, 0] },
+      focus: { offset: 5, path: [1, 0] }
+    });
+    editor.tf.insertBreak();
+
+    const splitPath = editor.selection?.anchor.path.slice(0, 1);
+
+    assert.ok(splitPath);
+    assert.equal(editor.children[1].id, 'notes');
+    assert.equal(editor.children[1].children[0].text, 'Notes');
+    assert.equal(editor.children[splitPath![0]].indent, 1);
+    assert.deepEqual(getTanaParentPath(editor.children, splitPath!), [0]);
+    assert.equal(
+      isTanaNodeInteractable(
+        editor.children,
+        splitPath!,
+        editor.getOption(TogglePlugin, 'openIds') ?? new Set<string>(),
+        'project'
+      ),
+      true
+    );
   });
 
   test('uses one NodeId predicate for every top-level block type', () => {

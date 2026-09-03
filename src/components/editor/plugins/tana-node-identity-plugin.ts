@@ -3,12 +3,9 @@ import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { isTanaFieldHostNode } from '@/lib/tana/fields';
-import {
-  getTanaDirectChildPaths,
-  getTanaNodeDescendantPaths,
-  getTanaNodePath
-} from '@/lib/tana/outliner';
+import { getTanaDirectChildPaths, getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { TanaBlockElement } from '@/lib/tana/types';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_NODE_IDENTITY_PLUGIN_KEY = 'tanaNodeIdentity' as const;
 
@@ -46,45 +43,52 @@ function isSelectionAtStart(editor: PlateEditor, path: number[]): boolean {
   return !!selection && editor.api.isStart(selection.anchor, path);
 }
 
-function getDirectFieldNodeIds(editor: PlateEditor, hostPath: number[]) {
-  if (!isTanaFieldHostNode(editor.children, hostPath)) return [];
+function getFocusedHostBodyInsertionPath(editor: PlateEditor, hostPath: number[]) {
+  const afterFieldSubtrees = getTanaDirectChildPaths(editor.children, hostPath).flatMap(
+    (path) => {
+      const node = editor.api.node(path)?.[0] as TanaBlockElement | undefined;
 
-  return getTanaDirectChildPaths(editor.children, hostPath).flatMap((path) => {
-    const node = editor.api.node(path)?.[0] as TanaBlockElement | undefined;
+      if (typeof node?.tanaFieldId !== 'string') return [];
 
-    return typeof node?.tanaFieldId === 'string' && typeof node.id === 'string' ? [node.id] : [];
+      const lastDescendant = getTanaNodeDescendantPaths(editor.children, path).at(-1);
+
+      return [(lastDescendant ?? path)[0] + 1];
+    }
+  );
+
+  return [Math.max(hostPath[0] + 1, ...afterFieldSubtrees)];
+}
+
+function insertFocusedHostBodyChild(
+  editor: PlateEditor,
+  host: TanaBlockElement,
+  hostPath: number[]
+) {
+  const indent = typeof host.indent === 'number' ? host.indent + 1 : 1;
+  const childPath = getFocusedHostBodyInsertionPath(editor, hostPath);
+
+  editor.tf.insertNodes(
+    editor.api.create.block({ children: [{ text: '' }], indent }),
+    { at: childPath }
+  );
+
+  const point = editor.api.start(childPath);
+
+  if (!point) return;
+
+  editor.tf.navigation.navigate({
+    flash: false,
+    focus: true,
+    scroll: true,
+    select: point,
+    target: { path: childPath, type: 'node' },
   });
 }
 
-function moveSplitNodeAfterFieldSubtrees(
-  editor: PlateEditor,
-  splitPath: number[],
-  fieldNodeIds: string[]
-) {
-  const lastFieldPath = fieldNodeIds.reduce<number | undefined>((last, fieldNodeId) => {
-    const fieldPath = getTanaNodePath(editor.children, fieldNodeId);
-
-    if (!fieldPath) return last;
-
-    const lastDescendantPath = getTanaNodeDescendantPaths(editor.children, fieldPath).at(-1);
-    const lastPath = lastDescendantPath ?? fieldPath;
-
-    return last === undefined ? lastPath[0] : Math.max(last, lastPath[0]);
-  }, undefined);
-
-  if (lastFieldPath === undefined || lastFieldPath < splitPath[0]) return;
-
-  // Keep every direct Field subtree below the existing Host. Moving the new
-  // sibling after those flat-indent descendants preserves Plate's split while
-  // keeping the original Field owner unchanged.
-  editor.tf.moveNodes({ at: splitPath, to: [lastFieldPath + 1] });
-}
-
 /**
- * Plate owns Enter and its standard split transform. This wrapper only keeps
- * the original NodeId and direct Field subtrees attached to the pre-existing
- * Host; the newly split sibling always receives fresh identity and no copied
- * Tana semantics.
+ * Plate owns ordinary splits. A focused Field Host creates a direct body child
+ * after Field subtrees, keeping page body editing inside the current Zoom
+ * range and leaving Field ownership untouched.
  */
 export const TanaNodeIdentityPlugin = createPlatePlugin({
   key: TANA_NODE_IDENTITY_PLUGIN_KEY
@@ -96,9 +100,14 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       if (!entry || typeof entry[0].id !== 'string') return insertBreak();
 
       const [node, path] = entry;
+      const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+
+      if (focusedNodeId === node.id && isTanaFieldHostNode(editor.children, path)) {
+        return insertFocusedHostBodyChild(editor, node, path);
+      }
+
       const previousId = node.id;
       const selectionAtStart = isSelectionAtStart(editor, path);
-      const directFieldNodeIds = getDirectFieldNodeIds(editor, path);
 
       insertBreak();
 
@@ -124,7 +133,6 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       // semantics on the left, then make the new right sibling ordinary.
       editor.tf.setNodes({ id: nanoid() }, { at: rightPath });
       TANA_SEMANTIC_KEYS.forEach((key) => editor.tf.unsetNodes(key, { at: rightPath }));
-      moveSplitNodeAfterFieldSubtrees(editor, rightPath, directFieldNodeIds);
     }
   }
 }));
