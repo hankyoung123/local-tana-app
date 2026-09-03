@@ -1,16 +1,22 @@
 'use client';
 
-import { ArrowLeftIcon, ArrowUpRightIcon, ListFilterIcon } from 'lucide-react';
+import { ArrowLeftIcon, ListFilterIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import type { TanaIndex, TanaNode } from '@/lib/tana';
 import {
+  createAndQuery,
   describeTanaQueryClause,
-  getNodeSupertagIds,
+  resolveTanaNodeTitle,
   runTanaQuery,
 } from '@/lib/tana';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
+
+import { NodeProjection } from './node-projection';
+import { TanaCalendarView } from './tana-calendar-view';
+import { TanaCardsView } from './tana-cards-view';
+import { TanaTableView } from './tana-table-view';
 
 export function TanaView({
   index,
@@ -20,8 +26,11 @@ export function TanaView({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const clauses = view.searchDefinition?.clauses ?? [];
-  const results = runTanaQuery(index, clauses).filter(
+  const query = view.searchDefinition?.query ?? createAndQuery();
+  const predicates = query.type === 'and'
+    ? query.children.flatMap((child) => child.type === 'predicate' ? [child.predicate] : [])
+    : [];
+  const results = runTanaQuery(index, query).filter(
     ({ id }) => id !== view.id
   );
 
@@ -42,16 +51,22 @@ export function TanaView({
           </span>
         </div>
         <p className="mb-1 text-muted-foreground text-xs">
-          {view.viewDefinition?.type === 'outline' ? '大纲视图' : '搜索结果'}
+          {view.viewDefinition?.type === 'table'
+            ? '表格视图'
+            : view.viewDefinition?.type === 'calendar'
+              ? '日历视图'
+              : view.viewDefinition?.type === 'cards'
+                ? '卡片视图'
+              : '大纲视图'}
         </p>
-        <h1 className="font-semibold text-2xl">{view.text}</h1>
+        <h1 className="font-semibold text-2xl">{resolveTanaNodeTitle(index, view.id)}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {clauses.length === 0 ? (
+          {predicates.length === 0 ? (
             <span className="rounded bg-amber-50 px-2 py-1 text-amber-800 text-xs">
               未设置筛选条件：显示所有节点
             </span>
           ) : (
-            clauses.map((clause, indexInList) => (
+            predicates.map((clause, indexInList) => (
               <span
                 key={`${clause.kind}:${indexInList}`}
                 className="rounded bg-muted px-2 py-1 text-muted-foreground text-xs"
@@ -75,39 +90,24 @@ export function TanaView({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-3xl divide-y rounded-lg border">
-            {results.map((node) => {
-              const supertagIds = getNodeSupertagIds(index, node.id);
-
-              return (
-                <button
+          view.viewDefinition?.type === 'table' ? (
+            <TanaTableView index={index} results={results} />
+          ) : view.viewDefinition?.type === 'calendar' ? (
+            <TanaCalendarView index={index} results={results} />
+          ) : view.viewDefinition?.type === 'cards' ? (
+            <TanaCardsView index={index} results={results} />
+          ) : (
+            <div className="mx-auto max-w-3xl divide-y rounded-lg border">
+              {results.map((node) => (
+                <NodeProjection
                   key={node.id}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-muted/50"
-                  type="button"
-                  onClick={() =>
-                    editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
-                  }
-                >
-                  <ArrowUpRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{node.text}</span>
-                    {supertagIds.length > 0 && (
-                      <span className="mt-1 flex flex-wrap gap-1">
-                        {supertagIds.map((supertagId) => (
-                          <span
-                            key={supertagId}
-                            className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800"
-                          >
-                            #{index.nodesById.get(supertagId)?.text ?? supertagId}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  index={index}
+                  targetNodeId={node.id}
+                  variant="search-result"
+                />
+              ))}
+            </div>
+          )
         )}
       </div>
     </section>

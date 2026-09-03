@@ -291,7 +291,12 @@ export const initialDocument = normalizeStaticValue([
     children: [{ text: '全部项目' }],
     id: 'view-projects',
     indent: 2,
-    tanaSearchDefinition: { clauses: [{ kind: 'has-supertag', supertagId: 'supertag-project' }] },
+    tanaSearchDefinition: {
+      query: {
+        children: [{ predicate: { kind: 'has-supertag', supertagId: 'supertag-project' }, type: 'predicate' }],
+        type: 'and',
+      },
+    },
     tanaViewDefinition: { type: 'outline' },
     type: 'p',
   },

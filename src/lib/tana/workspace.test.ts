@@ -377,6 +377,25 @@ describe('canonical Tana workspace document', () => {
     assert.equal(editor.children.find((node) => node.id === 'nested-child')?.indent, 2);
   });
 
+  test('does not outdent a Zoom-external Node through a direct transform selection', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Page' }], id: 'page', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Page child' }], id: 'page-child', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Other page' }], id: 'other-page', indent: 1, type: KEYS.p },
+      { children: [{ text: 'External nested child' }], id: 'external-child', indent: 3, type: KEYS.p },
+    ]);
+
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to('page'), true);
+    editor.tf.select({
+      anchor: { offset: 0, path: [10, 0] },
+      focus: { offset: 0, path: [10, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'external-child')?.indent, 3);
+  });
+
   test('rejects an ordinary root outside Workspace at the persistence gate', () => {
     const document: Value = [
       ...minimalWorkspace(),

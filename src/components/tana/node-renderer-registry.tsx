@@ -1,6 +1,6 @@
 'use client';
 
-import { EyeOffIcon, HashIcon, ListFilterIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import { EyeOffIcon, HashIcon, ListFilterIcon, PinIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import type { TElement } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
@@ -15,10 +15,18 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import type { FieldValue, NodeId, TanaIndex, TanaNode, TanaNodeSemanticType } from '@/lib/tana';
+import type {
+  FieldValue,
+  NodeId,
+  TanaBlockElement,
+  TanaIndex,
+  TanaNode,
+  TanaNodeSemanticType,
+} from '@/lib/tana';
 import { getFieldValueCandidates } from '@/lib/tana';
 
 import { OutlineNodeView } from './outline-node-view';
+import { NodeProjection } from './node-projection';
 import { TanaView } from './tana-view';
 
 export type TanaNodeBlockRendererProps = {
@@ -74,6 +82,30 @@ function ViewHint() {
   return <NodeSemanticHint icon={<ListFilterIcon />} label="视图" />;
 }
 
+/**
+ * A block Reference is a read-through projection: its own Plate Node carries
+ * only a target NodeId, while title and tags are always derived from — and
+ * edits always write to — the canonical target Node.
+ */
+function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
+  const targetNodeId = (element as TanaBlockElement).tanaReferenceTargetId;
+  const indent = typeof element.indent === 'number' ? element.indent : 0;
+
+  return (
+    <div
+      className="absolute inset-y-0 z-20"
+      contentEditable={false}
+      style={{ left: `${indent * 24}px`, right: 0 }}
+    >
+      <NodeProjection
+        index={index}
+        targetNodeId={targetNodeId}
+        variant="block-reference"
+      />
+    </div>
+  );
+}
+
 function OutlineRenderer({ focusedNodeId, selectedNodeId }: TanaNodeWorkspaceRendererProps) {
   return <OutlineNodeView focusedNodeId={focusedNodeId} selectedNodeId={selectedNodeId} />;
 }
@@ -83,6 +115,43 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
     <TanaView index={index} view={node} />
   ) : (
     <OutlineRenderer index={index} {...props} />
+  );
+}
+
+/**
+ * A Supertag Definition normally presents its derived instances. Its own
+ * editable definition outline remains available through the inspector and
+ * becomes the page only when an explicit View semantic takes precedence.
+ */
+function SupertagInstancesRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps) {
+  if (!node) return <OutlineRenderer index={index} {...props} />;
+
+  const instanceIds = index.nodesBySupertag.get(node.id) ?? [];
+
+  return (
+    <section className="flex min-w-0 flex-1 flex-col bg-white">
+      <header className="shrink-0 border-b px-6 py-5 sm:px-10">
+        <p className="mb-1 text-muted-foreground text-xs">超级标签</p>
+        <h1 className="font-semibold text-2xl">#{node.text || '未命名超级标签'}</h1>
+        <p className="mt-2 text-muted-foreground text-xs">{instanceIds.length} 个实例</p>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
+        {instanceIds.length === 0 ? (
+          <p className="text-muted-foreground text-sm">暂无实例。</p>
+        ) : (
+          <div className="mx-auto max-w-3xl divide-y rounded-lg border">
+            {instanceIds.map((instanceId) => (
+              <NodeProjection
+                key={instanceId}
+                index={index}
+                targetNodeId={instanceId}
+                variant="search-result"
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -99,6 +168,8 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const indent = typeof element.indent === 'number' ? element.indent : 0;
   const labelLeft = `${indent * 24}px`;
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const pinned = (element as TanaBlockElement).tanaFieldPinned === true;
 
   return (
     <div
@@ -118,7 +189,13 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
-        {field?.text || '未命名字段'}
+        <span className="flex min-w-0 items-center gap-1.5">
+          {pinned && <PinIcon aria-label="已置顶" className="size-3 shrink-0" />}
+          <span className="truncate">{field?.text || '未命名字段'}</span>
+          {field?.fieldDefinition?.required && (
+            <span aria-label="必填字段" className="shrink-0 text-[#ad5c42]">*</span>
+          )}
+        </span>
       </button>
 
       <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-white/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
@@ -127,6 +204,12 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
           onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
         >
           <EyeOffIcon />
+        </FieldAction>
+        <FieldAction
+          label={pinned ? '取消置顶字段' : '置顶字段'}
+          onClick={() => fieldTransforms.setPinned(fieldNode.id, !pinned)}
+        >
+          <PinIcon />
         </FieldAction>
       </div>
     </div>
@@ -186,7 +269,12 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
     fieldTransforms.setValue(fieldNode.parentNodeId, fieldNode.fieldId, value);
   const clearValue = () => fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
 
-  if (definition.type === 'plain' || definition.type === 'number') {
+  if (
+    definition.type === 'plain' ||
+    definition.type === 'number' ||
+    definition.type === 'email' ||
+    definition.type === 'url'
+  ) {
     const text = fieldNode.valueNodeId
       ? index.nodesById.get(fieldNode.valueNodeId)?.text
       : undefined;
@@ -337,11 +425,11 @@ export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer
   },
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
   option: { Workspace: OutlineRenderer },
-  reference: { Workspace: OutlineRenderer },
+  reference: { Block: ReferenceRenderer, Workspace: OutlineRenderer },
   search: { Workspace: ViewRenderer },
   'supertag-definition': {
     Block: SupertagHint,
-    Workspace: OutlineRenderer
+    Workspace: SupertagInstancesRenderer
   },
   value: { Block: ValueRenderer, Workspace: OutlineRenderer },
   view: { Block: ViewHint, Workspace: ViewRenderer }

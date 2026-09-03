@@ -1,14 +1,17 @@
 'use client';
 
 import {
+  CalendarDaysIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   HashIcon,
   HomeIcon,
   ListFilterIcon,
 } from 'lucide-react';
+import * as React from 'react';
 import { useEditorRef } from 'platejs/react';
 
+import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import type { NodeId, TanaIndex } from '@/lib/tana';
 import { cn } from '@/lib/utils';
@@ -30,6 +33,7 @@ export function TanaSidebar({
   workspaceRootActive,
 }: TanaSidebarProps) {
   const editor = useEditorRef();
+  const [dayInput, setDayInput] = React.useState('');
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ semanticTypes }) => semanticTypes.includes('supertag-definition')
   );
@@ -80,6 +84,50 @@ export function TanaSidebar({
             <HomeIcon className="size-3.5 text-[#6f7d75]" />
             工作区
           </SidebarButton>
+        </SidebarSection>
+
+        <SidebarSection title="每日笔记">
+          <div className="space-y-1 px-1">
+            <div className="flex items-center gap-1">
+              <SidebarButton
+                aria-label="前一天"
+                className="w-7 justify-center px-0"
+                onClick={() => editor.getTransforms(TanaTimePlugin).time.previousDay()}
+              >
+                <ChevronLeftIcon className="size-3.5 text-[#6f7d75]" />
+              </SidebarButton>
+              <SidebarButton
+                className="flex-1"
+                onClick={() => editor.getTransforms(TanaTimePlugin).time.today()}
+              >
+                <CalendarDaysIcon className="size-3.5 text-[#4f725f]" />
+                今天
+              </SidebarButton>
+              <SidebarButton
+                aria-label="后一天"
+                className="w-7 justify-center px-0"
+                onClick={() => editor.getTransforms(TanaTimePlugin).time.nextDay()}
+              >
+                <ChevronRightIcon className="size-3.5 text-[#6f7d75]" />
+              </SidebarButton>
+            </div>
+            <input
+              aria-label="前往指定日期"
+              className="h-7 w-full rounded border border-[#e1e7e3] bg-white px-2 text-xs text-[#39433d] outline-none focus:border-[#83a894] focus:ring-1 focus:ring-[#c3d7c8]"
+              type="date"
+              value={dayInput}
+              onChange={(event) => setDayInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || !dayInput) return;
+
+                event.preventDefault();
+                editor.getTransforms(TanaTimePlugin).time.goToDay(dayInput);
+              }}
+              onBlur={() => {
+                if (dayInput) editor.getTransforms(TanaTimePlugin).time.goToDay(dayInput);
+              }}
+            />
+          </div>
         </SidebarSection>
 
         <SidebarSection title="超级标签">

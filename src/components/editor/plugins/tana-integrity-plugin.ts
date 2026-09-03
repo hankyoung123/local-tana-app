@@ -14,7 +14,8 @@ import type {
   FieldValue,
   NodeId,
   TanaBlockElement,
-  TanaQueryClause,
+  TanaQueryExpression,
+  TanaQueryPredicate,
 } from '@/lib/tana/types';
 
 export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
@@ -23,9 +24,11 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * NodeId relations currently owned by integrity:
  *
  * inline
- * - mention.key
+ * - mention.key (dangling references are intentionally preserved as broken)
  * - supertag.key (presentation token only)
  * - tanaSupertagIds (semantic membership)
+ * - supertag-definition.extends (ordered Definition inheritance)
+ * - default child Supertag targets (node and Definition configuration)
  *
  * field
  * - Field Definition Node identity
@@ -36,7 +39,7 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  * - value-node mention.key
  *
  * reference
- * - tanaReferenceTargetId
+ * - tanaReferenceTargetId (dangling references are intentionally preserved as broken)
  *
  * search
  * - query fieldId
@@ -52,10 +55,11 @@ type RelationElement = TElement & { key?: unknown };
 export type TanaNodeIntegrityIssue =
   | 'field-definition-field-conflict'
   | 'invalid-field-host'
+  | 'invalid-supertag-inheritance'
   | 'invalid-supertag-definition'
   | 'invalid-value-owner'
+  | 'missing-default-child-supertag'
   | 'missing-from-supertag-source'
-  | 'missing-reference-target'
   | 'missing-supertag-membership'
   | 'invalid-search-query'
   | 'invalid-view-definition';
@@ -71,6 +75,81 @@ type TanaNodeIntegrityContext = {
   nodeIds: ReadonlySet<NodeId>;
   supertagDefinitionIds: ReadonlySet<NodeId>;
 };
+
+function hasInvalidSupertagInheritance(
+  node: TanaBlockElement,
+  context: TanaNodeIntegrityContext
+): boolean {
+  const extendsIds = node.tanaSupertagDefinition?.extends;
+
+  if (extendsIds === undefined) return false;
+  if (
+    !Array.isArray(extendsIds) ||
+    new Set(extendsIds).size !== extendsIds.length ||
+    extendsIds.some(
+      (parentId) =>
+        typeof parentId !== 'string' ||
+        !context.supertagDefinitionIds.has(parentId)
+    )
+  ) {
+    return true;
+  }
+
+  if (typeof node.id !== 'string') return true;
+  const entriesById = new Map(
+    context.entries.flatMap(([entry]) =>
+      typeof entry.id === 'string' ? [[entry.id, entry] as const] : []
+    )
+  );
+  const visiting = new Set<NodeId>();
+
+  const visit = (id: NodeId): boolean => {
+    if (visiting.has(id)) return true;
+
+    const candidate = entriesById.get(id);
+    const parents = candidate?.tanaSupertagDefinition?.extends ?? [];
+
+    visiting.add(id);
+    const cyclic = parents.some(
+      (parentId) => typeof parentId === 'string' && visit(parentId)
+    );
+    visiting.delete(id);
+
+    return cyclic;
+  };
+
+  return visit(node.id);
+}
+
+function hasMissingDefaultChildSupertag(
+  node: TanaBlockElement,
+  context: TanaNodeIntegrityContext
+): boolean {
+  const targetId =
+    node.tanaDefaultChildSupertagId ??
+    node.tanaSupertagDefinition?.defaultChildSupertagId;
+
+  return targetId !== undefined && !context.supertagDefinitionIds.has(targetId);
+}
+
+function supertagParentReaches(
+  parentId: NodeId,
+  targetId: NodeId,
+  context: TanaNodeIntegrityContext,
+  visited = new Set<NodeId>()
+): boolean {
+  if (parentId === targetId) return true;
+  if (visited.has(parentId)) return false;
+
+  visited.add(parentId);
+  const parent = context.entries.find(([node]) => node.id === parentId)?.[0];
+
+  return (parent?.tanaSupertagDefinition?.extends ?? []).some(
+    (ancestorId) =>
+      typeof ancestorId === 'string' &&
+      supertagParentReaches(ancestorId, targetId, context, visited)
+  );
+}
 
 function getTanaNodeEntries(editor: PlateEditor): TanaNodeEntry[] {
   return editor.children.flatMap((node, index) => {
@@ -90,15 +169,21 @@ function getNodeIds(entries: readonly TanaNodeEntry[]): ReadonlySet<NodeId> {
   );
 }
 
-function findDanglingInlineRelation(
+function findDanglingNonReferenceInlineRelation(
   entries: readonly TanaNodeEntry[],
+  document: Value,
   nodeIds: ReadonlySet<NodeId>
 ): Path | undefined {
-  function visit(node: TElement, path: Path): Path | undefined {
+  function visit(
+    node: TElement,
+    path: Path,
+    sourceIsValueNode: boolean
+  ): Path | undefined {
     const targetNodeId = (node as RelationElement).key;
 
     if (
-      (node.type === KEYS.mention || node.type === TANA_SUPERTAG_KEY) &&
+      (node.type === TANA_SUPERTAG_KEY ||
+        (sourceIsValueNode && node.type === KEYS.mention)) &&
       typeof targetNodeId === 'string' &&
       !nodeIds.has(targetNodeId)
     ) {
@@ -108,14 +193,18 @@ function findDanglingInlineRelation(
     for (const [index, child] of node.children.entries()) {
       if (!ElementApi.isElement(child)) continue;
 
-      const dangling = visit(child, [...path, index]);
+      const dangling = visit(child, [...path, index], sourceIsValueNode);
 
       if (dangling) return dangling;
     }
   }
 
   for (const [node, path] of entries) {
-    const dangling = visit(node, path);
+    const dangling = visit(
+      node,
+      path,
+      getNodeSemanticTypes(node, { document, path }).includes('value')
+    );
 
     if (dangling) return dangling;
   }
@@ -167,27 +256,89 @@ function pruneHiddenFieldNodeIds(
   return true;
 }
 
-function isTanaQueryClauseValid(
-  clause: TanaQueryClause,
+function isTanaQueryPredicateValid(
+  predicate: TanaQueryPredicate,
   context: Pick<
     TanaNodeIntegrityContext,
     'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
   >
 ): boolean {
-  switch (clause.kind) {
+  switch (predicate.kind) {
     case 'field-defined':
     case 'field-exists':
-      return context.fieldDefinitionIds.has(clause.fieldId);
+      return context.fieldDefinitionIds.has(predicate.fieldId);
     case 'field-equals':
       return (
-        context.fieldDefinitionIds.has(clause.fieldId) &&
-        (!isReferenceLikeFieldValue(clause.value) ||
-          context.nodeIds.has(clause.value.value))
+        context.fieldDefinitionIds.has(predicate.fieldId) &&
+        (!isReferenceLikeFieldValue(predicate.value) ||
+          context.nodeIds.has(predicate.value.value))
       );
     case 'has-supertag':
-      return context.supertagDefinitionIds.has(clause.supertagId);
+      return context.supertagDefinitionIds.has(predicate.supertagId);
     case 'text-contains':
       return true;
+    case 'parent-is':
+    case 'child-of':
+    case 'descendant-of':
+    case 'references':
+    case 'referenced-by':
+      return context.nodeIds.has(predicate.nodeId);
+  }
+}
+
+function isTanaQueryExpressionValid(
+  expression: TanaQueryExpression | undefined,
+  context: Pick<
+    TanaNodeIntegrityContext,
+    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
+  >
+): boolean {
+  if (!expression || typeof expression !== 'object') return false;
+
+  switch (expression.type) {
+    case 'predicate':
+      return isTanaQueryPredicateValid(expression.predicate, context);
+    case 'not':
+      return isTanaQueryExpressionValid(expression.child, context);
+    case 'and':
+    case 'or':
+      return Array.isArray(expression.children) && expression.children.every((child) =>
+        isTanaQueryExpressionValid(child, context)
+      );
+    default:
+      return false;
+  }
+}
+
+function pruneTanaQueryExpression(
+  expression: TanaQueryExpression | undefined,
+  context: Pick<
+    TanaNodeIntegrityContext,
+    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
+  >
+): TanaQueryExpression | undefined {
+  if (!expression || typeof expression !== 'object') return;
+
+  switch (expression.type) {
+    case 'predicate':
+      return isTanaQueryPredicateValid(expression.predicate, context)
+        ? expression
+        : undefined;
+    case 'not': {
+      const child = pruneTanaQueryExpression(expression.child, context);
+
+      return child ? { child, type: 'not' } : undefined;
+    }
+    case 'and':
+    case 'or':
+      return {
+        children: expression.children.flatMap((child) => {
+          const next = pruneTanaQueryExpression(child, context);
+
+          return next ? [next] : [];
+        }),
+        type: expression.type,
+      };
   }
 }
 
@@ -246,16 +397,15 @@ const NodeIntegrityValidators: Partial<
       return 'missing-from-supertag-source';
     }
   },
-  reference: (node, _, context) => {
-    return node.tanaReferenceTargetId && !context.nodeIds.has(node.tanaReferenceTargetId)
-      ? 'missing-reference-target'
-      : undefined;
-  },
-  'supertag-definition': (node) => {
+  'supertag-definition': (node, _, context) => {
     const definition = node.tanaSupertagDefinition;
 
-    return typeof definition !== 'object' || definition === null || Array.isArray(definition)
-      ? 'invalid-supertag-definition'
+    if (typeof definition !== 'object' || definition === null || Array.isArray(definition)) {
+      return 'invalid-supertag-definition';
+    }
+
+    return hasInvalidSupertagInheritance(node, context)
+      ? 'invalid-supertag-inheritance'
       : undefined;
   },
   field: (node, path, context) => {
@@ -288,16 +438,15 @@ const NodeIntegrityValidators: Partial<
     }
   },
   search: (node, _, context) => {
-    const clauses = node.tanaSearchDefinition?.clauses;
-
-    if (!Array.isArray(clauses)) return 'invalid-search-query';
-
-    return clauses.some((clause) => !isTanaQueryClauseValid(clause, context))
-      ? 'invalid-search-query'
-      : undefined;
+    return isTanaQueryExpressionValid(node.tanaSearchDefinition?.query, context)
+      ? undefined
+      : 'invalid-search-query';
   },
   view: (node) =>
-    node.tanaViewDefinition?.type === 'outline'
+    node.tanaViewDefinition?.type === 'outline' ||
+    node.tanaViewDefinition?.type === 'table' ||
+    node.tanaViewDefinition?.type === 'calendar' ||
+    node.tanaViewDefinition?.type === 'cards'
       ? undefined
       : 'invalid-view-definition',
 };
@@ -318,6 +467,10 @@ export function validateNode(
     )
   ) {
     return 'missing-supertag-membership';
+  }
+
+  if (hasMissingDefaultChildSupertag(node, context)) {
+    return 'missing-default-child-supertag';
   }
 
   const semanticContext = { document: context.document, path };
@@ -344,6 +497,26 @@ export function repairNode(
     case 'invalid-supertag-definition':
       editor.tf.setNodes({ tanaSupertagDefinition: {} }, { at: path });
       return true;
+    case 'invalid-supertag-inheritance': {
+      const candidateParents = node.tanaSupertagDefinition?.extends ?? [];
+      const safeParents = candidateParents.filter(
+        (parentId): parentId is NodeId =>
+          typeof parentId === 'string' &&
+          parentId !== node.id &&
+          context.supertagDefinitionIds.has(parentId) &&
+          typeof node.id === 'string' &&
+          !supertagParentReaches(parentId, node.id, context)
+      );
+
+      editor.tf.setNodes(
+        {
+          tanaSupertagDefinition:
+            safeParents.length > 0 ? { extends: safeParents } : {},
+        },
+        { at: path }
+      );
+      return true;
+    }
     case 'invalid-value-owner':
       editor.tf.unsetNodes('tanaFieldValueType', { at: path });
       return true;
@@ -362,9 +535,6 @@ export function repairNode(
         { at: path }
       );
       return true;
-    case 'missing-reference-target':
-      editor.tf.unsetNodes('tanaReferenceTargetId', { at: path });
-      return true;
     case 'missing-supertag-membership': {
       const supertagIds = (node.tanaSupertagIds ?? []).filter((supertagId) =>
         context.supertagDefinitionIds.has(supertagId)
@@ -377,20 +547,30 @@ export function repairNode(
       }
       return true;
     }
+    case 'missing-default-child-supertag': {
+      if (node.tanaDefaultChildSupertagId !== undefined) {
+        editor.tf.unsetNodes('tanaDefaultChildSupertagId', { at: path });
+      } else {
+        const definition = { ...node.tanaSupertagDefinition };
+
+        delete definition.defaultChildSupertagId;
+        editor.tf.setNodes({ tanaSupertagDefinition: definition }, { at: path });
+      }
+      return true;
+    }
     case 'invalid-view-definition':
       editor.tf.setNodes({ tanaViewDefinition: { type: 'outline' } }, { at: path });
       return true;
     case 'invalid-search-query': {
-      const clauses = Array.isArray(node.tanaSearchDefinition?.clauses)
-        ? node.tanaSearchDefinition.clauses
-        : [];
+      const query = pruneTanaQueryExpression(
+        node.tanaSearchDefinition?.query,
+        context
+      ) ?? { children: [], type: 'and' };
 
       editor.tf.setNodes(
         {
           tanaSearchDefinition: {
-            clauses: clauses.filter((clause) =>
-              isTanaQueryClauseValid(clause, context)
-            ),
+            query,
           },
         },
         { at: path }
@@ -488,7 +668,11 @@ function normalizeRelations(editor: PlateEditor): boolean {
       'supertag-definition'
     ),
   };
-  const danglingInlinePath = findDanglingInlineRelation(entries, nodeIds);
+  const danglingInlinePath = findDanglingNonReferenceInlineRelation(
+    entries,
+    editor.children,
+    nodeIds
+  );
 
   if (danglingInlinePath) {
     editor.tf.removeNodes({ at: danglingInlinePath });

@@ -53,6 +53,7 @@ import {
   isTanaNodeElement,
   isTanaNodeHidden,
   isTanaNodeInteractable,
+  resolveTanaNodeTitle,
   getNodeSemanticType,
   hasNodeSemantic,
 } from '@/lib/tana';
@@ -340,6 +341,13 @@ function Draggable({
   });
   const indent = getNodeIndent(element);
   const fieldValueOffset = `${Math.max(0, indent - 1) * 24 + 124}px`;
+  const nodeId = typeof element.id === 'string' ? element.id : undefined;
+  const derivedTitle = nodeId ? resolveTanaNodeTitle(index, nodeId) : undefined;
+  const showsDerivedTitle =
+    semanticType === 'content' &&
+    !!nodeId &&
+    derivedTitle !== undefined &&
+    derivedTitle !== index.nodesById.get(nodeId)?.text;
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
@@ -476,6 +484,16 @@ function Draggable({
         }
       >
         {BlockRenderer && <BlockRenderer element={element} index={index} />}
+        {showsDerivedTitle && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-white pr-1 font-medium text-[13px] text-[#39433d]"
+            contentEditable={false}
+            style={{ left: `${indent * 24}px`, right: '1rem' }}
+          >
+            <span className="truncate">{derivedTitle}</span>
+          </span>
+        )}
         {semanticType === 'value' &&
         element.tanaFieldValueType !== 'plain' &&
         element.tanaFieldValueType !== 'number' ? (

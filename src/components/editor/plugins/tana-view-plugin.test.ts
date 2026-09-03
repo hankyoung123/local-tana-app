@@ -82,6 +82,36 @@ describe('Tana view mutations', () => {
     assert.equal(editor.children[0].tanaViewDefinition, undefined);
   });
 
+  test('changes only View presentation while keeping the Search definition untouched', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Tasks' }],
+        id: 'view',
+        tanaSearchDefinition: { query: { children: [], type: 'and' } },
+        tanaViewDefinition: { type: 'outline' },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.equal(view(editor).setType('view', 'table'), true);
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'table' });
+    assert.deepEqual(editor.children[0].tanaSearchDefinition, {
+      query: { children: [], type: 'and' },
+    });
+
+    assert.equal(view(editor).setType('view', 'calendar'), true);
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'calendar' });
+    assert.deepEqual(editor.children[0].tanaSearchDefinition, {
+      query: { children: [], type: 'and' },
+    });
+
+    assert.equal(view(editor).setType('view', 'cards'), true);
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'cards' });
+    assert.deepEqual(editor.children[0].tanaSearchDefinition, {
+      query: { children: [], type: 'and' },
+    });
+  });
+
   test('composes a View with a Supertag Definition without changing either Node semantic', () => {
     const editor = createEditor(value);
     const supertagDefinition = structuredClone(

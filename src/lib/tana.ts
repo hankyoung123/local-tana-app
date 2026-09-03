@@ -6,4 +6,5 @@ export * from './tana/node-semantic';
 export * from './tana/outliner';
 export * from './tana/persistence';
 export * from './tana/query';
+export * from './tana/title';
 export * from './tana/types';

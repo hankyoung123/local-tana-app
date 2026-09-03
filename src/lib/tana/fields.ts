@@ -2,7 +2,9 @@ import { ElementApi, TextApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
-import { getNodeSupertagIds } from './index';
+import { isTanaNumberInRange, isTanaStringFieldValueValid } from './field-value';
+import { getNodeSupertagIds, getSupertagInheritance } from './index';
+import { isTanaDay } from './time';
 import { hasNodeSemantic } from './node-semantic';
 import {
   getTanaAncestorPaths,
@@ -23,6 +25,7 @@ export type ResolvedSupertagTemplateField = {
   definition: FieldDefinition;
   fieldId: NodeId;
   field: TanaNode;
+  optional: boolean;
   /** Explicit template defaults live only on external Field occurrence Values. */
   value?: FieldValue;
 };
@@ -57,6 +60,7 @@ export type TanaFieldDescriptor = {
   fieldNodeId?: NodeId;
   key: NodeId | TanaSystemFieldKey;
   label: string;
+  pinned?: boolean;
   source: 'custom' | 'supertag' | 'system';
   supertagIds?: readonly NodeId[];
   systemValue?: string;
@@ -81,6 +85,21 @@ export function isFieldValueValid(
 
   if (!definition) return false;
   if (!isFieldValueCompatible(definition, value)) return false;
+
+  if (definition.type === 'date' && value.type === 'date') {
+    return isTanaDay(value.value);
+  }
+
+  if (
+    (definition.type === 'email' && value.type === 'email') ||
+    (definition.type === 'url' && value.type === 'url')
+  ) {
+    return isTanaStringFieldValueValid(definition.type, value.value);
+  }
+
+  if (definition.type === 'number' && value.type === 'number') {
+    return isTanaNumberInRange(definition, value.value);
+  }
 
   if (definition.type === 'options' && value.type === 'options') {
     return getFieldValueCandidates(index, fieldId).some(
@@ -360,7 +379,7 @@ export function findFieldDefinitionExactMatch(
  * Resolves a Supertag's template Fields from ordered direct children. A template
  * can either be an external Field occurrence or a local Field Definition Node.
  */
-export function getSupertagTemplateFields(
+function getDirectSupertagTemplateFields(
   index: TanaIndex,
   supertagId: NodeId
 ): ResolvedSupertagTemplateField[] {
@@ -370,18 +389,18 @@ export function getSupertagTemplateFields(
     return [];
   }
 
-  const seenFieldIds = new Set<NodeId>();
-
   return (index.childrenByParent.get(supertagId) ?? []).flatMap((childId) => {
     const child = index.nodesById.get(childId);
 
     if (!child) return [];
 
     if (child.semanticTypes.includes('field-definition') && child.fieldDefinition) {
-      if (seenFieldIds.has(child.id)) return [];
-      seenFieldIds.add(child.id);
-
-      return [{ definition: child.fieldDefinition, field: child, fieldId: child.id }];
+      return [{
+        definition: child.fieldDefinition,
+        field: child,
+        fieldId: child.id,
+        optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
+      }];
     }
 
     const template = index.fieldNodesById.get(child.id);
@@ -390,19 +409,44 @@ export function getSupertagTemplateFields(
     if (
       !template ||
       !field?.fieldDefinition ||
-      !field.semanticTypes.includes('field-definition') ||
-      seenFieldIds.has(template.fieldId)
+      !field.semanticTypes.includes('field-definition')
     ) {
       return [];
     }
 
-    seenFieldIds.add(template.fieldId);
     return [{
       definition: field.fieldDefinition,
       field,
       fieldId: template.fieldId,
+      optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
       value: template.value,
     }];
+  });
+}
+
+/**
+ * Resolves inherited templates in parent-first order. A direct template with
+ * the same FieldId replaces its ancestor's binding without copying either
+ * Field Definition or Value Nodes into a parallel schema.
+ */
+export function getSupertagTemplateFields(
+  index: TanaIndex,
+  supertagId: NodeId
+): ResolvedSupertagTemplateField[] {
+  const templatesByFieldId = new Map<NodeId, ResolvedSupertagTemplateField>();
+  const orderedFieldIds: NodeId[] = [];
+
+  [...getSupertagInheritance(index, supertagId), supertagId].forEach((definitionId) => {
+    getDirectSupertagTemplateFields(index, definitionId).forEach((template) => {
+      if (!templatesByFieldId.has(template.fieldId)) orderedFieldIds.push(template.fieldId);
+      templatesByFieldId.set(template.fieldId, template);
+    });
+  });
+
+  return orderedFieldIds.flatMap((fieldId) => {
+    const template = templatesByFieldId.get(fieldId);
+
+    return template ? [template] : [];
   });
 }
 
@@ -549,6 +593,7 @@ export function getNodeFieldDescriptors(
         fieldNodeId: fieldNode.id,
         key: fieldNode.id,
         label: field.text || '未命名字段',
+        pinned: fieldNode.node.tanaFieldPinned === true,
         source: matchingSupertagIds.length > 0 ? 'supertag' : 'custom',
         ...(matchingSupertagIds.length > 0
           ? { supertagIds: matchingSupertagIds }
@@ -557,5 +602,10 @@ export function getNodeFieldDescriptors(
     ];
   });
 
-  return [...system, ...semanticFields];
+  return [
+    ...system,
+    ...semanticFields.sort(
+      (left, right) => Number(right.pinned === true) - Number(left.pinned === true)
+    ),
+  ];
 }

@@ -18,7 +18,7 @@ function createEditor(value: Value) {
 }
 
 describe('Tana search mutations', () => {
-  test('owns query clauses separately from View presentation', () => {
+  test('owns a root AND query separately from View presentation', () => {
     const editor = createEditor([
       { children: [{ text: 'Open tasks' }], id: 'search', type: KEYS.p },
       {
@@ -36,7 +36,10 @@ describe('Tana search mutations', () => {
       true
     );
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
-      clauses: [{ kind: 'has-supertag', supertagId: 'project' }],
+      query: {
+        children: [{ predicate: { kind: 'has-supertag', supertagId: 'project' }, type: 'predicate' }],
+        type: 'and',
+      },
     });
     assert.equal(editor.children[0].tanaViewDefinition, undefined);
   });

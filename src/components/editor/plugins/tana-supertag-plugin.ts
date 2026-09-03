@@ -1,4 +1,4 @@
-import { ElementApi } from 'platejs';
+import { ElementApi, nanoid } from 'platejs';
 import type { NodeEntry } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
@@ -7,9 +7,12 @@ import {
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
 import { getSupertagTemplateFields } from '@/lib/tana/fields';
-import { buildTanaIndex } from '@/lib/tana/index';
+import { buildTanaIndex, getSupertagInheritance } from '@/lib/tana/index';
 import { hasNodeSemantic } from '@/lib/tana/node-semantic';
-import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
+import {
+  getTanaDirectChildPaths,
+  getTanaNodeDescendantPaths,
+} from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 import { TanaFieldPlugin } from './tana-field-plugin';
@@ -51,6 +54,85 @@ function isSelectionInNode(editor: PlateEditor, nodePath: number[]) {
       (point) => point.path[0] === nodePath[0]
     )
   );
+}
+
+/**
+ * Normal template children are copied as normal Plate Nodes only. Field
+ * templates remain the FieldPlugin's responsibility, and no semantic data is
+ * copied into a second entity model. Requiring an entirely plain subtree keeps
+ * a malformed template from materializing Field/Value structure by accident.
+ */
+function getPlainTemplateSubtreePaths(editor: PlateEditor, supertagPath: number[]) {
+  return getTanaDirectChildPaths(editor.children, supertagPath).flatMap((childPath) => {
+    const subtreePaths = [
+      childPath,
+      ...getTanaNodeDescendantPaths(editor.children, childPath),
+    ];
+    const isPlainSubtree = subtreePaths.every((path) => {
+      const entry = editor.api.node(path);
+
+      if (!entry || !ElementApi.isElement(entry[0])) return false;
+
+      const node = entry[0] as TanaBlockElement;
+
+      return (
+        node.tanaFieldDefinition === undefined &&
+        node.tanaFieldId === undefined &&
+        node.tanaFieldValueType === undefined &&
+        node.tanaReferenceTargetId === undefined &&
+        node.tanaSearchDefinition === undefined &&
+        node.tanaSupertagIds === undefined &&
+        node.tanaSupertagDefinition === undefined &&
+        node.tanaSystemNode === undefined &&
+        node.tanaTime === undefined &&
+        node.tanaViewDefinition === undefined
+      );
+    });
+
+    return isPlainSubtree ? [subtreePaths] : [];
+  });
+}
+
+function materializePlainTemplateChildren(
+  editor: PlateEditor,
+  nodePath: number[],
+  supertagPath: number[]
+) {
+  const target = editor.api.node(nodePath)?.[0] as TanaBlockElement | undefined;
+  const template = editor.api.node(supertagPath)?.[0] as TanaBlockElement | undefined;
+
+  if (!target || !template) return;
+
+  const targetIndent = typeof target.indent === 'number' ? target.indent : 0;
+
+  for (const subtreePaths of getPlainTemplateSubtreePaths(editor, supertagPath)) {
+    const root = editor.api.node(subtreePaths[0])?.[0] as TanaBlockElement | undefined;
+    const rootIndent = typeof root?.indent === 'number' ? root.indent : 0;
+    const insertionPath = [
+      (getTanaNodeDescendantPaths(editor.children, nodePath).at(-1)?.[0] ?? nodePath[0]) +
+        1,
+    ];
+    const clonedNodes = subtreePaths.flatMap((path) => {
+      const source = editor.api.node(path)?.[0];
+
+      if (!source || !ElementApi.isElement(source)) return [];
+
+      const clone = structuredClone(source) as TanaBlockElement;
+      const sourceIndent = typeof clone.indent === 'number' ? clone.indent : rootIndent;
+
+      return [
+        {
+          ...clone,
+          id: nanoid(),
+          indent: targetIndent + 1 + (sourceIndent - rootIndent),
+        },
+      ];
+    });
+
+    if (clonedNodes.length === subtreePaths.length) {
+      editor.tf.insertNodes(clonedNodes, { at: insertionPath });
+    }
+  }
 }
 
 function create(editor: PlateEditor, name: string): NodeId | undefined {
@@ -115,6 +197,176 @@ function define(editor: PlateEditor, nodeId: NodeId) {
   return true;
 }
 
+/**
+ * A writer validates the whole inheritance edge before it reaches the Plate
+ * document. `TanaIndex` remains free to derive broken historical data, while
+ * ordinary UI actions can never create a cyclic Definition graph.
+ */
+function setExtends(
+  editor: PlateEditor,
+  supertagId: NodeId,
+  parentIds: readonly NodeId[]
+) {
+  const entry = getDefinitionEntry(editor, supertagId);
+
+  if (!entry || !Array.isArray(parentIds)) return false;
+
+  const uniqueParentIds = Array.from(new Set(parentIds));
+  const index = buildTanaIndex(editor.children);
+
+  if (
+    uniqueParentIds.some(
+      (parentId) =>
+        parentId === supertagId ||
+        !getDefinitionEntry(editor, parentId) ||
+        getSupertagInheritance(index, parentId).includes(supertagId)
+    )
+  ) {
+    return false;
+  }
+
+  const current = entry[0].tanaSupertagDefinition?.extends ?? [];
+
+  if (
+    current.length === uniqueParentIds.length &&
+    current.every((parentId, index) => parentId === uniqueParentIds[index])
+  ) {
+    return false;
+  }
+
+  editor.tf.setNodes(
+    {
+      tanaSupertagDefinition:
+        uniqueParentIds.length > 0 ? { extends: uniqueParentIds } : {},
+    },
+    { at: entry[1] }
+  );
+
+  return true;
+}
+
+function getDefaultChildSupertagId(editor: PlateEditor, ownerId: NodeId) {
+  const index = buildTanaIndex(editor.children);
+  const owner = index.nodesById.get(ownerId);
+
+  if (!owner) return;
+  const ownDefault = (owner.node as TanaBlockElement).tanaDefaultChildSupertagId;
+
+  if (ownDefault && getDefinitionEntry(editor, ownDefault)) return ownDefault;
+
+  for (const supertagId of owner.supertagIds) {
+    const definitionIds = [
+      supertagId,
+      ...getSupertagInheritance(index, supertagId).slice().reverse(),
+    ];
+
+    for (const definitionId of definitionIds) {
+      const defaultChildSupertagId =
+        index.nodesById.get(definitionId)?.supertagDefinition?.defaultChildSupertagId;
+
+      if (defaultChildSupertagId && getDefinitionEntry(editor, defaultChildSupertagId)) {
+        return defaultChildSupertagId;
+      }
+    }
+  }
+}
+
+/** Applies an already-configured child tag after Plate creates an ordinary Node. */
+function applyDefaultChild(editor: PlateEditor, childNodeId: NodeId) {
+  const childEntry = getTanaNodeEntry(editor, childNodeId);
+
+  if (!childEntry) return false;
+
+  const [child] = childEntry;
+
+  if (
+    child.tanaFieldDefinition !== undefined ||
+    child.tanaFieldId !== undefined ||
+    child.tanaFieldValueType !== undefined ||
+    child.tanaSystemNode !== undefined
+  ) {
+    return false;
+  }
+
+  // Parentage is derived exclusively from flat indent and document order.
+  const parentNode = buildTanaIndex(editor.children).parentNodeIds.get(childNodeId);
+  const defaultChildSupertagId = parentNode
+    ? getDefaultChildSupertagId(editor, parentNode)
+    : undefined;
+
+  return defaultChildSupertagId
+    ? apply(editor, childNodeId, defaultChildSupertagId)
+    : false;
+}
+
+function setDefaultChildSupertag(
+  editor: PlateEditor,
+  ownerNodeId: NodeId,
+  defaultChildSupertagId: NodeId | null
+) {
+  const entry = getTanaNodeEntry(editor, ownerNodeId);
+
+  if (!entry || entry[0].tanaSystemNode !== undefined) return false;
+  if (defaultChildSupertagId !== null && !getDefinitionEntry(editor, defaultChildSupertagId)) {
+    return false;
+  }
+
+  const [node, path] = entry;
+
+  if (node.tanaSupertagDefinition !== undefined) {
+    const current = node.tanaSupertagDefinition.defaultChildSupertagId;
+
+    if (current === defaultChildSupertagId) return false;
+    const rest = { ...node.tanaSupertagDefinition };
+
+    delete rest.defaultChildSupertagId;
+
+    editor.tf.setNodes(
+      {
+        tanaSupertagDefinition:
+          defaultChildSupertagId === null
+            ? rest
+            : { ...rest, defaultChildSupertagId },
+      },
+      { at: path }
+    );
+    return true;
+  }
+
+  if (node.tanaDefaultChildSupertagId === defaultChildSupertagId) return false;
+  if (defaultChildSupertagId === null) {
+    editor.tf.unsetNodes('tanaDefaultChildSupertagId', { at: path });
+  } else {
+    editor.tf.setNodes({ tanaDefaultChildSupertagId: defaultChildSupertagId }, { at: path });
+  }
+
+  return true;
+}
+
+function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression: string) {
+  const entry = getDefinitionEntry(editor, supertagId);
+
+  if (!entry) return false;
+
+  const [node, path] = entry;
+  const nextExpression = expression.trim();
+  const current = node.tanaSupertagDefinition?.titleExpression ?? '';
+
+  if (current === nextExpression) return false;
+
+  const definition = { ...node.tanaSupertagDefinition };
+
+  if (nextExpression) {
+    definition.titleExpression = nextExpression;
+  } else {
+    delete definition.titleExpression;
+  }
+
+  editor.tf.setNodes({ tanaSupertagDefinition: definition }, { at: path });
+
+  return true;
+}
+
 function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const nodeEntry = getTanaNodeEntry(editor, nodeId);
   const definitionEntry = getDefinitionEntry(editor, supertagId);
@@ -134,11 +386,24 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const index = buildTanaIndex(editor.children);
   const templates = getSupertagTemplateFields(index, supertagId);
   templates.forEach((template) => {
+    if (template.optional) return;
+
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
     fieldTransforms.materialize(nodeId, template.fieldId);
     if (template.value !== undefined) {
       fieldTransforms.applyDefault(nodeId, template.fieldId, template.value);
+    }
+  });
+  const templateDefinitionIds = [
+    ...getSupertagInheritance(index, supertagId),
+    supertagId,
+  ];
+  templateDefinitionIds.forEach((templateDefinitionId) => {
+    const templateEntry = getDefinitionEntry(editor, templateDefinitionId);
+
+    if (templateEntry) {
+      materializePlainTemplateChildren(editor, nodePath, templateEntry[1]);
     }
   });
 
@@ -225,6 +490,15 @@ export const TanaSupertagPlugin = createPlatePlugin({
       apply(editor, nodeId, supertagId),
     create: (name: string) => create(editor, name),
     define: (nodeId: NodeId) => define(editor, nodeId),
+    applyDefaultChild: (childNodeId: NodeId) => applyDefaultChild(editor, childNodeId),
+    setDefaultChildSupertag: (
+      ownerNodeId: NodeId,
+      defaultChildSupertagId: NodeId | null
+    ) => setDefaultChildSupertag(editor, ownerNodeId, defaultChildSupertagId),
+    setExtends: (supertagId: NodeId, parentIds: readonly NodeId[]) =>
+      setExtends(editor, supertagId, parentIds),
+    setTitleExpression: (supertagId: NodeId, expression: string) =>
+      setTitleExpression(editor, supertagId, expression),
     remove: (nodeId: NodeId, supertagId: NodeId) =>
       remove(editor, nodeId, supertagId),
   },

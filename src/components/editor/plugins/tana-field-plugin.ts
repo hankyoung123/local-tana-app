@@ -464,6 +464,53 @@ function updateDefinition(editor: PlateEditor, fieldId: NodeId, definition: Fiel
   return true;
 }
 
+/** Optionality belongs to the direct Supertag template binding, never the shared Definition. */
+function setOptional(editor: PlateEditor, templateNodeId: NodeId, optional: boolean) {
+  const entry = getTanaNodeEntry(editor, templateNodeId);
+
+  if (!entry) return false;
+
+  const [node, path] = entry;
+  const parentPath = getTanaParentPath(editor.children, path);
+  const parent = parentPath
+    ? (editor.api.node(parentPath)?.[0] as TanaBlockElement | undefined)
+    : undefined;
+
+  if (
+    !parent?.tanaSupertagDefinition ||
+    (node.tanaFieldDefinition === undefined && node.tanaFieldId === undefined)
+  ) {
+    return false;
+  }
+
+  if (optional) {
+    if (node.tanaFieldOptional === true) return false;
+    editor.tf.setNodes({ tanaFieldOptional: true }, { at: path });
+  } else {
+    if (node.tanaFieldOptional !== true) return false;
+    editor.tf.unsetNodes('tanaFieldOptional', { at: path });
+  }
+
+  return true;
+}
+
+/** Pinned presentation is carried by the real Field occurrence Node itself. */
+function setPinned(editor: PlateEditor, fieldNodeId: NodeId, pinned: boolean) {
+  const entry = getTanaNodeEntry(editor, fieldNodeId);
+
+  if (!entry?.[0].tanaFieldId) return false;
+
+  if (pinned) {
+    if (entry[0].tanaFieldPinned === true) return false;
+    editor.tf.setNodes({ tanaFieldPinned: true }, { at: entry[1] });
+  } else {
+    if (entry[0].tanaFieldPinned !== true) return false;
+    editor.tf.unsetNodes('tanaFieldPinned', { at: entry[1] });
+  }
+
+  return true;
+}
+
 function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
   const normalizedName = name.trim();
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
@@ -719,6 +766,10 @@ export const TanaFieldPlugin = createPlatePlugin({
       removeOption: (fieldId: NodeId, optionId: NodeId) => removeOption(editor, fieldId, optionId),
       setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
         setValue(editor, nodeId, fieldId, value),
+      setOptional: (templateNodeId: NodeId, optional: boolean) =>
+        setOptional(editor, templateNodeId, optional),
+      setPinned: (fieldNodeId: NodeId, pinned: boolean) =>
+        setPinned(editor, fieldNodeId, pinned),
       updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
         updateDefinition(editor, fieldId, definition)
     }

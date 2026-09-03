@@ -16,11 +16,12 @@ describe('Node renderer registry', () => {
 
     assert.ok(NodeRendererRegistry['field-definition'].Block);
     assert.ok(NodeRendererRegistry.field.Block);
+    assert.ok(NodeRendererRegistry.reference.Block);
     assert.ok(NodeRendererRegistry.value.Block);
   });
 
-  test('renders a Supertag Definition through its editable outline', () => {
-    assert.equal(
+  test('renders a Supertag Definition through its derived instance page', () => {
+    assert.notEqual(
       NodeRendererRegistry['supertag-definition'].Workspace,
       NodeRendererRegistry.content.Workspace
     );

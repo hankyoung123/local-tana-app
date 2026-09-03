@@ -3,12 +3,14 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 import { ElementApi, KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
+import { isTanaNumberInRange, isTanaStringFieldValueValid } from './field-value';
 import {
   getNodeSemanticType,
   getNodeSemanticTypes,
   hasNodeSemantic,
 } from './node-semantic';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
+import { getTanaTimeKey } from './time';
 import type {
   FieldId,
   FieldValue,
@@ -30,6 +32,39 @@ export type NodeReferenceCandidate = Pick<TanaNode, 'id' | 'text'>;
 export type SupertagCandidate = NodeReferenceCandidate & {
   definition: SupertagDefinition;
 };
+
+/** Resolves a definition's ancestors in parent-first order without recursion loops. */
+export function getSupertagInheritance(
+  index: Pick<TanaIndex, 'nodesById'>,
+  supertagId: NodeId
+): NodeId[] {
+  const ordered: NodeId[] = [];
+  const visiting = new Set<NodeId>();
+  const visited = new Set<NodeId>();
+
+  const visit = (id: NodeId, includeSelf: boolean) => {
+    if (visited.has(id) || visiting.has(id)) return;
+
+    const node = index.nodesById.get(id);
+
+    if (!node?.supertagDefinition) return;
+
+    visiting.add(id);
+    const parents = node.supertagDefinition.extends ?? [];
+
+    parents.forEach((parentId) => {
+      if (typeof parentId === 'string') visit(parentId, true);
+    });
+    visiting.delete(id);
+    visited.add(id);
+
+    if (includeSelf) ordered.push(id);
+  };
+
+  visit(supertagId, false);
+
+  return ordered;
+}
 
 function isElement(node: Descendant): node is TElement {
   return 'children' in node && Array.isArray(node.children);
@@ -98,6 +133,10 @@ function getFieldValueFromNode(
     return text.length > 0 ? { type: 'date', value: text } : undefined;
   }
 
+  if (definition.type === 'email' || definition.type === 'url') {
+    return text.length > 0 ? { type: definition.type, value: text } : undefined;
+  }
+
   if (definition.type === 'number') {
     const normalized = text.trim();
 
@@ -141,6 +180,17 @@ function isDerivedFieldValueValid(
 ): boolean {
   if (definition.type !== value.type) return false;
 
+  if (
+    (definition.type === 'email' && value.type === 'email') ||
+    (definition.type === 'url' && value.type === 'url')
+  ) {
+    return isTanaStringFieldValueValid(definition.type, value.value);
+  }
+
+  if (definition.type === 'number' && value.type === 'number') {
+    return isTanaNumberInRange(definition, value.value);
+  }
+
   if (definition.type === 'options' && value.type === 'options') {
     const fieldDefinitionNode = nodesById.get(fieldId);
 
@@ -176,6 +226,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const fieldValues = new Map<NodeId, Map<FieldId, FieldValue>>();
   const parentNodeIds = new Map<NodeId, NodeId | undefined>();
   const systemNodeIds = new Map<TanaSystemNode, NodeId>();
+  const timeNodeIds = new Map<string, NodeId>();
   const orderedNodes: TanaNode[] = [];
 
   document.forEach((descendant, index) => {
@@ -204,6 +255,8 @@ export function buildTanaIndex(document: Value): TanaIndex {
           )
         : [],
       systemNode: tanaNode.tanaSystemNode,
+      time: tanaNode.tanaTime,
+      rawText: '',
       text: '',
       viewDefinition: tanaNode.tanaViewDefinition,
     };
@@ -252,10 +305,35 @@ export function buildTanaIndex(document: Value): TanaIndex {
   }
 
   orderedNodes.forEach((node) => {
+    const rawText = resolveNodeName(node.id, new Set());
+
     nodesById.set(node.id, {
       ...node,
-      text: resolveNodeName(node.id, new Set()),
+      rawText,
+      text: rawText,
     });
+  });
+
+  // Title expressions are display-only. Keep the canonical Plate text intact
+  // so Field names, query input, and document transforms never depend on a
+  // generated title.
+  orderedNodes.forEach((node) => {
+    const resolved = nodesById.get(node.id);
+
+    if (!resolved) return;
+    let titleExpression: string | undefined;
+
+    resolved.supertagIds.forEach((supertagId) => {
+      [...getSupertagInheritance({ nodesById }, supertagId), supertagId].forEach(
+        (definitionId) => {
+          const expression = nodesById.get(definitionId)?.supertagDefinition?.titleExpression;
+
+          if (expression !== undefined) titleExpression = expression;
+        }
+      );
+    });
+
+    nodesById.set(node.id, { ...resolved, titleExpression });
   });
 
   const resolvedNodes = orderedNodes.flatMap((node) => {
@@ -283,12 +361,17 @@ export function buildTanaIndex(document: Value): TanaIndex {
     }
 
     if (node.systemNode) systemNodeIds.set(node.systemNode, node.id);
+    if (node.time) timeNodeIds.set(getTanaTimeKey(node.time), node.id);
 
     node.supertagIds.forEach((supertagId) => {
-      const taggedNodes = nodesBySupertag.get(supertagId) ?? [];
+      const relationIds = [supertagId, ...getSupertagInheritance({ nodesById }, supertagId)];
 
-      taggedNodes.push(node.id);
-      nodesBySupertag.set(supertagId, taggedNodes);
+      relationIds.forEach((relationId) => {
+        const taggedNodes = nodesBySupertag.get(relationId) ?? [];
+
+        if (!taggedNodes.includes(node.id)) taggedNodes.push(node.id);
+        nodesBySupertag.set(relationId, taggedNodes);
+      });
     });
   });
 
@@ -320,7 +403,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
   }
 
   resolvedNodes.forEach((node) => {
-    if (node.referenceTargetId && nodesById.has(node.referenceTargetId)) {
+    if (node.referenceTargetId) {
       referenceTargetsByNode.set(node.id, node.referenceTargetId);
       addReference({
         kind: 'node',
@@ -428,8 +511,11 @@ export function buildTanaIndex(document: Value): TanaIndex {
     references,
     referenceTargetsByNode,
     systemNodeIds,
+    timeNodeIds,
   };
 }
+
+export * from './time';
 
 export function getNodeDisplayNameFromIndex(
   index: TanaIndex,

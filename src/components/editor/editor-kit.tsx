@@ -20,8 +20,11 @@ import { SlashKit } from '@/components/editor/plugins/slash-kit';
 import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
 import { TanaIntegrityPlugin } from '@/components/editor/plugins/tana-integrity-plugin';
 import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
+import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
+import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
@@ -30,6 +33,8 @@ export const EditorKit = [
   // Local Tana semantics: its focusedNodeId lives in the Plate plugin store.
   TanaZoomPlugin,
   TanaNodeIdentityPlugin,
+  TanaTimePlugin,
+  TanaNodeLifecyclePlugin,
 
   // Elements
   ...BasicBlocksKit,
@@ -38,6 +43,7 @@ export const EditorKit = [
   ...MentionKit,
   ...SupertagKit,
   ...FieldKit,
+  TanaReferencePlugin,
   TanaSearchPlugin,
   TanaViewPlugin,
   TanaPresentationPlugin,

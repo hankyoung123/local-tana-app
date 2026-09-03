@@ -45,6 +45,11 @@ export function TanaSearchDefinitionEditor({
   const [supertagId, setSupertagId] = React.useState('');
   const [text, setText] = React.useState('');
   const definition = node.tanaSearchDefinition;
+  const rootPredicates = definition?.query.type === 'and'
+    ? definition.query.children.flatMap((child) =>
+        child.type === 'predicate' ? [child.predicate] : []
+      )
+    : [];
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ supertagDefinition }) => !!supertagDefinition
   );
@@ -114,7 +119,7 @@ export function TanaSearchDefinitionEditor({
       </div>
 
       <div className="mb-3 space-y-1">
-        {definition.clauses.map((clause, indexInList) => (
+        {rootPredicates.map((clause, indexInList) => (
           <div
             key={`${clause.kind}:${indexInList}`}
             className="flex items-start gap-2 rounded bg-white px-2 py-1.5 text-xs"
@@ -267,7 +272,17 @@ function QueryValueInput({
   return (
     <Input
       className="h-8 text-xs"
-      type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+      type={
+        field.type === 'number'
+          ? 'number'
+          : field.type === 'date'
+            ? 'date'
+            : field.type === 'email'
+              ? 'email'
+              : field.type === 'url'
+                ? 'url'
+                : 'text'
+      }
       value={value}
       placeholder="值"
       onChange={(event) => onChange(event.target.value)}
@@ -286,6 +301,8 @@ function getFieldValue(
       return { type: 'checkbox', value: rawValue === 'true' };
     case 'date':
       return { type: 'date', value: rawValue };
+    case 'email':
+      return { type: 'email', value: rawValue };
     case 'from-supertag':
       return { type: 'from-supertag', value: rawValue };
     case 'number': {
@@ -297,5 +314,7 @@ function getFieldValue(
       return { type: 'options', value: rawValue };
     case 'plain':
       return { type: 'plain', value: rawValue };
+    case 'url':
+      return { type: 'url', value: rawValue };
   }
 }

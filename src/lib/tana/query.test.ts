@@ -5,6 +5,7 @@ import type { Value } from 'platejs';
 
 import { buildTanaIndex } from './index';
 import {
+  createAndQuery,
   describeTanaQueryClause,
   isTanaQueryClauseValid,
   runTanaQuery,
@@ -74,14 +75,22 @@ const document: Value = [
   },
   { children: [{ text: '' }], id: 'gamma-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },
   { children: [{ text: '' }], id: 'gamma-estimate-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
+  { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
+  { children: [{ text: 'Child' }], id: 'child', indent: 1, type: 'p' },
+  { children: [{ text: 'Grandchild' }], id: 'grandchild', indent: 2, type: 'p' },
+  { children: [{ text: 'Alpha reference' }], id: 'alpha-reference', tanaReferenceTargetId: 'alpha', type: 'p' },
 ];
 
 const index = buildTanaIndex(document);
 
+function run(clauses: Parameters<typeof createAndQuery>[0]) {
+  return runTanaQuery(index, createAndQuery(clauses));
+}
+
 describe('runTanaQuery', () => {
   test('supports hasSupertag', () => {
     assert.deepEqual(
-      runTanaQuery(index, [
+      run([
         { kind: 'has-supertag', supertagId: 'project-tag' },
       ]).map(({ id }) => id),
       ['alpha']
@@ -90,7 +99,7 @@ describe('runTanaQuery', () => {
 
   test('supports field equals and field exists', () => {
     assert.deepEqual(
-      runTanaQuery(index, [
+      run([
         {
           fieldId: 'status',
           kind: 'field-equals',
@@ -104,7 +113,7 @@ describe('runTanaQuery', () => {
 
   test('treats a null Field value as not set for field-exists', () => {
     assert.deepEqual(
-      runTanaQuery(index, [{ fieldId: 'estimate', kind: 'field-exists' }]).map(
+      run([{ fieldId: 'estimate', kind: 'field-exists' }]).map(
         ({ id }) => id
       ),
       ['alpha']
@@ -113,7 +122,7 @@ describe('runTanaQuery', () => {
 
   test('matches a FieldValue for field-exists', () => {
     assert.deepEqual(
-      runTanaQuery(index, [{ fieldId: 'status', kind: 'field-exists' }]).map(
+      run([{ fieldId: 'status', kind: 'field-exists' }]).map(
         ({ id }) => id
       ),
       ['alpha', 'beta']
@@ -122,13 +131,13 @@ describe('runTanaQuery', () => {
 
   test('treats both a template-derived and an ad-hoc Field Node as field-defined', () => {
     assert.deepEqual(
-      runTanaQuery(index, [{ fieldId: 'estimate', kind: 'field-defined' }]).map(
+      run([{ fieldId: 'estimate', kind: 'field-defined' }]).map(
         ({ id }) => id
       ),
       ['alpha', 'gamma']
     );
     assert.deepEqual(
-      runTanaQuery(index, [{ fieldId: 'status', kind: 'field-defined' }]).map(
+      run([{ fieldId: 'status', kind: 'field-defined' }]).map(
         ({ id }) => id
       ),
       ['alpha', 'beta']
@@ -137,10 +146,53 @@ describe('runTanaQuery', () => {
 
   test('supports case-insensitive text contains', () => {
     assert.deepEqual(
-      runTanaQuery(index, [
+      run([
         { kind: 'text-contains', text: 'BETA' },
       ]).map(({ id }) => id),
       ['beta']
+    );
+  });
+
+  test('evaluates AND, OR, and NOT directly from a persisted query expression', () => {
+    assert.deepEqual(
+      runTanaQuery(index, {
+        children: [
+          { predicate: { kind: 'text-contains', text: 'beta' }, type: 'predicate' },
+          { predicate: { kind: 'text-contains', text: 'gamma' }, type: 'predicate' },
+        ],
+        type: 'or',
+      }).map(({ id }) => id),
+      ['beta', 'gamma']
+    );
+    assert.equal(
+      runTanaQuery(index, {
+        child: { predicate: { kind: 'has-supertag', supertagId: 'project-tag' }, type: 'predicate' },
+        type: 'not',
+      }).some(({ id }) => id === 'alpha'),
+      false
+    );
+  });
+
+  test('evaluates graph predicates from hierarchy and derived References', () => {
+    assert.deepEqual(
+      run([{ kind: 'parent-is', nodeId: 'parent' }]).map(({ id }) => id),
+      ['child']
+    );
+    assert.deepEqual(
+      run([{ kind: 'child-of', nodeId: 'child' }]).map(({ id }) => id),
+      ['parent']
+    );
+    assert.deepEqual(
+      run([{ kind: 'descendant-of', nodeId: 'parent' }]).map(({ id }) => id),
+      ['child', 'grandchild']
+    );
+    assert.deepEqual(
+      run([{ kind: 'references', nodeId: 'alpha' }]).map(({ id }) => id),
+      ['alpha-reference']
+    );
+    assert.deepEqual(
+      run([{ kind: 'referenced-by', nodeId: 'alpha-reference' }]).map(({ id }) => id),
+      ['alpha']
     );
   });
 

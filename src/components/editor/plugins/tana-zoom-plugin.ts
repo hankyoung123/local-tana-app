@@ -16,6 +16,8 @@ import {
 } from '@/lib/tana/outliner';
 import type { NodeId } from '@/lib/tana/types';
 
+import { TanaSupertagPlugin } from './tana-supertag-plugin';
+
 const EMPTY_OPEN_IDS = new Set<string>();
 
 export const TANA_ZOOM_PLUGIN_KEY = 'tanaZoom' as const;
@@ -134,6 +136,11 @@ function insertZoomBodyChild(editor: PlateEditor) {
     editor.api.create.block({ children: [{ text: '' }], indent }),
     { at: childPath }
   );
+  const child = editor.api.node(childPath)?.[0];
+
+  if (child && typeof child.id === 'string') {
+    editor.getTransforms(TanaSupertagPlugin).supertag.applyDefaultChild(child.id);
+  }
   editor.getApi(TogglePlugin).toggle.toggleIds([focusedNodeId], true);
 
   return navigate(editor, childPath);

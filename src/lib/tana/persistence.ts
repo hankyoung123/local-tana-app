@@ -8,6 +8,7 @@ import {
   TANA_SUPERTAG_KEY,
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
+import { isTanaDay } from './time';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
 
@@ -68,21 +69,41 @@ function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaFieldDefinition?: unknown;
     tanaFieldId?: unknown;
+    tanaFieldOptional?: unknown;
+    tanaFieldPinned?: unknown;
     tanaFieldValueType?: unknown;
     tanaFieldValues?: unknown;
+    tanaDefaultChildSupertagId?: unknown;
     tanaPresentation?: unknown;
     tanaReferenceTargetId?: unknown;
     tanaSearchDefinition?: unknown;
     tanaSupertagIds?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaSystemNode?: unknown;
+    tanaTime?: unknown;
     tanaViewDefinition?: unknown;
   };
+
+  if (
+    semantic.tanaDefaultChildSupertagId !== undefined &&
+    (typeof semantic.tanaDefaultChildSupertagId !== 'string' ||
+      semantic.tanaDefaultChildSupertagId.length === 0)
+  ) {
+    return false;
+  }
 
   if (
     semantic.tanaFieldId !== undefined &&
     (typeof semantic.tanaFieldId !== 'string' || semantic.tanaFieldId.length === 0)
   ) {
+    return false;
+  }
+
+  if (semantic.tanaFieldOptional !== undefined && semantic.tanaFieldOptional !== true) {
+    return false;
+  }
+
+  if (semantic.tanaFieldPinned !== undefined && semantic.tanaFieldPinned !== true) {
     return false;
   }
 
@@ -111,6 +132,12 @@ function hasValidSemanticData(element: TElement): boolean {
       !TANA_SYSTEM_NODES.has(semantic.tanaSystemNode))
   ) {
     return false;
+  }
+
+  if (semantic.tanaTime !== undefined) {
+    const time = semantic.tanaTime as { unit?: unknown; value?: unknown };
+
+    if (!time || time.unit !== 'day' || !isTanaDay(time.value)) return false;
   }
 
   // Field-as-Node is a schema break. Parent value maps and the previous
@@ -154,25 +181,59 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   if (semantic.tanaSupertagDefinition !== undefined) {
-    if (
-      !semantic.tanaSupertagDefinition ||
-      typeof semantic.tanaSupertagDefinition !== 'object' ||
-      Object.keys(semantic.tanaSupertagDefinition).length > 0
-    ) {
+    const definition = semantic.tanaSupertagDefinition as {
+      defaultChildSupertagId?: unknown;
+      extends?: unknown;
+      titleExpression?: unknown;
+    };
+
+    if (!definition || typeof definition !== 'object' ||
+      Object.keys(definition).some(
+        (key) =>
+          key !== 'defaultChildSupertagId' &&
+          key !== 'extends' &&
+          key !== 'titleExpression'
+      ) ||
+      (definition.extends !== undefined &&
+        (!Array.isArray(definition.extends) ||
+          !definition.extends.every(
+            (parentId) => typeof parentId === 'string' && parentId.length > 0
+          ) ||
+          new Set(definition.extends).size !== definition.extends.length)) ||
+      (definition.defaultChildSupertagId !== undefined &&
+        (typeof definition.defaultChildSupertagId !== 'string' ||
+          definition.defaultChildSupertagId.length === 0)) ||
+      (definition.titleExpression !== undefined &&
+        typeof definition.titleExpression !== 'string')) {
       return false;
     }
   }
 
   if (semantic.tanaSearchDefinition !== undefined) {
-    const definition = semantic.tanaSearchDefinition as { clauses?: unknown };
+    const definition = semantic.tanaSearchDefinition as { query?: unknown };
 
-    if (!definition || !Array.isArray(definition.clauses)) return false;
+    if (
+      !definition ||
+      !definition.query ||
+      typeof definition.query !== 'object' ||
+      !('type' in definition.query)
+    ) {
+      return false;
+    }
   }
 
   if (semantic.tanaViewDefinition !== undefined) {
     const definition = semantic.tanaViewDefinition as { type?: unknown };
 
-    if (!definition || definition.type !== 'outline') return false;
+    if (
+      !definition ||
+      (definition.type !== 'outline' &&
+        definition.type !== 'table' &&
+        definition.type !== 'calendar' &&
+        definition.type !== 'cards')
+    ) {
+      return false;
+    }
   }
 
   return true;
@@ -199,14 +260,41 @@ function isFieldDefinition(value: unknown): value is {
     return false;
   }
 
+  if (field.required !== undefined && field.required !== true) return false;
+
   if (field.type === 'options') {
-    return Object.keys(field).every((key) => key === 'type' || key === 'cardinality');
+    return Object.keys(field).every(
+      (key) => key === 'type' || key === 'cardinality' || key === 'required'
+    );
+  }
+
+  if (field.type === 'number') {
+    if (!Object.keys(field).every((key) => ['type', 'cardinality', 'required', 'min', 'max'].includes(key))) {
+      return false;
+    }
+
+    const min = field.min;
+    const max = field.max;
+
+    return (
+      (min === undefined || (typeof min === 'number' && Number.isFinite(min))) &&
+      (max === undefined || (typeof max === 'number' && Number.isFinite(max))) &&
+      (typeof min !== 'number' || typeof max !== 'number' || min <= max)
+    );
+  }
+
+  if (['checkbox', 'date', 'email', 'plain', 'url'].includes(field.type as string)) {
+    return Object.keys(field).every(
+      (key) => key === 'type' || key === 'cardinality' || key === 'required'
+    );
   }
 
   return (
-    field.type !== 'from-supertag' ||
-    field.sourceSupertagId === null ||
-    (typeof field.sourceSupertagId === 'string' && field.sourceSupertagId.length > 0)
+    Object.keys(field).every(
+      (key) => key === 'type' || key === 'cardinality' || key === 'required' || key === 'sourceSupertagId'
+    ) &&
+    (field.sourceSupertagId === null ||
+      (typeof field.sourceSupertagId === 'string' && field.sourceSupertagId.length > 0))
   );
 }
 
@@ -214,10 +302,12 @@ function isFieldType(value: unknown): value is string {
   return [
     'checkbox',
     'date',
+    'email',
     'from-supertag',
     'number',
     'options',
     'plain',
+    'url',
   ].includes(value as string);
 }
 
@@ -241,27 +331,35 @@ export function isValidTanaDocument(value: unknown): value is Value {
       key?: unknown;
       tanaFieldDefinition?: unknown;
       tanaFieldId?: unknown;
+      tanaFieldOptional?: unknown;
+      tanaFieldPinned?: unknown;
       tanaFieldValueType?: unknown;
       tanaFieldValues?: unknown;
+      tanaDefaultChildSupertagId?: unknown;
       tanaPresentation?: unknown;
       tanaReferenceTargetId?: unknown;
       tanaSearchDefinition?: unknown;
       tanaSupertagIds?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaSystemNode?: unknown;
+      tanaTime?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
       semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldId !== undefined ||
+      semantic.tanaFieldOptional !== undefined ||
+      semantic.tanaFieldPinned !== undefined ||
       semantic.tanaFieldValueType !== undefined ||
       semantic.tanaFieldValues !== undefined ||
+      semantic.tanaDefaultChildSupertagId !== undefined ||
       semantic.tanaPresentation !== undefined ||
       semantic.tanaReferenceTargetId !== undefined ||
       semantic.tanaSearchDefinition !== undefined ||
       semantic.tanaSupertagIds !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaSystemNode !== undefined ||
+      semantic.tanaTime !== undefined ||
       semantic.tanaViewDefinition !== undefined;
 
     if (isTanaNode) {
@@ -312,11 +410,21 @@ export function isValidTanaDocument(value: unknown): value is Value {
     )
   );
   const systemNodes = new Set<string>();
+  const timeValues = new Set<string>();
 
   for (const [node, path] of entries) {
     if (node.tanaSystemNode) {
       if (systemNodes.has(node.tanaSystemNode)) return false;
       systemNodes.add(node.tanaSystemNode);
+    }
+
+    if (node.tanaTime) {
+      if (node.tanaTime.unit !== 'day' || !isTanaDay(node.tanaTime.value)) {
+        return false;
+      }
+      if (timeValues.has(node.tanaTime.value)) return false;
+      timeValues.add(node.tanaTime.value);
+
     }
 
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;

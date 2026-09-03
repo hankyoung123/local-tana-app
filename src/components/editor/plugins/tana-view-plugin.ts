@@ -4,7 +4,7 @@ import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { hasNodeSemantic } from '@/lib/tana/node-semantic';
-import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+import type { NodeId, TanaBlockElement, TanaViewDefinition } from '@/lib/tana/types';
 
 export const TANA_VIEW_PLUGIN_KEY = 'tanaView' as const;
 
@@ -54,6 +54,22 @@ function remove(editor: PlateEditor, nodeId: NodeId) {
   return true;
 }
 
+function setType(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  type: TanaViewDefinition['type']
+) {
+  const entry = getTanaNodeEntry(editor, nodeId);
+
+  if (!entry?.[0].tanaViewDefinition || entry[0].tanaViewDefinition.type === type) {
+    return false;
+  }
+
+  editor.tf.setNodes({ tanaViewDefinition: { type } }, { at: entry[1] });
+
+  return true;
+}
+
 /** Owns only the presentation metadata of a View Node. */
 export const TanaViewPlugin = createPlatePlugin({
   key: TANA_VIEW_PLUGIN_KEY,
@@ -61,5 +77,7 @@ export const TanaViewPlugin = createPlatePlugin({
   view: {
     define: (nodeId: NodeId) => define(editor, nodeId),
     remove: (nodeId: NodeId) => remove(editor, nodeId),
+    setType: (nodeId: NodeId, type: TanaViewDefinition['type']) =>
+      setType(editor, nodeId, type),
   },
 }));

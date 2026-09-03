@@ -4,7 +4,7 @@ import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana/index';
-import { isTanaQueryClauseValid } from '@/lib/tana/query';
+import { createAndQuery, isTanaQueryClauseValid } from '@/lib/tana/query';
 import type { NodeId, TanaBlockElement, TanaQueryClause } from '@/lib/tana/types';
 
 export const TANA_SEARCH_PLUGIN_KEY = 'tanaSearch' as const;
@@ -24,7 +24,7 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 
   if (!entry || entry[0].tanaSearchDefinition) return false;
 
-  editor.tf.setNodes({ tanaSearchDefinition: { clauses: [] } }, { at: entry[1] });
+  editor.tf.setNodes({ tanaSearchDefinition: { query: createAndQuery() } }, { at: entry[1] });
 
   return true;
 }
@@ -44,10 +44,18 @@ function addClause(editor: PlateEditor, nodeId: NodeId, clause: TanaQueryClause)
   const definition = entry?.[0].tanaSearchDefinition;
 
   if (!entry || !definition) return false;
+  if (definition.query.type !== 'and') return false;
   if (!isTanaQueryClauseValid(buildTanaIndex(editor.children), clause)) return false;
 
   editor.tf.setNodes(
-    { tanaSearchDefinition: { clauses: [...definition.clauses, clause] } },
+    {
+      tanaSearchDefinition: {
+        query: {
+          ...definition.query,
+          children: [...definition.query.children, { predicate: clause, type: 'predicate' }],
+        },
+      },
+    },
     { at: entry[1] }
   );
 
@@ -63,7 +71,8 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
     !definition ||
     !Number.isInteger(index) ||
     index < 0 ||
-    index >= definition.clauses.length
+    definition.query.type !== 'and' ||
+    index >= definition.query.children.length
   ) {
     return false;
   }
@@ -71,7 +80,10 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
   editor.tf.setNodes(
     {
       tanaSearchDefinition: {
-        clauses: definition.clauses.filter((_, clauseIndex) => clauseIndex !== index),
+        query: {
+          ...definition.query,
+          children: definition.query.children.filter((_, clauseIndex) => clauseIndex !== index),
+        },
       },
     },
     { at: entry[1] }

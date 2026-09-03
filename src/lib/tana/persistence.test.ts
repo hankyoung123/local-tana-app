@@ -219,10 +219,54 @@ describe('Plate document persistence', () => {
     );
     assert.equal(
       isValidTanaDocument([
+        { children: [{ text: 'Workspace' }], id: 'ws', tanaSystemNode: 'workspace', type: 'p' },
+        { children: [{ text: 'Home' }], id: 'ws-home', indent: 1, tanaSystemNode: 'home', type: 'p' },
+        { children: [{ text: 'Daily' }], id: 'ws-daily', indent: 1, tanaSystemNode: 'daily-notes', type: 'p' },
+        { children: [{ text: 'Schema' }], id: 'ws-schema', indent: 1, tanaSystemNode: 'schema', type: 'p' },
+        { children: [{ text: 'Base' }], id: 'base', indent: 2, tanaSupertagDefinition: {}, type: 'p' },
+        { children: [{ text: 'Task' }], id: 'task-tag', indent: 2, tanaSupertagDefinition: { extends: ['base'] }, type: 'p' },
+        { children: [{ text: 'Library' }], id: 'ws-library', indent: 1, tanaSystemNode: 'library', type: 'p' },
+        { children: [{ text: 'Settings' }], id: 'ws-settings', indent: 1, tanaSystemNode: 'settings', type: 'p' },
+        { children: [{ text: 'Trash' }], id: 'ws-trash', indent: 1, tanaSystemNode: 'trash', type: 'p' },
+      ]),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument([
         { children: [{ text: 'Task' }], id: 'task', tanaSystemNode: 'not-a-system-node', type: 'p' },
       ]),
       false
     );
+  });
+
+  test('accepts one valid Day Node and rejects duplicate or invalid time identity', () => {
+    const document = minimalWorkspace();
+
+    document.splice(3, 0, {
+      children: [{ text: 'Day' }],
+      id: 'day',
+      indent: 2,
+      tanaTime: { unit: 'day', value: '2026-03-01' },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(document), true);
+
+    const duplicate = structuredClone(document);
+    duplicate.splice(4, 0, {
+      children: [{ text: 'Same day' }],
+      id: 'same-day',
+      indent: 2,
+      tanaTime: { unit: 'day', value: '2026-03-01' },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(duplicate), false);
+
+    const invalidDay = structuredClone(document);
+    invalidDay[3] = {
+      ...invalidDay[3],
+      tanaTime: { unit: 'day', value: '2026-02-29' },
+    };
+    assert.equal(isValidTanaDocument(invalidDay), false);
   });
 
   test('flushes a debounced final edit before close', async () => {

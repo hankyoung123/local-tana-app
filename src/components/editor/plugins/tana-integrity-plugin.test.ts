@@ -35,13 +35,29 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
   });
 
+  test('removes an exceptional dangling SuperTag inheritance relation', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagDefinition: { extends: ['missing'] },
+        type: KEYS.p,
+      },
+    ]);
+
+    editor.tf.normalize({ force: true });
+
+    assert.equal(editor.children[0].id, 'task');
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+  });
+
   test('repairs malformed View presentation without changing Search ownership', () => {
     const editor = createEditor([
       { children: [{ text: 'Open tasks' }], id: 'view', type: KEYS.p },
     ]);
 
     editor.tf.setNodes(
-      { tanaViewDefinition: { type: 'table' as never } },
+      { tanaViewDefinition: { type: 'kanban' as never } },
       { at: [0] }
     );
 
@@ -49,7 +65,7 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'outline' });
   });
 
-  test('removes dangling inline references and supertags', () => {
+  test('keeps broken inline References while removing a dangling Supertag token', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
       {
@@ -65,7 +81,11 @@ describe('Tana relation integrity', () => {
 
     editor.tf.removeNodes({ at: [0] });
 
-    assert.deepEqual(editor.children[0].children, [{ text: 'Ship ' }]);
+    assert.equal(editor.children[0].children[1]?.type, KEYS.mention);
+    assert.equal(
+      editor.children[0].children.some((node) => node.type === TANA_SUPERTAG_KEY),
+      false
+    );
   });
 
   test('removes a deleted Supertag from Node-level membership without touching Field data', () => {
@@ -84,7 +104,7 @@ describe('Tana relation integrity', () => {
     assert.equal(editor.children.some((node) => node.id === 'task-status-value'), true);
   });
 
-  test('clears a dangling block-level Reference target while retaining its Node', () => {
+  test('keeps a dangling block-level Reference target as a broken relation', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
       {
@@ -98,7 +118,11 @@ describe('Tana relation integrity', () => {
     editor.tf.removeNodes({ at: [0] });
 
     assert.equal(editor.children[0].id, 'project-reference');
-    assert.equal(editor.children[0].tanaReferenceTargetId, undefined);
+    assert.equal(editor.children[0].tanaReferenceTargetId, 'project');
+    assert.equal(
+      buildTanaIndex(editor.children).referenceTargetsByNode.get('project-reference'),
+      'project'
+    );
   });
 
   test('keeps Field occurrence Nodes when their Definition Node is deleted', () => {
@@ -193,6 +217,22 @@ describe('Tana relation integrity', () => {
     });
   });
 
+  test('removes only a deleted default-child SuperTag relation', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: { defaultChildSupertagId: 'task' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', tanaSupertagDefinition: {}, type: KEYS.p },
+    ]);
+
+    editor.tf.removeNodes({ at: [1] });
+
+    assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
+  });
+
   test('allows Field occurrences to retain zero or multiple direct Value Nodes', () => {
     const editor = createEditor([
       { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
@@ -242,7 +282,7 @@ describe('Tana relation integrity', () => {
     );
   });
 
-  test('prunes dangling View clauses while retaining unrelated clauses', () => {
+  test('prunes dangling Search predicates while retaining unrelated AST children', () => {
     const editor = createEditor([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
       { children: [{ text: 'Active' }], id: 'active', indent: 1, type: KEYS.p },
@@ -250,11 +290,21 @@ describe('Tana relation integrity', () => {
         children: [{ text: 'Open tasks' }],
         id: 'view',
         tanaSearchDefinition: {
-          clauses: [
-            { fieldId: 'status', kind: 'field-defined' },
-            { fieldId: 'status', kind: 'field-equals', value: { type: 'options', value: 'active' } },
-            { kind: 'text-contains', text: 'open' },
-          ],
+          query: {
+            children: [
+              { predicate: { fieldId: 'status', kind: 'field-defined' }, type: 'predicate' },
+              {
+                predicate: {
+                  fieldId: 'status',
+                  kind: 'field-equals',
+                  value: { type: 'options', value: 'active' },
+                },
+                type: 'predicate',
+              },
+              { predicate: { kind: 'text-contains', text: 'open' }, type: 'predicate' },
+            ],
+            type: 'and',
+          },
         },
         type: KEYS.p,
       },
@@ -266,7 +316,10 @@ describe('Tana relation integrity', () => {
     });
 
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
-      clauses: [{ kind: 'text-contains', text: 'open' }],
+      query: {
+        children: [{ predicate: { kind: 'text-contains', text: 'open' }, type: 'predicate' }],
+        type: 'and',
+      },
     });
   });
 });

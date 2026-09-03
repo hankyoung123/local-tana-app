@@ -16,6 +16,7 @@ import {
   isFieldDefined,
   isFieldSet,
   isFieldValueCompatible,
+  isFieldValueValid,
   isSupertagFieldInputNode,
   getFieldValueCandidates
 } from './fields';
@@ -623,5 +624,113 @@ describe('Field occurrence Nodes', () => {
   test('keeps compatibility a pure type check', () => {
     assert.equal(isFieldValueCompatible({ type: 'number' }, { type: 'plain', value: '1' }), false);
     assert.equal(isFieldValueCompatible({ type: 'number' }, { type: 'number', value: 1 }), true);
+  });
+
+  test('accepts only valid URL and Email FieldValue writes while preserving their Value Nodes', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Website' }], id: 'website', tanaFieldDefinition: { type: 'url' }, type: KEYS.p },
+      { children: [{ text: 'Contact' }], id: 'contact', tanaFieldDefinition: { type: 'email' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'website'));
+    assert.ok(transforms.materialize('task', 'contact'));
+    assert.equal(
+      transforms.setValue('task', 'website', { type: 'url', value: 'not-a-url' }),
+      false
+    );
+    assert.equal(
+      transforms.setValue('task', 'contact', { type: 'email', value: 'not-an-email' }),
+      false
+    );
+    assert.equal(
+      transforms.setValue('task', 'website', { type: 'url', value: 'https://localtana.app/docs' }),
+      true
+    );
+    assert.equal(
+      transforms.setValue('task', 'contact', { type: 'email', value: 'hello@localtana.app' }),
+      true
+    );
+
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(
+      isFieldValueValid(index, 'website', { type: 'url', value: 'https://localtana.app/docs' }),
+      true
+    );
+    assert.deepEqual(index.fieldValues.get('task'), new Map([
+      ['website', { type: 'url', value: 'https://localtana.app/docs' }],
+      ['contact', { type: 'email', value: 'hello@localtana.app' }],
+    ]));
+  });
+
+  test('pins a real Field occurrence for presentation without changing document hierarchy', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'First' }], id: 'first', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+    const first = transforms.materialize('task', 'first');
+    const second = transforms.materialize('task', 'second');
+
+    assert.ok(first);
+    assert.ok(second);
+    const documentOrder = editor.children.map((node) => node.id);
+    assert.equal(transforms.setPinned(second, true), true);
+    assert.equal(transforms.setPinned('task', true), false);
+    assert.deepEqual(editor.children.map((node) => node.id), documentOrder);
+
+    const descriptors = getNodeFieldDescriptors(buildTanaIndex(editor.children), 'task')
+      .filter((descriptor) => descriptor.source !== 'system');
+
+    assert.deepEqual(
+      descriptors.map(({ fieldId, pinned }) => ({ fieldId, pinned })),
+      [
+        { fieldId: 'second', pinned: true },
+        { fieldId: 'first', pinned: false },
+      ]
+    );
+  });
+
+  test('enforces Number min/max for new writes without deleting an existing Value Node', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { max: 8, min: 2, type: 'number' },
+        type: KEYS.p,
+      },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'estimate'));
+    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 1 }), false);
+    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 9 }), false);
+    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 5 }), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
+      ['estimate', { type: 'number', value: 5 }],
+    ]));
+  });
+
+  test('keeps required as a Definition-only unset hint without creating a second Field value', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Summary' }],
+        id: 'summary',
+        tanaFieldDefinition: { required: true, type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.ok(field(editor).materialize('task', 'summary'));
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(index.fieldValues.get('task')?.has('summary') ?? false, false);
+    assert.equal(index.nodesById.get('summary')?.fieldDefinition?.required, true);
+    assert.equal(index.fieldNodesByParent.get('task')?.[0]?.valueNodeIds.length, 1);
   });
 });
