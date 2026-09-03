@@ -14,10 +14,24 @@ const value = (text: string): Value => [
   { children: [{ text }], id: 'node', type: 'p' },
 ];
 
+const minimalWorkspace = (): Value => [
+  { children: [{ text: 'Workspace' }], id: 'ws', tanaSystemNode: 'workspace', type: 'p' },
+  { children: [{ text: 'Home' }], id: 'ws-home', indent: 1, tanaSystemNode: 'home', type: 'p' },
+  { children: [{ text: 'Daily' }], id: 'ws-daily', indent: 1, tanaSystemNode: 'daily-notes', type: 'p' },
+  { children: [{ text: 'Schema' }], id: 'ws-schema', indent: 1, tanaSystemNode: 'schema', type: 'p' },
+  { children: [{ text: 'Library' }], id: 'ws-library', indent: 1, tanaSystemNode: 'library', type: 'p' },
+  { children: [{ text: 'Settings' }], id: 'ws-settings', indent: 1, tanaSystemNode: 'settings', type: 'p' },
+  { children: [{ text: 'Trash' }], id: 'ws-trash', indent: 1, tanaSystemNode: 'trash', type: 'p' },
+];
+
+const withWorkspace = (extra: Value): Value => [...minimalWorkspace(), ...extra];
+
 describe('Plate document persistence', () => {
   test('validates Plate structure and Tana node invariants', () => {
     assert.equal(isPlateDocument(value('A')), true);
-    assert.equal(isValidTanaDocument(value('A')), true);
+    // A bare Node is valid Plate but not a valid Tana workspace document.
+    assert.equal(isValidTanaDocument(value('A')), false);
+    assert.equal(isValidTanaDocument(minimalWorkspace()), true);
     assert.equal(isPlateDocument([]), false);
     assert.equal(isPlateDocument([{ children: 'nope', type: 'p' }]), false);
     assert.equal(
@@ -32,56 +46,60 @@ describe('Plate document persistence', () => {
       false
     );
     assert.equal(
-      isValidTanaDocument([
-        {
-          children: [{ text: 'Tags' }],
-          id: 'tags',
-          tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
-          type: 'p',
-        },
-        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
-        {
-          children: [{ text: '' }],
-          id: 'task-tags',
-          indent: 1,
-          tanaFieldId: 'tags',
-          type: 'p',
-        },
-        {
-          children: [{ text: 'First' }],
-          id: 'task-tags-first',
-          indent: 2,
-          tanaFieldValueType: 'plain',
-          type: 'p',
-        },
-        {
-          children: [{ text: 'Second' }],
-          id: 'task-tags-second',
-          indent: 2,
-          tanaFieldValueType: 'plain',
-          type: 'p',
-        },
-      ]),
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Tags' }],
+            id: 'tags',
+            tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+            type: 'p',
+          },
+          { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+          {
+            children: [{ text: '' }],
+            id: 'task-tags',
+            indent: 1,
+            tanaFieldId: 'tags',
+            type: 'p',
+          },
+          {
+            children: [{ text: 'First' }],
+            id: 'task-tags-first',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: 'p',
+          },
+          {
+            children: [{ text: 'Second' }],
+            id: 'task-tags-second',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: 'p',
+          },
+        ])
+      ),
       true
     );
     assert.equal(
-      isValidTanaDocument([
-        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
-        {
-          children: [{ text: '' }],
-          id: 'historical-field',
-          indent: 1,
-          tanaFieldId: 'deleted-definition',
-          type: 'p',
-        },
-        {
-          children: [{ text: 'Historical value' }],
-          id: 'historical-value',
-          indent: 2,
-          tanaFieldValueType: 'plain',
-          type: 'p',
-        },
-      ]),
+      isValidTanaDocument(
+        withWorkspace([
+          { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+          {
+            children: [{ text: '' }],
+            id: 'historical-field',
+            indent: 1,
+            tanaFieldId: 'deleted-definition',
+            type: 'p',
+          },
+          {
+            children: [{ text: 'Historical value' }],
+            id: 'historical-value',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: 'p',
+          },
+        ])
+      ),
       true
     );
     assert.equal(
@@ -96,35 +114,39 @@ describe('Plate document persistence', () => {
       false
     );
     assert.equal(
-      isValidTanaDocument([
-        { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
-        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
-        {
-          children: [{ text: '' }],
-          id: 'field-occurrence',
-          indent: 1,
-          tanaFieldId: 'priority',
-          type: 'p',
-        },
-        {
-          children: [{ text: '' }],
-          id: 'field-value',
-          indent: 2,
-          tanaFieldValueType: 'plain',
-          type: 'p',
-        },
-      ]),
+      isValidTanaDocument(
+        withWorkspace([
+          { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
+          { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+          {
+            children: [{ text: '' }],
+            id: 'field-occurrence',
+            indent: 1,
+            tanaFieldId: 'priority',
+            type: 'p',
+          },
+          {
+            children: [{ text: '' }],
+            id: 'field-value',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: 'p',
+          },
+        ])
+      ),
       true
     );
     assert.equal(
-      isValidTanaDocument([
-        {
-          children: [{ text: 'Visible field preference' }],
-          id: 'presentation',
-          tanaPresentation: { hiddenFieldNodeIds: ['status-occurrence'] },
-          type: 'p',
-        },
-      ]),
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Visible field preference' }],
+            id: 'presentation',
+            tanaPresentation: { hiddenFieldNodeIds: ['status-occurrence'] },
+            type: 'p',
+          },
+        ])
+      ),
       true
     );
     assert.equal(
@@ -171,9 +193,14 @@ describe('Plate document persistence', () => {
   test('accepts explicit system Nodes and rejects invalid membership metadata', () => {
     assert.equal(
       isValidTanaDocument([
-        { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: 'p' },
-        { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: 'p' },
+        { children: [{ text: 'Workspace' }], id: 'ws', tanaSystemNode: 'workspace', type: 'p' },
+        { children: [{ text: 'Home' }], id: 'ws-home', indent: 1, tanaSystemNode: 'home', type: 'p' },
+        { children: [{ text: 'Daily' }], id: 'ws-daily', indent: 1, tanaSystemNode: 'daily-notes', type: 'p' },
+        { children: [{ text: 'Schema' }], id: 'ws-schema', indent: 1, tanaSystemNode: 'schema', type: 'p' },
         { children: [{ text: 'Project' }], id: 'project', indent: 2, tanaSupertagDefinition: {}, type: 'p' },
+        { children: [{ text: 'Library' }], id: 'ws-library', indent: 1, tanaSystemNode: 'library', type: 'p' },
+        { children: [{ text: 'Settings' }], id: 'ws-settings', indent: 1, tanaSystemNode: 'settings', type: 'p' },
+        { children: [{ text: 'Trash' }], id: 'ws-trash', indent: 1, tanaSystemNode: 'trash', type: 'p' },
         { children: [{ text: 'Task' }], id: 'task', indent: 1, tanaSupertagIds: ['project'], type: 'p' },
       ]),
       true

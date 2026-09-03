@@ -8,7 +8,8 @@ import {
   TANA_SUPERTAG_KEY,
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
-import type { TanaBlockElement } from './types';
+import type { NodeId, TanaBlockElement } from './types';
+import { validateWorkspaceStructure } from './workspace';
 
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
@@ -361,6 +362,22 @@ export function isValidTanaDocument(value: unknown): value is Value {
     if (!parent?.tanaFieldId) return false;
     if (definition && node.tanaFieldValueType !== definition.type) return false;
   }
+
+  // Canonical workspace structure is the final persistence gate. Field
+  // Definition ownership stays unrestricted: only the seven system Nodes are
+  // required to be unique with the six children directly under Workspace.
+  const parentNodeIds = new Map<NodeId, NodeId | undefined>();
+
+  for (const [node, path] of entries) {
+    const parentPath = getTanaParentPath(value, path);
+    const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
+    const parentId =
+      parent && typeof parent.id === 'string' ? parent.id : undefined;
+
+    if (typeof node.id === 'string') parentNodeIds.set(node.id, parentId);
+  }
+
+  if (!validateWorkspaceStructure(value, { parentNodeIds })) return false;
 
   return true;
 }

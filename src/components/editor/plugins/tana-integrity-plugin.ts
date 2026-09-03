@@ -404,6 +404,67 @@ export function repairNode(
 export const NodeIntegrity = { repairNode, validateNode };
 
 /**
+ * Conservative workspace-skeleton fallback: a mis-indented system Node is
+ * restored as a Workspace direct child. It never creates missing system
+ * Nodes, never deduplicates, and never reorders — deletion stays blocked at
+ * the interaction boundary and persistence stays the final gate.
+ */
+function repairWorkspaceHierarchy(editor: PlateEditor, entries: readonly TanaNodeEntry[]): boolean {
+  const workspaceEntries = entries.filter(([node]) => node.tanaSystemNode === 'workspace');
+
+  if (workspaceEntries.length !== 1) return false;
+
+  const [workspace, workspacePath] = workspaceEntries[0];
+  const workspaceIndent = typeof workspace.indent === 'number' ? workspace.indent : 0;
+
+  if (workspaceIndent !== 0) {
+    editor.tf.setNodes({ indent: 0 }, { at: workspacePath });
+    return true;
+  }
+
+  const counts = new Map<string, number>();
+
+  for (const [node] of entries) {
+    if (node.tanaSystemNode === undefined) continue;
+    counts.set(node.tanaSystemNode, (counts.get(node.tanaSystemNode) ?? 0) + 1);
+  }
+
+  // Duplicates or missing system Nodes are persistence errors, not repairs.
+  // Integrity must not become a Workspace manager.
+  if (
+    counts.get('workspace') !== 1 ||
+    counts.get('home') !== 1 ||
+    counts.get('daily-notes') !== 1 ||
+    counts.get('schema') !== 1 ||
+    counts.get('library') !== 1 ||
+    counts.get('settings') !== 1 ||
+    counts.get('trash') !== 1
+  ) {
+    return false;
+  }
+
+  const expectedIndent = workspaceIndent + 1;
+
+  for (const [node, path] of entries) {
+    if (
+      node.tanaSystemNode === undefined ||
+      node.tanaSystemNode === 'workspace'
+    ) {
+      continue;
+    }
+
+    const indent = typeof node.indent === 'number' ? node.indent : 0;
+
+    if (indent !== expectedIndent) {
+      editor.tf.setNodes({ indent: expectedIndent }, { at: path });
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Repairs one dangling semantic relation at a time. Returning after a repair
  * lets Plate's native normalization schedule the next pass with fresh paths.
  */
@@ -433,6 +494,8 @@ function normalizeRelations(editor: PlateEditor): boolean {
     editor.tf.removeNodes({ at: danglingInlinePath });
     return true;
   }
+
+  if (repairWorkspaceHierarchy(editor, entries)) return true;
 
   for (const [node, path] of entries) {
     if (repairNode(editor, [node, path], context)) return true;

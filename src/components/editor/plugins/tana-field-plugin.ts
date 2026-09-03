@@ -120,10 +120,19 @@ function addFieldSubtreeIds(editor: PlateEditor, fieldPath: Path, targetIds: Set
 }
 
 /**
+ * Canonical system Nodes are the workspace skeleton and can never be removed
+ * as individual blocks. Their ordinary children stay deletable through Plate.
+ */
+function isSystemNode(node: TanaBlockElement): boolean {
+  return node.tanaSystemNode !== undefined;
+}
+
+/**
  * Plate Block Selection stays the selection owner. This derives the smallest
  * deletion closure that never removes a Value without its Field, or a Field
  * without its Value. A selected Value alone is left intact; a selected Field
- * (or its selected Host) removes the complete Field subtree.
+ * (or its selected Host) removes the complete Field subtree. Canonical system
+ * Nodes are never part of the closure.
  */
 function getBlockSelectionRemovalIds(editor: PlateEditor) {
   const selectedIds = getBlockSelectionIds(editor);
@@ -135,6 +144,11 @@ function getBlockSelectionRemovalIds(editor: PlateEditor) {
     if (!entry) continue;
 
     const [node, path] = entry;
+
+    if (isSystemNode(node)) {
+      removalIds.delete(nodeId);
+      continue;
+    }
     const semantics = getNodeSemanticTypes(node, {
       document: editor.children,
       path
@@ -568,26 +582,86 @@ function completeTemplateInput(
     return;
   }
 
-  const fieldId =
-    'fieldId' in choice
-      ? choice.fieldId
-      : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)?.id ??
-        createDefinition(editor, choice.name, { type: 'plain' }, supertagId));
+  // Shared template Field: the transient blank child becomes a real Field
+  // occurrence pointing at the existing Schema/shared Definition.
+  if ('fieldId' in choice) {
+    const fieldId = choice.fieldId;
 
-  if (!fieldId) return;
+    if (
+      !getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition ||
+      getFieldNode(editor, supertagId, fieldId)
+    ) {
+      return;
+    }
 
-  if (
-    !getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition ||
-    getFieldNode(editor, supertagId, fieldId)
-  ) {
-    return;
+    const currentTemporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
+
+    if (!currentTemporaryPath || !materializeInputNode(editor, currentTemporaryPath, fieldId)) {
+      return;
+    }
+    const supertagPath = getTanaNodePath(editor.children, supertagId);
+    const point = supertagPath ? editor.api.end(supertagPath) : undefined;
+
+    if (supertagPath && point) {
+      editor.tf.navigation.navigate({
+        flash: false,
+        focus: true,
+        scroll: true,
+        select: point,
+        target: { path: supertagPath, type: 'node' }
+      });
+    }
+
+    return fieldId;
   }
 
+  const normalizedName = choice.name.trim();
+
+  if (!normalizedName) return;
+
+  // A name matching an existing Definition reuses it as a shared template
+  // occurrence instead of duplicating the Definition.
+  const exactMatch = findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name);
+
+  if (exactMatch) {
+    if (getFieldNode(editor, supertagId, exactMatch.id)) return;
+
+    const currentTemporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
+
+    if (!currentTemporaryPath || !materializeInputNode(editor, currentTemporaryPath, exactMatch.id)) {
+      return;
+    }
+    const supertagPath = getTanaNodePath(editor.children, supertagId);
+    const point = supertagPath ? editor.api.end(supertagPath) : undefined;
+
+    if (supertagPath && point) {
+      editor.tf.navigation.navigate({
+        flash: false,
+        focus: true,
+        scroll: true,
+        select: point,
+        target: { path: supertagPath, type: 'node' }
+      });
+    }
+
+    return exactMatch.id;
+  }
+
+  // New local Field: the transient input itself becomes the Definition Node.
+  // No extra occurrence is created inside the template; applying the Supertag
+  // later materializes occurrences on targets via the existing resolver.
   const currentTemporaryPath = getTanaNodePath(editor.children, temporaryNodeId);
 
-  if (!currentTemporaryPath || !materializeInputNode(editor, currentTemporaryPath, fieldId)) {
-    return;
-  }
+  if (!currentTemporaryPath) return;
+
+  editor.tf.setNodes(
+    {
+      children: [{ text: normalizedName }],
+      tanaFieldDefinition: { type: 'plain' }
+    },
+    { at: currentTemporaryPath }
+  );
+
   const supertagPath = getTanaNodePath(editor.children, supertagId);
   const point = supertagPath ? editor.api.end(supertagPath) : undefined;
 
@@ -601,7 +675,7 @@ function completeTemplateInput(
     });
   }
 
-  return fieldId;
+  return temporaryNodeId;
 }
 
 function completeAdHocInput(editor: PlateEditor, nodeId: NodeId, choice: FieldInputChoice) {
@@ -710,16 +784,27 @@ export const TanaFieldPlugin = createPlatePlugin({
           },
           removeNodes(options = {}) {
             const selectedIds = getBlockSelectionIds(editor);
+            const at = Array.isArray(options.at) ? options.at : undefined;
+
+            // Canonical system Nodes can never be removed as individual
+            // blocks. This is the narrowest workspace-skeleton guard on the
+            // existing block deletion boundary; ordinary children stay on the
+            // native Plate path.
+            if (at && at.length === 1) {
+              const target = editor.api.node(at)?.[0] as TanaBlockElement | undefined;
+
+              if (target && isSystemNode(target)) return;
+            }
 
             if (selectedIds.size === 0) return removeNodes(options);
-
-            const at = Array.isArray(options.at) ? options.at : undefined;
 
             // Plate's public BlockSelection transform removes an id-matched set at
             // the root. Expand that set before Plate applies the removal, in one
             // normalizing transaction, so Integrity never observes a half subtree.
             if (at?.length === 0 && options.block === true && typeof options.match === 'function') {
               const removalIds = getBlockSelectionRemovalIds(editor);
+
+              if (removalIds.size === 0) return;
 
               return editor.tf.withoutNormalizing(() =>
                 removeNodes({
@@ -743,6 +828,9 @@ export const TanaFieldPlugin = createPlatePlugin({
             }
 
             const [node, path] = entry as NodeEntry<TanaBlockElement>;
+
+            if (isSystemNode(node)) return;
+
             const semantics = getNodeSemanticTypes(node, {
               document: editor.children,
               path

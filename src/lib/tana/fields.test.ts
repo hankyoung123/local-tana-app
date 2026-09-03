@@ -422,7 +422,7 @@ describe('Field occurrence Nodes', () => {
     assert.equal(index.nodesById.get(localFieldId!)?.fieldDefinition?.type, 'number');
   });
 
-  test('turns a transient Supertag child into a real template Field Node', () => {
+  test('turns a transient Supertag child into a direct local Field Definition', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -443,20 +443,71 @@ describe('Field occurrence Nodes', () => {
       name: 'Priority',
       type: 'create'
     });
-    const definition = fieldId ? buildTanaIndex(editor.children).nodesById.get(fieldId) : undefined;
+    const index = buildTanaIndex(editor.children);
+    const definition = fieldId ? index.nodesById.get(fieldId) : undefined;
 
-    assert.ok(fieldId);
+    // New local Field converges to a direct Definition child; no extra
+    // occurrence is created inside the template.
+    assert.equal(fieldId, 'template-input');
     assert.equal(definition?.fieldDefinition?.type, 'plain');
     assert.equal(definition?.node.indent, 1);
     assert.equal(
-      editor.children.find((node) => node.id === 'template-input')?.tanaFieldId,
-      fieldId
+      (editor.children.find((node) => node.id === 'template-input') as { tanaFieldDefinition?: unknown })?.tanaFieldDefinition !== undefined,
+      true
     );
     assert.equal(
-      buildTanaIndex(editor.children).fieldNodesById.get('template-input')?.parentNodeId,
-      'project'
+      (editor.children.find((node) => node.id === 'template-input') as { tanaFieldId?: unknown })?.tanaFieldId,
+      undefined
+    );
+    assert.equal(index.fieldNodesById.has('template-input'), false);
+    assert.deepEqual(
+      index.childrenByParent.get('project'),
+      ['template-input']
     );
     assert.equal(isSupertagFieldInputNode(editor.children, [1]), false);
+  });
+
+  test('turns a transient Supertag child into a shared occurrence when selecting an existing Field', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Schema' }],
+        id: 'schema',
+        tanaSystemNode: 'schema',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        indent: 1,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'template-input',
+        indent: 1,
+        type: KEYS.p,
+      },
+    ]);
+
+    const fieldId = field(editor).completeTemplateInput('template-input', 'project', {
+      fieldId: 'status',
+    });
+    const index = buildTanaIndex(editor.children);
+
+    assert.equal(fieldId, 'status');
+    assert.equal(
+      editor.children.find((node) => node.id === 'template-input')?.tanaFieldId,
+      'status'
+    );
+    assert.equal(index.fieldNodesById.get('template-input')?.parentNodeId, 'project');
+    assert.ok(index.fieldNodesById.get('template-input')?.valueNodeId);
   });
 
   test('materializes every template Field when applying a Supertag and keeps Field labels dynamic', () => {
