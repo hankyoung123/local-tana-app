@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
-import { ArrowLeftIcon, ListFilterIcon } from 'lucide-react';
-import { useEditorRef } from 'platejs/react';
+import { ArrowLeftIcon, ListFilterIcon } from "lucide-react";
+import { useEditorRef } from "platejs/react";
 
-import type { TanaIndex, TanaNode } from '@/lib/tana';
+import type { TanaIndex, TanaNode } from "@/lib/tana";
 import {
   createAndQuery,
-  describeTanaQueryClause,
+  describeTanaQueryExpression,
   resolveTanaNodeTitle,
   runTanaQuery,
-} from '@/lib/tana';
-import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { Button } from '@/components/ui/button';
+} from "@/lib/tana";
+import { TanaZoomPlugin } from "@/components/editor/plugins/tana-zoom-plugin";
+import { Button } from "@/components/ui/button";
 
-import { NodeProjection } from './node-projection';
-import { TanaCalendarView } from './tana-calendar-view';
-import { TanaCardsView } from './tana-cards-view';
-import { TanaTableView } from './tana-table-view';
+import { NodeProjection } from "./node-projection";
+import { TanaCalendarView } from "./tana-calendar-view";
+import { TanaCardsView } from "./tana-cards-view";
+import { TanaTableView } from "./tana-table-view";
 
 export function TanaView({
   index,
@@ -27,12 +27,7 @@ export function TanaView({
 }) {
   const editor = useEditorRef();
   const query = view.searchDefinition?.query ?? createAndQuery();
-  const predicates = query.type === 'and'
-    ? query.children.flatMap((child) => child.type === 'predicate' ? [child.predicate] : [])
-    : [];
-  const results = runTanaQuery(index, query).filter(
-    ({ id }) => id !== view.id
-  );
+  const results = runTanaQuery(index, query).filter(({ id }) => id !== view.id);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white">
@@ -51,30 +46,21 @@ export function TanaView({
           </span>
         </div>
         <p className="mb-1 text-muted-foreground text-xs">
-          {view.viewDefinition?.type === 'table'
-            ? '表格视图'
-            : view.viewDefinition?.type === 'calendar'
-              ? '日历视图'
-              : view.viewDefinition?.type === 'cards'
-                ? '卡片视图'
-              : '大纲视图'}
+          {view.viewDefinition?.type === "table"
+            ? "表格视图"
+            : view.viewDefinition?.type === "calendar"
+              ? "日历视图"
+              : view.viewDefinition?.type === "cards"
+                ? "卡片视图"
+                : "大纲视图"}
         </p>
-        <h1 className="font-semibold text-2xl">{resolveTanaNodeTitle(index, view.id)}</h1>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {predicates.length === 0 ? (
-            <span className="rounded bg-amber-50 px-2 py-1 text-amber-800 text-xs">
-              未设置筛选条件：显示所有节点
-            </span>
-          ) : (
-            predicates.map((clause, indexInList) => (
-              <span
-                key={`${clause.kind}:${indexInList}`}
-                className="rounded bg-muted px-2 py-1 text-muted-foreground text-xs"
-              >
-                {describeTanaQueryClause(index, clause)}
-              </span>
-            ))
-          )}
+        <h1 className="font-semibold text-2xl">
+          {resolveTanaNodeTitle(index, view.id)}
+        </h1>
+        <div className="mt-3">
+          <span className="inline-block rounded bg-muted px-2 py-1 text-muted-foreground text-xs">
+            {describeTanaQueryExpression(index, query)}
+          </span>
         </div>
       </header>
 
@@ -89,25 +75,23 @@ export function TanaView({
               </p>
             </div>
           </div>
+        ) : view.viewDefinition?.type === "table" ? (
+          <TanaTableView index={index} results={results} />
+        ) : view.viewDefinition?.type === "calendar" ? (
+          <TanaCalendarView index={index} results={results} />
+        ) : view.viewDefinition?.type === "cards" ? (
+          <TanaCardsView index={index} results={results} />
         ) : (
-          view.viewDefinition?.type === 'table' ? (
-            <TanaTableView index={index} results={results} />
-          ) : view.viewDefinition?.type === 'calendar' ? (
-            <TanaCalendarView index={index} results={results} />
-          ) : view.viewDefinition?.type === 'cards' ? (
-            <TanaCardsView index={index} results={results} />
-          ) : (
-            <div className="mx-auto max-w-3xl divide-y rounded-lg border">
-              {results.map((node) => (
-                <NodeProjection
-                  key={node.id}
-                  index={index}
-                  targetNodeId={node.id}
-                  variant="search-result"
-                />
-              ))}
-            </div>
-          )
+          <div className="mx-auto max-w-3xl divide-y rounded-lg border">
+            {results.map((node) => (
+              <NodeProjection
+                key={node.id}
+                index={index}
+                targetNodeId={node.id}
+                variant="search-result"
+              />
+            ))}
+          </div>
         )}
       </div>
     </section>

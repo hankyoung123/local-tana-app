@@ -1,13 +1,22 @@
-import { ElementApi } from 'platejs';
-import type { NodeEntry } from 'platejs';
-import { createPlatePlugin, type PlateEditor } from 'platejs/react';
+import { ElementApi } from "platejs";
+import type { NodeEntry } from "platejs";
+import { createPlatePlugin, type PlateEditor } from "platejs/react";
 
-import { isTanaNodeElement } from '@/lib/tana/constants';
-import { buildTanaIndex } from '@/lib/tana/index';
-import { createAndQuery, isTanaQueryClauseValid } from '@/lib/tana/query';
-import type { NodeId, TanaBlockElement, TanaQueryClause } from '@/lib/tana/types';
+import { isTanaNodeElement } from "@/lib/tana/constants";
+import { buildTanaIndex } from "@/lib/tana/index";
+import {
+  createAndQuery,
+  isTanaQueryClauseValid,
+  isTanaQueryExpressionValid,
+} from "@/lib/tana/query";
+import type {
+  NodeId,
+  TanaBlockElement,
+  TanaQueryClause,
+  TanaQueryExpression,
+} from "@/lib/tana/types";
 
-export const TANA_SEARCH_PLUGIN_KEY = 'tanaSearch' as const;
+export const TANA_SEARCH_PLUGIN_KEY = "tanaSearch" as const;
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -24,7 +33,10 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 
   if (!entry || entry[0].tanaSearchDefinition) return false;
 
-  editor.tf.setNodes({ tanaSearchDefinition: { query: createAndQuery() } }, { at: entry[1] });
+  editor.tf.setNodes(
+    { tanaSearchDefinition: { query: createAndQuery() } },
+    { at: entry[1] },
+  );
 
   return true;
 }
@@ -34,29 +46,63 @@ function remove(editor: PlateEditor, nodeId: NodeId) {
 
   if (!entry?.[0].tanaSearchDefinition) return false;
 
-  editor.tf.unsetNodes('tanaSearchDefinition', { at: entry[1] });
+  editor.tf.unsetNodes("tanaSearchDefinition", { at: entry[1] });
 
   return true;
 }
 
-function addClause(editor: PlateEditor, nodeId: NodeId, clause: TanaQueryClause) {
+/** Writes one already-validated persisted AST; query results stay derived. */
+function setQuery(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  query: TanaQueryExpression,
+): boolean {
   const entry = getTanaNodeEntry(editor, nodeId);
   const definition = entry?.[0].tanaSearchDefinition;
 
   if (!entry || !definition) return false;
-  if (definition.query.type !== 'and') return false;
-  if (!isTanaQueryClauseValid(buildTanaIndex(editor.children), clause)) return false;
+  if (!isTanaQueryExpressionValid(buildTanaIndex(editor.children), query))
+    return false;
+
+  editor.tf.setNodes(
+    {
+      tanaSearchDefinition: {
+        ...definition,
+        query,
+      },
+    },
+    { at: entry[1] },
+  );
+
+  return true;
+}
+
+function addClause(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  clause: TanaQueryClause,
+) {
+  const entry = getTanaNodeEntry(editor, nodeId);
+  const definition = entry?.[0].tanaSearchDefinition;
+
+  if (!entry || !definition) return false;
+  if (definition.query.type !== "and") return false;
+  if (!isTanaQueryClauseValid(buildTanaIndex(editor.children), clause))
+    return false;
 
   editor.tf.setNodes(
     {
       tanaSearchDefinition: {
         query: {
           ...definition.query,
-          children: [...definition.query.children, { predicate: clause, type: 'predicate' }],
+          children: [
+            ...definition.query.children,
+            { predicate: clause, type: "predicate" },
+          ],
         },
       },
     },
-    { at: entry[1] }
+    { at: entry[1] },
   );
 
   return true;
@@ -71,7 +117,7 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
     !definition ||
     !Number.isInteger(index) ||
     index < 0 ||
-    definition.query.type !== 'and' ||
+    definition.query.type !== "and" ||
     index >= definition.query.children.length
   ) {
     return false;
@@ -82,11 +128,13 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
       tanaSearchDefinition: {
         query: {
           ...definition.query,
-          children: definition.query.children.filter((_, clauseIndex) => clauseIndex !== index),
+          children: definition.query.children.filter(
+            (_, clauseIndex) => clauseIndex !== index,
+          ),
         },
       },
     },
-    { at: entry[1] }
+    { at: entry[1] },
   );
 
   return true;
@@ -103,5 +151,7 @@ export const TanaSearchPlugin = createPlatePlugin({
     remove: (nodeId: NodeId) => remove(editor, nodeId),
     removeClause: (nodeId: NodeId, index: number) =>
       removeClause(editor, nodeId, index),
+    setQuery: (nodeId: NodeId, query: TanaQueryExpression) =>
+      setQuery(editor, nodeId, query),
   },
 }));
