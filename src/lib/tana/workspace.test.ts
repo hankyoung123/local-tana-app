@@ -199,6 +199,19 @@ describe('canonical Tana workspace document', () => {
     assert.notEqual(editor.children[4].id, 'schema');
   });
 
+  test('does not split Workspace into a second root on Enter', () => {
+    const editor = createEditor(minimalWorkspace());
+    const before = structuredClone(editor.children);
+
+    editor.tf.select({
+      anchor: { offset: 9, path: [0, 0] },
+      focus: { offset: 9, path: [0, 0] },
+    });
+    editor.tf.insertBreak();
+
+    assert.deepEqual(editor.children, before);
+  });
+
   test('blocks direct and block-selected removal of system Nodes but keeps ordinary deletes native', () => {
     const editor = createEditor([
       ...minimalWorkspace(),
@@ -319,6 +332,23 @@ describe('canonical Tana workspace document', () => {
     assert.equal(editor.children.find((node) => node.id === 'nested-child')?.indent, 1);
   });
 
+  test('blocks multi-selection Shift+Tab when one Node is already at indent 1', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Parent' }], id: 'parent', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', indent: 2, type: KEYS.p },
+    ]);
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [7, 0] },
+      focus: { offset: 5, path: [8, 0] },
+    });
+
+    assert.equal(editor.tf.tab({ reverse: true }), true);
+    assert.equal(editor.children.find((node) => node.id === 'parent')?.indent, 1);
+    assert.equal(editor.children.find((node) => node.id === 'child')?.indent, 2);
+  });
+
   test('rejects an ordinary root outside Workspace at the persistence gate', () => {
     const document: Value = [
       ...minimalWorkspace(),
@@ -335,6 +365,17 @@ describe('canonical Tana workspace document', () => {
 
     assert.equal(editor.tf.moveNodes({ at: [3], to: [6] }), false);
 
+    assert.deepEqual(editor.children, before);
+  });
+
+  test('blocks moving an ordinary Node before Workspace', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Note' }], id: 'note', indent: 1, type: KEYS.p },
+    ]);
+    const before = structuredClone(editor.children);
+
+    assert.equal(editor.tf.moveNodes({ at: [7], to: [0] }), false);
     assert.deepEqual(editor.children, before);
   });
 

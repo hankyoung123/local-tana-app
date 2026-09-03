@@ -75,6 +75,35 @@ function getCurrentBlockPath(editor: PlateEditor): Path | undefined {
   return entry && isTanaNodeElement(entry) ? entry[1] : undefined;
 }
 
+function selectionHasProtectedOutdentNode(editor: PlateEditor): boolean {
+  return Array.from(
+    editor.api.nodes({ block: true, mode: 'lowest' })
+  ).some(([node, path]) => {
+    if (!ElementApi.isElement(node) || !isTanaNodeElement(node, path)) {
+      return false;
+    }
+
+    if (isSystemNode(node)) return true;
+
+    return (typeof node.indent === 'number' ? node.indent : 0) <= 1;
+  });
+}
+
+function moveWouldPrecedeWorkspace(
+  editor: PlateEditor,
+  options: { to?: unknown }
+): boolean {
+  if (!Array.isArray(options.to) || options.to.length !== 1) return false;
+
+  const workspaceIndex = editor.children.findIndex(
+    (node) =>
+      ElementApi.isElement(node) &&
+      (node as TanaBlockElement).tanaSystemNode === 'workspace'
+  );
+
+  return workspaceIndex >= 0 && options.to[0] <= workspaceIndex;
+}
+
 function isAtBlockEdge(
   editor: PlateEditor,
   path: Path,
@@ -185,6 +214,11 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       if (!entry || typeof entry[0].id !== 'string') return insertBreak();
 
       const [node, path] = entry;
+
+      // Workspace is the unique root. It is a container boundary, not an
+      // editable block that can split into another indent-0 Node.
+      if (node.tanaSystemNode === 'workspace') return;
+
       const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
 
       if (focusedNodeId === node.id) return;
@@ -235,7 +269,12 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       return mergeNodes(options);
     },
     moveNodes(options) {
-      if (moveTargetsSystemNode(editor, options)) return false;
+      if (
+        moveTargetsSystemNode(editor, options) ||
+        moveWouldPrecedeWorkspace(editor, options)
+      ) {
+        return false;
+      }
 
       return moveNodes(options);
     },
@@ -256,6 +295,10 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       return removeNodes(options);
     },
     tab(options) {
+      if (options?.reverse === true && selectionHasProtectedOutdentNode(editor)) {
+        return true;
+      }
+
       if (getSystemNodeAtPath(editor, getCurrentBlockPath(editor))) return true;
 
       const path = getCurrentBlockPath(editor);
