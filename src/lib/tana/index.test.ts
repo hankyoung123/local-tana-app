@@ -33,6 +33,7 @@ const document: Value = [
       },
     ],
     type: 'p',
+    tanaSupertagIds: ['project'],
   },
 ];
 
@@ -68,6 +69,29 @@ describe('buildTanaIndex', () => {
     assert.deepEqual(getNodeReferenceCandidatesFromIndex(buildTanaIndex(document)), [
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
+    ]);
+  });
+
+  test('derives Supertag membership only from Node metadata, not inline presentation', () => {
+    const tokenOnly: Value = [
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: 'p' },
+      {
+        children: [
+          { text: 'Task ' },
+          { children: [{ text: '' }], key: 'project', type: 'tana_supertag' },
+        ],
+        id: 'task',
+        type: 'p',
+      },
+    ];
+    const semanticMembership: Value = [
+      tokenOnly[0],
+      { ...tokenOnly[1], tanaSupertagIds: ['project'] },
+    ];
+
+    assert.equal(buildTanaIndex(tokenOnly).nodesBySupertag.has('project'), false);
+    assert.deepEqual(buildTanaIndex(semanticMembership).nodesBySupertag.get('project'), [
+      'task',
     ]);
   });
 

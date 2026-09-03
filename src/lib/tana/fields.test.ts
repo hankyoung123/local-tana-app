@@ -394,6 +394,34 @@ describe('Field occurrence Nodes', () => {
     assert.ok(index.fieldNodesById.get('temporary')?.valueNodeId);
   });
 
+  test('creates shared Definitions under Schema and local Definitions under the requested owner', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Schema' }],
+        id: 'schema',
+        tanaSystemNode: 'schema',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+    ]);
+    const fields = field(editor);
+    const sharedFieldId = fields.createDefinition('Status', { type: 'plain' });
+    const localFieldId = fields.createDefinition('Priority', { type: 'number' }, 'project');
+    const index = buildTanaIndex(editor.children);
+
+    assert.ok(sharedFieldId);
+    assert.ok(localFieldId);
+    assert.equal(index.parentNodeIds.get(sharedFieldId!), 'schema');
+    assert.equal(index.parentNodeIds.get(localFieldId!), 'project');
+    assert.equal(index.nodesById.get(sharedFieldId!)?.fieldDefinition?.type, 'plain');
+    assert.equal(index.nodesById.get(localFieldId!)?.fieldDefinition?.type, 'number');
+  });
+
   test('turns a transient Supertag child into a real template Field Node', () => {
     const editor = createEditor([
       {
@@ -419,7 +447,7 @@ describe('Field occurrence Nodes', () => {
 
     assert.ok(fieldId);
     assert.equal(definition?.fieldDefinition?.type, 'plain');
-    assert.equal(definition?.node.indent, undefined);
+    assert.equal(definition?.node.indent, 1);
     assert.equal(
       editor.children.find((node) => node.id === 'template-input')?.tanaFieldId,
       fieldId

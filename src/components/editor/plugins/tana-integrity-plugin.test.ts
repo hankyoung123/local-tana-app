@@ -68,6 +68,22 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].children, [{ text: 'Ship ' }]);
   });
 
+  test('removes a deleted Supertag from Node-level membership without touching Field data', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', tanaSupertagIds: ['project'], type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Open' }], id: 'task-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    ]);
+
+    editor.tf.removeNodes({ at: [0] });
+
+    assert.equal(editor.children.find((node) => node.id === 'task')?.tanaSupertagIds, undefined);
+    assert.equal(editor.children.some((node) => node.id === 'task-status'), true);
+    assert.equal(editor.children.some((node) => node.id === 'task-status-value'), true);
+  });
+
   test('clears a dangling block-level Reference target while retaining its Node', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },

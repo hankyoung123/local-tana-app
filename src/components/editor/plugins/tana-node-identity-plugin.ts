@@ -14,7 +14,9 @@ const TANA_SEMANTIC_KEYS = [
   'tanaPresentation',
   'tanaReferenceTargetId',
   'tanaSearchDefinition',
+  'tanaSupertagIds',
   'tanaSupertagDefinition',
+  'tanaSystemNode',
   'tanaViewDefinition'
 ] as const;
 

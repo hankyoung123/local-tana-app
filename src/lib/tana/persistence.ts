@@ -13,7 +13,17 @@ import type { TanaBlockElement } from './types';
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
+
+const TANA_SYSTEM_NODES = new Set([
+  'workspace',
+  'home',
+  'daily-notes',
+  'schema',
+  'library',
+  'settings',
+  'trash',
+]);
 
 type DocumentRow = {
   schema_version: number;
@@ -62,7 +72,9 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaPresentation?: unknown;
     tanaReferenceTargetId?: unknown;
     tanaSearchDefinition?: unknown;
+    tanaSupertagIds?: unknown;
     tanaSupertagDefinition?: unknown;
+    tanaSystemNode?: unknown;
     tanaViewDefinition?: unknown;
   };
 
@@ -81,8 +93,28 @@ function hasValidSemanticData(element: TElement): boolean {
     return false;
   }
 
+  if (
+    semantic.tanaSupertagIds !== undefined &&
+    (!Array.isArray(semantic.tanaSupertagIds) ||
+      !semantic.tanaSupertagIds.every(
+        (supertagId) => typeof supertagId === 'string' && supertagId.length > 0
+      ) ||
+      new Set(semantic.tanaSupertagIds).size !== semantic.tanaSupertagIds.length)
+  ) {
+    return false;
+  }
+
+  if (
+    semantic.tanaSystemNode !== undefined &&
+    (typeof semantic.tanaSystemNode !== 'string' ||
+      !TANA_SYSTEM_NODES.has(semantic.tanaSystemNode))
+  ) {
+    return false;
+  }
+
   // Field-as-Node is a schema break. Parent value maps and the previous
-  // options array are never valid in v4 and are reset rather than migrated.
+  // options array are never valid in the current schema and are reset rather
+  // than migrated.
   if (semantic.tanaFieldValues !== undefined) return false;
 
   if (
@@ -213,7 +245,9 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaPresentation?: unknown;
       tanaReferenceTargetId?: unknown;
       tanaSearchDefinition?: unknown;
+      tanaSupertagIds?: unknown;
       tanaSupertagDefinition?: unknown;
+      tanaSystemNode?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
@@ -224,7 +258,9 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaPresentation !== undefined ||
       semantic.tanaReferenceTargetId !== undefined ||
       semantic.tanaSearchDefinition !== undefined ||
+      semantic.tanaSupertagIds !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
+      semantic.tanaSystemNode !== undefined ||
       semantic.tanaViewDefinition !== undefined;
 
     if (isTanaNode) {
@@ -274,8 +310,14 @@ export function isValidTanaDocument(value: unknown): value is Value {
         : []
     )
   );
+  const systemNodes = new Set<string>();
 
   for (const [node, path] of entries) {
+    if (node.tanaSystemNode) {
+      if (systemNodes.has(node.tanaSystemNode)) return false;
+      systemNodes.add(node.tanaSystemNode);
+    }
+
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;
 
     if (node.tanaFieldId) {

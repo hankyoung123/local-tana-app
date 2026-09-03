@@ -143,7 +143,7 @@ describe('Plate document persistence', () => {
   });
 
   test('treats obsolete Field metadata as a breaking schema', () => {
-    assert.equal(CURRENT_SCHEMA_VERSION, 5);
+    assert.equal(CURRENT_SCHEMA_VERSION, 6);
     assert.equal(
       isValidTanaDocument([
         {
@@ -163,6 +163,30 @@ describe('Plate document persistence', () => {
           tanaFieldDefinition: { options: ['active'], type: 'options' },
           type: 'p',
         },
+      ]),
+      false
+    );
+  });
+
+  test('accepts explicit system Nodes and rejects invalid membership metadata', () => {
+    assert.equal(
+      isValidTanaDocument([
+        { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: 'p' },
+        { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: 'p' },
+        { children: [{ text: 'Project' }], id: 'project', indent: 2, tanaSupertagDefinition: {}, type: 'p' },
+        { children: [{ text: 'Task' }], id: 'task', indent: 1, tanaSupertagIds: ['project'], type: 'p' },
+      ]),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument([
+        { children: [{ text: 'Task' }], id: 'task', tanaSupertagIds: ['project', 'project'], type: 'p' },
+      ]),
+      false
+    );
+    assert.equal(
+      isValidTanaDocument([
+        { children: [{ text: 'Task' }], id: 'task', tanaSystemNode: 'not-a-system-node', type: 'p' },
       ]),
       false
     );

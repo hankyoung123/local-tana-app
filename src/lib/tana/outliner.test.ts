@@ -909,6 +909,7 @@ describe('Tana outliner behavior', () => {
             }
           ],
           id: 'project',
+          tanaSupertagIds: ['project-tag'],
           type: KEYS.p
         },
         {

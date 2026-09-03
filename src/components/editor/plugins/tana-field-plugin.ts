@@ -419,17 +419,28 @@ function deleteAdHoc(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
 function createDefinition(
   editor: PlateEditor,
   name: string,
-  definition: FieldDefinition
+  definition: FieldDefinition,
+  ownerNodeId?: NodeId
 ): NodeId | undefined {
   const normalizedName = name.trim();
 
   if (!normalizedName) return;
 
-  const path = [editor.children.length];
+  const index = buildTanaIndex(editor.children);
+  const ownerId = ownerNodeId ?? index.systemNodeIds.get('schema');
+  const ownerEntry = ownerId ? getTanaNodeEntry(editor, ownerId) : undefined;
+
+  if (!ownerEntry) return;
+
+  const [owner, ownerPath] = ownerEntry;
+  const ownerIndent = typeof owner.indent === 'number' ? owner.indent : 0;
+  const descendants = getTanaNodeDescendantPaths(editor.children, ownerPath);
+  const path = [(descendants.at(-1)?.[0] ?? ownerPath[0]) + 1];
 
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
+      indent: ownerIndent + 1,
       tanaFieldDefinition: definition
     }),
     { at: path }
@@ -561,7 +572,7 @@ function completeTemplateInput(
     'fieldId' in choice
       ? choice.fieldId
       : (findFieldDefinitionExactMatch(buildTanaIndex(editor.children), choice.name)?.id ??
-        createDefinition(editor, choice.name, { type: 'plain' }));
+        createDefinition(editor, choice.name, { type: 'plain' }, supertagId));
 
   if (!fieldId) return;
 
@@ -633,8 +644,11 @@ export const TanaFieldPlugin = createPlatePlugin({
         supertagId: NodeId,
         choice: FieldInputChoice
       ) => completeTemplateInput(editor, temporaryNodeId, supertagId, choice),
-      createDefinition: (name: string, definition: FieldDefinition) =>
-        createDefinition(editor, name, definition),
+      createDefinition: (
+        name: string,
+        definition: FieldDefinition,
+        ownerNodeId?: NodeId
+      ) => createDefinition(editor, name, definition, ownerNodeId),
       createOption: (fieldId: NodeId, name: string) => createOption(editor, fieldId, name),
       deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) => deleteAdHoc(editor, nodeId, fieldId),
       materialize: (nodeId: NodeId, fieldId: NodeId) => materialize(editor, nodeId, fieldId),

@@ -14,7 +14,6 @@ import type {
   FieldValue,
   NodeId,
   TanaBlockElement,
-  TanaFieldNode,
   TanaIndex,
   TanaNode,
 } from './types';
@@ -22,8 +21,10 @@ import type {
 /** A Supertag template is its real direct child Field occurrence Node. */
 export type ResolvedSupertagTemplateField = {
   definition: FieldDefinition;
+  fieldId: NodeId;
   field: TanaNode;
-  template: TanaFieldNode;
+  /** Explicit template defaults live only on external Field occurrence Values. */
+  value?: FieldValue;
 };
 
 export type FieldDefinitionCandidate = Pick<
@@ -253,7 +254,7 @@ export function isFieldDefinedBySupertag(
     ([supertagId, nodeIds]) =>
       nodeIds.includes(nodeId) &&
       getSupertagTemplateFields(index, supertagId).some(
-        (template) => template.template.fieldId === fieldId
+        (template) => template.fieldId === fieldId
       )
   );
 }
@@ -356,8 +357,8 @@ export function findFieldDefinitionExactMatch(
 }
 
 /**
- * Resolves a Supertag's template Fields from its ordered direct child Nodes.
- * The template Field and its value child remain ordinary Plate Nodes.
+ * Resolves a Supertag's template Fields from ordered direct children. A template
+ * can either be an external Field occurrence or a local Field Definition Node.
  */
 export function getSupertagTemplateFields(
   index: TanaIndex,
@@ -369,14 +370,39 @@ export function getSupertagTemplateFields(
     return [];
   }
 
-  return (index.fieldNodesByParent.get(supertagId) ?? []).flatMap((template) => {
-    const field = index.nodesById.get(template.fieldId);
+  const seenFieldIds = new Set<NodeId>();
 
-    if (!field?.fieldDefinition || !field.semanticTypes.includes('field-definition')) {
+  return (index.childrenByParent.get(supertagId) ?? []).flatMap((childId) => {
+    const child = index.nodesById.get(childId);
+
+    if (!child) return [];
+
+    if (child.semanticTypes.includes('field-definition') && child.fieldDefinition) {
+      if (seenFieldIds.has(child.id)) return [];
+      seenFieldIds.add(child.id);
+
+      return [{ definition: child.fieldDefinition, field: child, fieldId: child.id }];
+    }
+
+    const template = index.fieldNodesById.get(child.id);
+    const field = template ? index.nodesById.get(template.fieldId) : undefined;
+
+    if (
+      !template ||
+      !field?.fieldDefinition ||
+      !field.semanticTypes.includes('field-definition') ||
+      seenFieldIds.has(template.fieldId)
+    ) {
       return [];
     }
 
-    return [{ definition: field.fieldDefinition, field, template }];
+    seenFieldIds.add(template.fieldId);
+    return [{
+      definition: field.fieldDefinition,
+      field,
+      fieldId: template.fieldId,
+      value: template.value,
+    }];
   });
 }
 
@@ -512,7 +538,7 @@ export function getNodeFieldDescriptors(
 
     const matchingSupertagIds = supertagIds.filter((supertagId) =>
       getSupertagTemplateFields(index, supertagId).some(
-        (template) => template.template.fieldId === fieldNode.fieldId
+        (template) => template.fieldId === fieldNode.fieldId
       )
     );
 

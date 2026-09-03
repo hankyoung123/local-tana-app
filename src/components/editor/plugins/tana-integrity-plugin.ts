@@ -24,7 +24,8 @@ export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
  *
  * inline
  * - mention.key
- * - supertag.key
+ * - supertag.key (presentation token only)
+ * - tanaSupertagIds (semantic membership)
  *
  * field
  * - Field Definition Node identity
@@ -55,6 +56,7 @@ export type TanaNodeIntegrityIssue =
   | 'invalid-value-owner'
   | 'missing-from-supertag-source'
   | 'missing-reference-target'
+  | 'missing-supertag-membership'
   | 'invalid-search-query'
   | 'invalid-view-definition';
 
@@ -310,6 +312,14 @@ export function validateNode(
   path: Path,
   context: TanaNodeIntegrityContext
 ): TanaNodeIntegrityIssue | undefined {
+  if (
+    node.tanaSupertagIds?.some(
+      (supertagId) => !context.supertagDefinitionIds.has(supertagId)
+    )
+  ) {
+    return 'missing-supertag-membership';
+  }
+
   const semanticContext = { document: context.document, path };
 
   for (const semantic of getNodeSemanticTypes(node, semanticContext)) {
@@ -355,6 +365,18 @@ export function repairNode(
     case 'missing-reference-target':
       editor.tf.unsetNodes('tanaReferenceTargetId', { at: path });
       return true;
+    case 'missing-supertag-membership': {
+      const supertagIds = (node.tanaSupertagIds ?? []).filter((supertagId) =>
+        context.supertagDefinitionIds.has(supertagId)
+      );
+
+      if (supertagIds.length === 0) {
+        editor.tf.unsetNodes('tanaSupertagIds', { at: path });
+      } else {
+        editor.tf.setNodes({ tanaSupertagIds: supertagIds }, { at: path });
+      }
+      return true;
+    }
     case 'invalid-view-definition':
       editor.tf.setNodes({ tanaViewDefinition: { type: 'outline' } }, { at: path });
       return true;

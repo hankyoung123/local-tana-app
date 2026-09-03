@@ -41,6 +41,7 @@ const document: Value = [
         type: 'tana_supertag',
       },
     ],
+    tanaSupertagIds: ['project-tag'],
     type: 'p',
   },
   { children: [{ text: '' }], id: 'alpha-estimate', indent: 1, tanaFieldId: 'estimate', type: 'p' },

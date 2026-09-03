@@ -5,6 +5,16 @@ import type { TanaNodeSemanticType } from './node-semantic';
 export type NodeId = string;
 export type FieldId = NodeId;
 
+/** Stable identities for the workspace's ordinary system Nodes. */
+export type TanaSystemNode =
+  | 'daily-notes'
+  | 'home'
+  | 'library'
+  | 'schema'
+  | 'settings'
+  | 'trash'
+  | 'workspace';
+
 export type FieldDefinition =
   | { cardinality?: FieldCardinality; type: 'checkbox' }
   | { cardinality?: FieldCardinality; type: 'date' }
@@ -67,10 +77,16 @@ export type TanaBlockElement = TElement & {
    */
   tanaFieldValueType?: FieldType;
   tanaPresentation?: TanaPresentation;
-  /** A block-level Reference occurrence; inline references remain Plate Mentions. */
+  /**
+   * Plate adapter for Tana reference semantics: the occurrence keeps its own
+   * Plate NodeId and points at the canonical target NodeId.
+   */
   tanaReferenceTargetId?: NodeId;
   tanaSearchDefinition?: TanaSearchDefinition;
+  /** Semantic Supertag membership. Inline `#` elements are presentation only. */
+  tanaSupertagIds?: readonly NodeId[];
   tanaSupertagDefinition?: SupertagDefinition;
+  tanaSystemNode?: TanaSystemNode;
   tanaViewDefinition?: TanaViewDefinition;
 };
 
@@ -88,6 +104,8 @@ export type TanaNode = {
   /** Preserves composable semantics such as Field Definition + View. */
   semanticTypes: readonly TanaNodeSemanticType[];
   supertagDefinition?: SupertagDefinition;
+  supertagIds: readonly NodeId[];
+  systemNode?: TanaSystemNode;
   viewDefinition?: TanaViewDefinition;
 };
 
@@ -123,14 +141,20 @@ export type TanaIndex = {
   fieldNodesByParent: ReadonlyMap<NodeId, readonly TanaFieldNode[]>;
   /** Derived only from Field Nodes; never persisted on the parent document Node. */
   fieldValues: ReadonlyMap<NodeId, ReadonlyMap<FieldId, FieldValue>>;
+  /** Direct children derived solely from flat indent and document order. */
+  childrenByParent: ReadonlyMap<NodeId, readonly NodeId[]>;
   /** The unchanged Plate document from which every index entry is derived. */
   document: Value;
   nodesById: ReadonlyMap<NodeId, TanaNode>;
-  nodesBySupertag: ReadonlyMap<string, readonly NodeId[]>;
+  /** Parent ownership derived solely from flat indent and document order. */
+  parentNodeIds: ReadonlyMap<NodeId, NodeId | undefined>;
+  nodesBySupertag: ReadonlyMap<NodeId, readonly NodeId[]>;
   /** All resolvable inline and block-level references in document order. */
   references: readonly ReferenceRelation[];
   /** Block-level Reference occurrences, keyed by their own NodeId. */
   referenceTargetsByNode: ReadonlyMap<NodeId, NodeId>;
+  /** System-node lookup derived from explicit Node metadata. */
+  systemNodeIds: ReadonlyMap<TanaSystemNode, NodeId>;
 };
 
 export function getNodeId(node: TElement): NodeId {

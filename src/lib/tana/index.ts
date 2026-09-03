@@ -19,6 +19,7 @@ import type {
   TanaFieldNode,
   TanaIndex,
   TanaNode,
+  TanaSystemNode,
 } from './types';
 
 type MentionElement = TElement & {
@@ -169,9 +170,12 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const references: ReferenceRelation[] = [];
   const referenceTargetsByNode = new Map<NodeId, NodeId>();
   const nodesBySupertag = new Map<NodeId, NodeId[]>();
+  const childrenByParent = new Map<NodeId, NodeId[]>();
   const fieldNodesById = new Map<NodeId, TanaFieldNode>();
   const fieldNodesByParent = new Map<NodeId, TanaFieldNode[]>();
   const fieldValues = new Map<NodeId, Map<FieldId, FieldValue>>();
+  const parentNodeIds = new Map<NodeId, NodeId | undefined>();
+  const systemNodeIds = new Map<TanaSystemNode, NodeId>();
   const orderedNodes: TanaNode[] = [];
 
   document.forEach((descendant, index) => {
@@ -193,6 +197,13 @@ export function buildTanaIndex(document: Value): TanaIndex {
       semanticType: getNodeSemanticType(tanaNode, semanticContext),
       semanticTypes: getNodeSemanticTypes(tanaNode, semanticContext),
       supertagDefinition: tanaNode.tanaSupertagDefinition,
+      supertagIds: Array.isArray(tanaNode.tanaSupertagIds)
+        ? tanaNode.tanaSupertagIds.filter(
+            (supertagId): supertagId is NodeId =>
+              typeof supertagId === 'string' && supertagId.length > 0
+          )
+        : [],
+      systemNode: tanaNode.tanaSystemNode,
       text: '',
       viewDefinition: tanaNode.tanaViewDefinition,
     };
@@ -256,6 +267,31 @@ export function buildTanaIndex(document: Value): TanaIndex {
     resolvedNodes.map((node) => [node.path[0], node.id])
   );
 
+  resolvedNodes.forEach((node) => {
+    const parentPath = getTanaParentPath(document, node.path);
+    const parentNodeId = parentPath
+      ? nodeIdsByDocumentIndex.get(parentPath[0])
+      : undefined;
+
+    parentNodeIds.set(node.id, parentNodeId);
+
+    if (parentNodeId) {
+      const children = childrenByParent.get(parentNodeId) ?? [];
+
+      children.push(node.id);
+      childrenByParent.set(parentNodeId, children);
+    }
+
+    if (node.systemNode) systemNodeIds.set(node.systemNode, node.id);
+
+    node.supertagIds.forEach((supertagId) => {
+      const taggedNodes = nodesBySupertag.get(supertagId) ?? [];
+
+      taggedNodes.push(node.id);
+      nodesBySupertag.set(supertagId, taggedNodes);
+    });
+  });
+
   function addReference(relation: ReferenceRelation) {
     references.push(relation);
 
@@ -273,19 +309,6 @@ export function buildTanaIndex(document: Value): TanaIndex {
     if (!isElement(descendant)) return;
 
     const targetNodeId = getReferenceTarget(descendant);
-
-    if (
-      descendant.type === TANA_SUPERTAG_KEY &&
-      typeof (descendant as MentionElement).key === 'string'
-    ) {
-      const supertagId = (descendant as MentionElement).key as NodeId;
-      const taggedNodes = nodesBySupertag.get(supertagId) ?? [];
-
-      if (!taggedNodes.includes(sourceNodeId)) {
-        taggedNodes.push(sourceNodeId);
-        nodesBySupertag.set(supertagId, taggedNodes);
-      }
-    }
 
     if (targetNodeId) {
       addReference({ kind: 'inline', path, sourceNodeId, targetNodeId });
@@ -394,14 +417,17 @@ export function buildTanaIndex(document: Value): TanaIndex {
 
   return {
     backlinks,
+    childrenByParent,
     document,
     fieldNodesById,
     fieldNodesByParent,
     fieldValues,
     nodesById,
+    parentNodeIds,
     nodesBySupertag,
     references,
     referenceTargetsByNode,
+    systemNodeIds,
   };
 }
 
@@ -431,9 +457,7 @@ export function getNodeSupertagIds(
   index: TanaIndex,
   nodeId: NodeId
 ): NodeId[] {
-  return Array.from(index.nodesBySupertag.entries())
-    .filter(([, nodeIds]) => nodeIds.includes(nodeId))
-    .map(([supertagId]) => supertagId);
+  return [...(index.nodesById.get(nodeId)?.supertagIds ?? [])];
 }
 
 export function getNodeReferenceCandidatesFromIndex(

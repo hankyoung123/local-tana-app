@@ -36,20 +36,31 @@ function tags(node: TElement) {
 }
 
 describe('Tana Supertag operations', () => {
-  test('creates a definition Node and applies its inline relation without copied text', () => {
+  test('creates a definition under Schema and applies Node-level membership', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Schema' }],
+        id: 'schema',
+        tanaSystemNode: 'schema',
+        type: KEYS.p,
+      },
     ]);
     const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
     const supertagId = supertag.create(' project ');
 
     assert.equal(supertagId, 'node-1');
     assert.equal(supertag.apply('task', supertagId!), true);
+    assert.deepEqual((editor.children[0] as TElement).tanaSupertagIds, [supertagId]);
     assert.equal(tags(editor.children[0] as TElement)[0]?.key, supertagId);
     assert.equal('value' in (tags(editor.children[0] as TElement)[0] ?? {}), false);
     assert.deepEqual(buildTanaIndex(editor.children).nodesBySupertag.get(supertagId!), [
       'task',
     ]);
+    assert.equal(
+      buildTanaIndex(editor.children).parentNodeIds.get(supertagId!),
+      'schema'
+    );
     assert.equal(supertag.apply('task', supertagId!), false);
   });
 
@@ -92,6 +103,36 @@ describe('Tana Supertag operations', () => {
     assert.deepEqual(index.fieldValues.get('existing-task'), new Map([
       ['title', { type: 'plain', value: 'Keep me' }],
     ]));
+    assert.deepEqual(index.nodesById.get('new-task')?.supertagIds, ['project']);
+  });
+
+  test('materializes a local Field Definition template without copying the definition', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Priority' }],
+        id: 'priority',
+        indent: 1,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    assert.equal(supertag.apply('task', 'project'), true);
+
+    const index = buildTanaIndex(editor.children);
+    const occurrence = index.fieldNodesByParent.get('task')?.[0];
+
+    assert.equal(occurrence?.fieldId, 'priority');
+    assert.equal(index.nodesById.get('priority')?.fieldDefinition?.type, 'plain');
+    assert.equal(index.parentNodeIds.get('priority'), 'project');
   });
 
   test('does not move another Node selection while materializing Fields', () => {
@@ -120,7 +161,7 @@ describe('Tana Supertag operations', () => {
     assert.equal(buildTanaIndex(editor.children).fieldNodesByParent.get('a')?.length, 1);
   });
 
-  test('removes only the inline relation while preserving real Field Nodes', () => {
+  test('removes only Node-level membership while preserving real Field Nodes', () => {
     const editor = createEditor([
       {
         children: [{ text: 'Project' }],
@@ -141,6 +182,7 @@ describe('Tana Supertag operations', () => {
 
     assert.equal(supertag.remove('task', 'project'), true);
     assert.equal(buildTanaIndex(editor.children).nodesBySupertag.has('project'), false);
+    assert.equal('tanaSupertagIds' in editor.children.find((node) => node.id === 'task')!, false);
     assert.ok(buildTanaIndex(editor.children).fieldNodesById.get(occurrenceId));
   });
 

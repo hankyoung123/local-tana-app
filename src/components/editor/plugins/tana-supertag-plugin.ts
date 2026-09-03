@@ -9,6 +9,7 @@ import {
 import { getSupertagTemplateFields } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { hasNodeSemantic } from '@/lib/tana/node-semantic';
+import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 import { TanaFieldPlugin } from './tana-field-plugin';
@@ -68,10 +69,20 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
 
   if (existing) return existing.id;
 
-  const path = [editor.children.length];
+  const schemaId = buildTanaIndex(editor.children).systemNodeIds.get('schema');
+  const schemaEntry = schemaId ? getTanaNodeEntry(editor, schemaId) : undefined;
+
+  if (!schemaEntry) return;
+
+  const [schema, schemaPath] = schemaEntry;
+  const schemaIndent = typeof schema.indent === 'number' ? schema.indent : 0;
+  const descendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
+  const path = [(descendants.at(-1)?.[0] ?? schemaPath[0]) + 1];
+
   editor.tf.insertNodes(
     editor.api.create.block({
       children: [{ text: normalizedName }],
+      indent: schemaIndent + 1,
       tanaSupertagDefinition: {},
     }),
     { at: path }
@@ -110,13 +121,19 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
   if (!nodeEntry || !definitionEntry) return false;
 
-  const index = buildTanaIndex(editor.children);
+  const currentSupertagIds = nodeEntry[0].tanaSupertagIds ?? [];
 
-  if (index.nodesBySupertag.get(supertagId)?.includes(nodeId)) return false;
+  if (currentSupertagIds.includes(supertagId)) return false;
 
   const [, nodePath] = nodeEntry;
+  editor.tf.setNodes(
+    { tanaSupertagIds: [...currentSupertagIds, supertagId] },
+    { at: nodePath }
+  );
+
+  const index = buildTanaIndex(editor.children);
   const templates = getSupertagTemplateFields(index, supertagId);
-  templates.forEach(({ template }) => {
+  templates.forEach((template) => {
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
     fieldTransforms.materialize(nodeId, template.fieldId);
@@ -127,18 +144,30 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
   const selectionIsInNode = isSelectionInNode(editor, nodePath);
 
-  editor.tf.insertNodes(
-    {
-      children: [{ text: '' }],
-      key: supertagId,
-      type: TANA_SUPERTAG_KEY,
-    },
-    {
-      at: selectionIsInNode ? editor.selection! : editor.api.end(nodePath),
-    }
-  );
+  const hasPresentationToken = Array.from(
+    editor.api.nodes({
+      at: nodePath,
+      match: (node) =>
+        ElementApi.isElement(node) &&
+        node.type === TANA_SUPERTAG_KEY &&
+        node.key === supertagId,
+    })
+  ).length > 0;
 
-  if (!selectionIsInNode) return true;
+  if (!hasPresentationToken) {
+    editor.tf.insertNodes(
+      {
+        children: [{ text: '' }],
+        key: supertagId,
+        type: TANA_SUPERTAG_KEY,
+      },
+      {
+        at: selectionIsInNode ? editor.selection! : editor.api.end(nodePath),
+      }
+    );
+  }
+
+  if (!selectionIsInNode || hasPresentationToken) return true;
 
   editor.tf.move({ unit: 'offset' });
 
@@ -160,6 +189,18 @@ function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
   if (!nodeEntry) return false;
 
+  const currentSupertagIds = nodeEntry[0].tanaSupertagIds ?? [];
+  const nextSupertagIds = currentSupertagIds.filter((id) => id !== supertagId);
+  const removedMembership = nextSupertagIds.length !== currentSupertagIds.length;
+
+  if (removedMembership) {
+    if (nextSupertagIds.length === 0) {
+      editor.tf.unsetNodes('tanaSupertagIds', { at: nodeEntry[1] });
+    } else {
+      editor.tf.setNodes({ tanaSupertagIds: nextSupertagIds }, { at: nodeEntry[1] });
+    }
+  }
+
   const entries = Array.from(
     editor.api.nodes({
       at: nodeEntry[1],
@@ -172,7 +213,7 @@ function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
   entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
 
-  return entries.length > 0;
+  return removedMembership;
 }
 
 /** Owns all document mutations for the existing Plate `#` Combobox workflow. */
