@@ -51,7 +51,10 @@ export function canDrag(
   node: TElement,
   context: TanaNodeSemanticContext = {}
 ): boolean {
-  return !getNodeSemanticTypes(node, context).includes('value');
+  return (
+    (node as TElement & { tanaSystemNode?: unknown }).tanaSystemNode === undefined &&
+    !getNodeSemanticTypes(node, context).includes('value')
+  );
 }
 
 export function canDrop(

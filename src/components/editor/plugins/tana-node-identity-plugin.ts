@@ -1,4 +1,5 @@
 import { ElementApi, nanoid } from 'platejs';
+import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
@@ -45,14 +46,137 @@ function isSelectionAtStart(editor: PlateEditor, path: number[]): boolean {
   return !!selection && editor.api.isStart(selection.anchor, path);
 }
 
+function isSystemNode(node: unknown): node is TanaBlockElement {
+  return ElementApi.isElement(node as TElement) &&
+    (node as TanaBlockElement).tanaSystemNode !== undefined;
+}
+
+function getSystemNodeAtPath(editor: PlateEditor, path: Path | undefined) {
+  if (!path || path.length !== 1) return;
+
+  const entry = editor.api.node(path);
+
+  return entry && isSystemNode(entry[0]) ? (entry as [TanaBlockElement, Path]) : undefined;
+}
+
+function getNodeIndentAtPath(editor: PlateEditor, path: Path): number | undefined {
+  const node = editor.api.node(path)?.[0];
+
+  return ElementApi.isElement(node) && typeof node.indent === 'number'
+    ? node.indent
+    : ElementApi.isElement(node)
+      ? 0
+      : undefined;
+}
+
+function getCurrentBlockPath(editor: PlateEditor): Path | undefined {
+  const entry = editor.api.block();
+
+  return entry && isTanaNodeElement(entry) ? entry[1] : undefined;
+}
+
+function isAtBlockEdge(
+  editor: PlateEditor,
+  path: Path,
+  edge: 'end' | 'start'
+): boolean {
+  const selection = editor.selection;
+
+  return (
+    !!selection &&
+    !editor.api.isExpanded() &&
+    (edge === 'start'
+      ? editor.api.isStart(selection.anchor, path)
+      : editor.api.isEnd(selection.anchor, path))
+  );
+}
+
+function hasSystemMergeBoundary(
+  editor: PlateEditor,
+  edge: 'end' | 'start'
+): boolean {
+  const path = getCurrentBlockPath(editor);
+
+  if (!path || !isAtBlockEdge(editor, path, edge)) return false;
+
+  if (getSystemNodeAtPath(editor, path)) return true;
+
+  const neighborIndex = path[0] + (edge === 'start' ? -1 : 1);
+  const neighborPath: Path = [neighborIndex];
+
+  return (
+    neighborIndex >= 0 &&
+    !!getSystemNodeAtPath(editor, neighborPath) &&
+    getNodeIndentAtPath(editor, path) === getNodeIndentAtPath(editor, neighborPath)
+  );
+}
+
+function moveTargetsSystemNode(
+  editor: PlateEditor,
+  options: { at?: unknown; match?: unknown }
+): boolean {
+  if (Array.isArray(options.at)) {
+    if (options.at.length === 1) {
+      return !!getSystemNodeAtPath(editor, options.at);
+    }
+
+    if (options.at.length === 0) {
+      const match = typeof options.match === 'function' ? options.match : undefined;
+
+      return editor.children.some(
+        (node, index) =>
+          isSystemNode(node) && (!match || match(node, [index]))
+      );
+    }
+  }
+
+  return !!getSystemNodeAtPath(editor, getCurrentBlockPath(editor));
+}
+
+function removeTargetsSystemNode(
+  editor: PlateEditor,
+  options: { at?: unknown; match?: unknown }
+): boolean {
+  if (Array.isArray(options.at) && options.at.length === 1) {
+    return !!getSystemNodeAtPath(editor, options.at);
+  }
+
+  if (Array.isArray(options.at) && options.at.length === 0) {
+    return typeof options.match !== 'function';
+  }
+
+  return !!getSystemNodeAtPath(editor, getCurrentBlockPath(editor));
+}
+
 /**
  * Plate owns ordinary Node splitting. The focused Zoom Node is page Header
  * presentation, so Enter there deliberately leaves the document unchanged.
  */
 export const TanaNodeIdentityPlugin = createPlatePlugin({
   key: TANA_NODE_IDENTITY_PLUGIN_KEY
-}).overrideEditor(({ editor, tf: { insertBreak } }) => ({
+}).overrideEditor(({
+  editor,
+  tf: {
+    deleteBackward,
+    deleteForward,
+    insertBreak,
+    mergeNodes,
+    moveNodes,
+    removeNodes,
+    tab,
+  },
+}) => ({
   transforms: {
+    deleteBackward(unit) {
+      if (hasSystemMergeBoundary(editor, 'start')) return;
+
+      return deleteBackward(unit);
+    },
+    deleteForward(unit) {
+      if (hasSystemMergeBoundary(editor, 'end')) return;
+
+      return deleteForward(unit);
+    },
     insertBreak() {
       const entry = getTanaNodeAtCollapsedSelection(editor);
 
@@ -90,6 +214,51 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       // semantics on the left, then make the new right sibling ordinary.
       editor.tf.setNodes({ id: nanoid() }, { at: rightPath });
       TANA_SEMANTIC_KEYS.forEach((key) => editor.tf.unsetNodes(key, { at: rightPath }));
-    }
-  }
+    },
+    mergeNodes(options = {}) {
+      const path = Array.isArray(options.at)
+        ? options.at
+        : getCurrentBlockPath(editor);
+      const reverse = options.reverse === true;
+
+      if (
+        getSystemNodeAtPath(editor, path) ||
+        (path &&
+          path.length === 1 &&
+          !!getSystemNodeAtPath(editor, [path[0] + (reverse ? 1 : -1)]) &&
+          getNodeIndentAtPath(editor, path) ===
+            getNodeIndentAtPath(editor, [path[0] + (reverse ? 1 : -1)]))
+      ) {
+        return;
+      }
+
+      return mergeNodes(options);
+    },
+    moveNodes(options) {
+      if (moveTargetsSystemNode(editor, options)) return false;
+
+      return moveNodes(options);
+    },
+    removeNodes(options = {}) {
+      if (removeTargetsSystemNode(editor, options)) return;
+
+      if (Array.isArray(options.at) && options.at.length === 0) {
+        const match = options.match;
+
+        return removeNodes({
+          ...options,
+          match: (node, path) =>
+            !isSystemNode(node) &&
+            (typeof match !== 'function' || match(node, path)),
+        });
+      }
+
+      return removeNodes(options);
+    },
+    tab(options) {
+      if (getSystemNodeAtPath(editor, getCurrentBlockPath(editor))) return true;
+
+      return tab(options);
+    },
+  },
 }));

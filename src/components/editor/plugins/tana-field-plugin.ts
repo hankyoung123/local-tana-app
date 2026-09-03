@@ -120,19 +120,10 @@ function addFieldSubtreeIds(editor: PlateEditor, fieldPath: Path, targetIds: Set
 }
 
 /**
- * Canonical system Nodes are the workspace skeleton and can never be removed
- * as individual blocks. Their ordinary children stay deletable through Plate.
- */
-function isSystemNode(node: TanaBlockElement): boolean {
-  return node.tanaSystemNode !== undefined;
-}
-
-/**
  * Plate Block Selection stays the selection owner. This derives the smallest
  * deletion closure that never removes a Value without its Field, or a Field
  * without its Value. A selected Value alone is left intact; a selected Field
- * (or its selected Host) removes the complete Field subtree. Canonical system
- * Nodes are never part of the closure.
+ * (or its selected Host) removes the complete Field subtree.
  */
 function getBlockSelectionRemovalIds(editor: PlateEditor) {
   const selectedIds = getBlockSelectionIds(editor);
@@ -145,10 +136,6 @@ function getBlockSelectionRemovalIds(editor: PlateEditor) {
 
     const [node, path] = entry;
 
-    if (isSystemNode(node)) {
-      removalIds.delete(nodeId);
-      continue;
-    }
     const semantics = getNodeSemanticTypes(node, {
       document: editor.children,
       path
@@ -786,16 +773,6 @@ export const TanaFieldPlugin = createPlatePlugin({
             const selectedIds = getBlockSelectionIds(editor);
             const at = Array.isArray(options.at) ? options.at : undefined;
 
-            // Canonical system Nodes can never be removed as individual
-            // blocks. This is the narrowest workspace-skeleton guard on the
-            // existing block deletion boundary; ordinary children stay on the
-            // native Plate path.
-            if (at && at.length === 1) {
-              const target = editor.api.node(at)?.[0] as TanaBlockElement | undefined;
-
-              if (target && isSystemNode(target)) return;
-            }
-
             if (selectedIds.size === 0) return removeNodes(options);
 
             // Plate's public BlockSelection transform removes an id-matched set at
@@ -828,8 +805,6 @@ export const TanaFieldPlugin = createPlatePlugin({
             }
 
             const [node, path] = entry as NodeEntry<TanaBlockElement>;
-
-            if (isSystemNode(node)) return;
 
             const semantics = getNodeSemanticTypes(node, {
               document: editor.children,

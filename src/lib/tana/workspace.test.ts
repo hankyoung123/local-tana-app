@@ -227,6 +227,80 @@ describe('canonical Tana workspace document', () => {
     assert.ok(editor.children.some((node) => node.id === 'schema'));
   });
 
+  test('blocks Backspace at the start of Schema', () => {
+    const editor = createEditor(minimalWorkspace());
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [3, 0] },
+      focus: { offset: 0, path: [3, 0] },
+    });
+    editor.tf.deleteBackward('character');
+
+    assert.equal(editor.children.find((node) => node.id === 'schema')?.tanaSystemNode, 'schema');
+    assert.equal(editor.children.find((node) => node.id === 'daily')?.tanaSystemNode, 'daily-notes');
+  });
+
+  test('blocks Delete at the end of Home before the next system Node', () => {
+    const editor = createEditor(minimalWorkspace());
+
+    editor.tf.select({
+      anchor: { offset: 4, path: [1, 0] },
+      focus: { offset: 4, path: [1, 0] },
+    });
+    editor.tf.deleteForward('character');
+
+    assert.equal(editor.children.find((node) => node.id === 'home')?.tanaSystemNode, 'home');
+    assert.equal(editor.children.find((node) => node.id === 'daily')?.tanaSystemNode, 'daily-notes');
+  });
+
+  test('blocks moveNodes for a system Node', () => {
+    const editor = createEditor(minimalWorkspace());
+    const before = structuredClone(editor.children);
+
+    assert.equal(editor.tf.moveNodes({ at: [3], to: [6] }), false);
+
+    assert.deepEqual(editor.children, before);
+  });
+
+  test('keeps ordinary Node Backspace, Delete, and move on Plate native transforms', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Alpha' }], id: 'alpha', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Beta' }], id: 'beta', indent: 2, type: KEYS.p },
+    ]);
+    const betaPath = editor.children.findIndex((node) => node.id === 'beta');
+
+    editor.tf.select({
+      anchor: { offset: 0, path: [betaPath, 0] },
+      focus: { offset: 0, path: [betaPath, 0] },
+    });
+    editor.tf.deleteBackward('character');
+
+    assert.equal(editor.children.some((node) => node.id === 'beta'), false);
+
+    const alphaPath = editor.children.findIndex((node) => node.id === 'alpha');
+    editor.tf.select({
+      anchor: { offset: 5, path: [alphaPath, 0] },
+      focus: { offset: 5, path: [alphaPath, 0] },
+    });
+    editor.tf.deleteForward('character');
+
+    assert.notEqual(editor.children.find((node) => node.id === 'alpha')?.children[0].text, 'Alpha');
+
+    editor.tf.insertNodes(
+      { children: [{ text: 'Beta' }], id: 'beta', indent: 2, type: KEYS.p },
+      { at: [editor.children.length] }
+    );
+    const restoredBetaPath = editor.children.findIndex((node) => node.id === 'beta');
+    const restoredAlphaPath = editor.children.findIndex((node) => node.id === 'alpha');
+
+    assert.equal(
+      editor.tf.moveNodes({ at: [restoredBetaPath], to: [restoredAlphaPath] }),
+      undefined
+    );
+    assert.equal(editor.children.findIndex((node) => node.id === 'beta'), restoredAlphaPath);
+  });
+
   test('restores a mis-indented system Node as a Workspace direct child without creating Nodes', () => {
     const editor = createEditor(minimalWorkspace());
 
