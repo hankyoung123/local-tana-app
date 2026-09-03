@@ -26,7 +26,7 @@ import {
 } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
-import { TanaViewDefinitionEditor } from './tana-view-editor';
+import { TanaSearchDefinitionEditor } from './tana-view-editor';
 
 const fieldTypeLabels: Record<FieldType, string> = {
   checkbox: '复选框',
@@ -181,7 +181,7 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
         <SupertagInstancesSection supertagId={node.id} />
       )}
 
-      <TanaViewDefinitionEditor
+      <TanaSearchDefinitionEditor
         editor={editor}
         index={index}
         node={node.node as TanaBlockElement}

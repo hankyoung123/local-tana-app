@@ -33,6 +33,70 @@ describe('Plate document persistence', () => {
     );
     assert.equal(
       isValidTanaDocument([
+        {
+          children: [{ text: 'Tags' }],
+          id: 'tags',
+          tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+          type: 'p',
+        },
+        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+        {
+          children: [{ text: '' }],
+          id: 'task-tags',
+          indent: 1,
+          tanaFieldId: 'tags',
+          type: 'p',
+        },
+        {
+          children: [{ text: 'First' }],
+          id: 'task-tags-first',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: 'p',
+        },
+        {
+          children: [{ text: 'Second' }],
+          id: 'task-tags-second',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: 'p',
+        },
+      ]),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument([
+        { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+        {
+          children: [{ text: '' }],
+          id: 'historical-field',
+          indent: 1,
+          tanaFieldId: 'deleted-definition',
+          type: 'p',
+        },
+        {
+          children: [{ text: 'Historical value' }],
+          id: 'historical-value',
+          indent: 2,
+          tanaFieldValueType: 'plain',
+          type: 'p',
+        },
+      ]),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument([
+        {
+          children: [{ text: 'Orphan' }],
+          id: 'orphan-value',
+          tanaFieldValueType: 'plain',
+          type: 'p',
+        },
+      ]),
+      false
+    );
+    assert.equal(
+      isValidTanaDocument([
         { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
         { children: [{ text: 'Task' }], id: 'task', type: 'p' },
         {
@@ -79,7 +143,7 @@ describe('Plate document persistence', () => {
   });
 
   test('treats obsolete Field metadata as a breaking schema', () => {
-    assert.equal(CURRENT_SCHEMA_VERSION, 4);
+    assert.equal(CURRENT_SCHEMA_VERSION, 5);
     assert.equal(
       isValidTanaDocument([
         {

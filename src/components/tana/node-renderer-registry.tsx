@@ -337,6 +337,8 @@ export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer
   },
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
   option: { Workspace: OutlineRenderer },
+  reference: { Workspace: OutlineRenderer },
+  search: { Workspace: ViewRenderer },
   'supertag-definition': {
     Block: SupertagHint,
     Workspace: OutlineRenderer

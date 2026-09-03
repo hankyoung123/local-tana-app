@@ -13,7 +13,7 @@ import type { TanaBlockElement } from './types';
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 type DocumentRow = {
   schema_version: number;
@@ -60,6 +60,8 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaFieldValueType?: unknown;
     tanaFieldValues?: unknown;
     tanaPresentation?: unknown;
+    tanaReferenceTargetId?: unknown;
+    tanaSearchDefinition?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaViewDefinition?: unknown;
   };
@@ -67,6 +69,14 @@ function hasValidSemanticData(element: TElement): boolean {
   if (
     semantic.tanaFieldId !== undefined &&
     (typeof semantic.tanaFieldId !== 'string' || semantic.tanaFieldId.length === 0)
+  ) {
+    return false;
+  }
+
+  if (
+    semantic.tanaReferenceTargetId !== undefined &&
+    (typeof semantic.tanaReferenceTargetId !== 'string' ||
+      semantic.tanaReferenceTargetId.length === 0)
   ) {
     return false;
   }
@@ -120,10 +130,16 @@ function hasValidSemanticData(element: TElement): boolean {
     }
   }
 
-  if (semantic.tanaViewDefinition !== undefined) {
-    const definition = semantic.tanaViewDefinition as { clauses?: unknown };
+  if (semantic.tanaSearchDefinition !== undefined) {
+    const definition = semantic.tanaSearchDefinition as { clauses?: unknown };
 
     if (!definition || !Array.isArray(definition.clauses)) return false;
+  }
+
+  if (semantic.tanaViewDefinition !== undefined) {
+    const definition = semantic.tanaViewDefinition as { type?: unknown };
+
+    if (!definition || definition.type !== 'outline') return false;
   }
 
   return true;
@@ -142,8 +158,16 @@ function isFieldDefinition(value: unknown): value is {
     return false;
   }
 
+  if (
+    field.cardinality !== undefined &&
+    field.cardinality !== 'single' &&
+    field.cardinality !== 'list'
+  ) {
+    return false;
+  }
+
   if (field.type === 'options') {
-    return Object.keys(field).length === 1;
+    return Object.keys(field).every((key) => key === 'type' || key === 'cardinality');
   }
 
   return (
@@ -187,6 +211,8 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaFieldValueType?: unknown;
       tanaFieldValues?: unknown;
       tanaPresentation?: unknown;
+      tanaReferenceTargetId?: unknown;
+      tanaSearchDefinition?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaViewDefinition?: unknown;
     };
@@ -196,6 +222,8 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaFieldValueType !== undefined ||
       semantic.tanaFieldValues !== undefined ||
       semantic.tanaPresentation !== undefined ||
+      semantic.tanaReferenceTargetId !== undefined ||
+      semantic.tanaSearchDefinition !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaViewDefinition !== undefined;
 
@@ -256,7 +284,6 @@ export function isValidTanaDocument(value: unknown): value is Value {
       const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
 
       if (
-        !definition ||
         !parent ||
         parent.tanaFieldDefinition !== undefined ||
         parent.tanaFieldId !== undefined ||
@@ -270,11 +297,15 @@ export function isValidTanaDocument(value: unknown): value is Value {
           elementsByPath.get(childPath[0])?.tanaFieldValueType !== undefined
       );
 
-      if (valuePaths.length !== 1) return false;
-
-      const valueNode = elementsByPath.get(valuePaths[0][0]);
-
-      if (valueNode?.tanaFieldValueType !== definition.type) return false;
+      if (
+        definition &&
+        valuePaths.some(
+          (valuePath) =>
+            elementsByPath.get(valuePath[0])?.tanaFieldValueType !== definition.type
+        )
+      ) {
+        return false;
+      }
     }
 
     if (!node.tanaFieldValueType) continue;
@@ -285,7 +316,8 @@ export function isValidTanaDocument(value: unknown): value is Value {
       ? fieldDefinitions.get(parent.tanaFieldId)
       : undefined;
 
-    if (!definition || node.tanaFieldValueType !== definition.type) return false;
+    if (!parent?.tanaFieldId) return false;
+    if (definition && node.tanaFieldValueType !== definition.type) return false;
   }
 
   return true;

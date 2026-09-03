@@ -100,21 +100,16 @@ function navigate(editor: PlateEditor, targetPath: number[]) {
 }
 
 function getTanaZoomBodyInsertionPath(editor: PlateEditor, hostPath: number[]) {
-  const afterFieldSubtrees = getTanaDirectChildPaths(editor.children, hostPath).flatMap(
-    (path) => {
-      const node = editor.api.node(path)?.[0];
+  const lastDirectChildPath = getTanaDirectChildPaths(editor.children, hostPath).at(-1);
 
-      if (!node || !('tanaFieldId' in node) || typeof node.tanaFieldId !== 'string') {
-        return [];
-      }
+  if (!lastDirectChildPath) return [hostPath[0] + 1];
 
-      const lastDescendant = getTanaNodeDescendantPaths(editor.children, path).at(-1);
+  const lastDescendant = getTanaNodeDescendantPaths(
+    editor.children,
+    lastDirectChildPath
+  ).at(-1);
 
-      return [(lastDescendant ?? path)[0] + 1];
-    }
-  );
-
-  return [Math.max(hostPath[0] + 1, ...afterFieldSubtrees)];
+  return [(lastDescendant ?? lastDirectChildPath)[0] + 1];
 }
 
 /**

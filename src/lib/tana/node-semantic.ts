@@ -11,6 +11,8 @@ export const TANA_NODE_SEMANTIC_TYPES = [
   'supertag-definition',
   'view',
   'option',
+  'reference',
+  'search',
 ] as const;
 
 export type TanaNodeSemanticType =
@@ -61,6 +63,8 @@ export function getNodeSemanticTypes(
   if (tanaNode.tanaSupertagDefinition !== undefined) {
     types.push('supertag-definition');
   }
+  if (tanaNode.tanaReferenceTargetId !== undefined) types.push('reference');
+  if (tanaNode.tanaSearchDefinition !== undefined) types.push('search');
   if (tanaNode.tanaViewDefinition !== undefined) types.push('view');
   if (isOptionNode(tanaNode, context)) types.push('option');
 
@@ -79,6 +83,8 @@ export function getNodeSemanticType(
   const types = getNodeSemanticTypes(node, context);
   const priority: readonly TanaNodeSemanticType[] = [
     'view',
+    'search',
+    'reference',
     'supertag-definition',
     'field-definition',
     'field',

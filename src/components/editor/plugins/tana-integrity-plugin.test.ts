@@ -35,18 +35,18 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
   });
 
-  test('repairs a malformed View configuration to an empty clause list', () => {
+  test('repairs malformed View presentation without changing Search ownership', () => {
     const editor = createEditor([
       { children: [{ text: 'Open tasks' }], id: 'view', type: KEYS.p },
     ]);
 
     editor.tf.setNodes(
-      { tanaViewDefinition: { clauses: 'invalid' as never } },
+      { tanaViewDefinition: { type: 'table' as never } },
       { at: [0] }
     );
 
     assert.equal(editor.children[0].id, 'view');
-    assert.deepEqual(editor.children[0].tanaViewDefinition, { clauses: [] });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'outline' });
   });
 
   test('removes dangling inline references and supertags', () => {
@@ -68,7 +68,24 @@ describe('Tana relation integrity', () => {
     assert.deepEqual(editor.children[0].children, [{ text: 'Ship ' }]);
   });
 
-  test('removes Field occurrence Nodes when their Definition Node is deleted', () => {
+  test('clears a dangling block-level Reference target while retaining its Node', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+      {
+        children: [{ text: 'Project reference' }],
+        id: 'project-reference',
+        tanaReferenceTargetId: 'project',
+        type: KEYS.p,
+      },
+    ]);
+
+    editor.tf.removeNodes({ at: [0] });
+
+    assert.equal(editor.children[0].id, 'project-reference');
+    assert.equal(editor.children[0].tanaReferenceTargetId, undefined);
+  });
+
+  test('keeps Field occurrence Nodes when their Definition Node is deleted', () => {
     const editor = createEditor([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
@@ -82,10 +99,15 @@ describe('Tana relation integrity', () => {
     editor.tf.removeNodes({ at: [0] });
 
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
-    assert.equal(editor.children.some((node) => node.id === 'template-status'), false);
-    assert.equal(editor.children.some((node) => node.id === 'template-status-value'), false);
-    assert.equal(editor.children.some((node) => node.id === 'task-status'), false);
-    assert.equal(editor.children.some((node) => node.id === 'task-status-value'), false);
+    assert.equal(editor.children.some((node) => node.id === 'template-status'), true);
+    assert.equal(editor.children.some((node) => node.id === 'template-status-value'), true);
+    assert.equal(editor.children.some((node) => node.id === 'task-status'), true);
+    assert.equal(editor.children.some((node) => node.id === 'task-status-value'), true);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesById.get('task-status')
+        ?.brokenFieldDefinition,
+      true
+    );
   });
 
   test('clears a dangling Options value through its ordinary value Node', () => {
@@ -155,7 +177,7 @@ describe('Tana relation integrity', () => {
     });
   });
 
-  test('repairs a missing or duplicate direct Value Node without deleting the Field occurrence', () => {
+  test('allows Field occurrences to retain zero or multiple direct Value Nodes', () => {
     const editor = createEditor([
       { children: [{ text: 'Priority' }], id: 'priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
@@ -165,26 +187,27 @@ describe('Tana relation integrity', () => {
 
     editor.tf.removeNodes({ at: [3] });
     assert.equal(editor.children.some((node) => node.id === 'task-priority'), true);
-    assert.equal(
-      editor.children.filter((node) => node.tanaFieldValueType === 'plain').length,
-      1
-    );
+    assert.equal(editor.children.filter((node) => node.tanaFieldValueType === 'plain').length, 0);
 
     editor.tf.insertNodes(
       { children: [{ text: 'duplicate' }], id: 'duplicate-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { at: [3] }
+    );
+    editor.tf.insertNodes(
+      { children: [{ text: 'another' }], id: 'another-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
       { at: [4] }
     );
     assert.equal(
       editor.children.filter((node) => node.tanaFieldValueType === 'plain').length,
-      1
+      2
     );
     assert.equal(
       editor.children.find((node) => node.id === 'duplicate-value')?.tanaFieldValueType,
-      undefined
+      'plain'
     );
   });
 
-  test('removes a Field occurrence whose target is not a Field Definition Node', () => {
+  test('keeps a Field occurrence whose Definition relation is temporarily broken', () => {
     const editor = createEditor([
       { children: [{ text: 'Not a field' }], id: 'not-definition', type: KEYS.p },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
@@ -194,8 +217,13 @@ describe('Tana relation integrity', () => {
 
     editor.tf.setNodes({ type: KEYS.h1 }, { at: [1] });
 
-    assert.equal(editor.children.some((node) => node.id === 'invalid-field'), false);
-    assert.equal(editor.children.some((node) => node.id === 'invalid-value'), false);
+    assert.equal(editor.children.some((node) => node.id === 'invalid-field'), true);
+    assert.equal(editor.children.some((node) => node.id === 'invalid-value'), true);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesById.get('invalid-field')
+        ?.brokenFieldDefinition,
+      true
+    );
   });
 
   test('prunes dangling View clauses while retaining unrelated clauses', () => {
@@ -205,7 +233,7 @@ describe('Tana relation integrity', () => {
       {
         children: [{ text: 'Open tasks' }],
         id: 'view',
-        tanaViewDefinition: {
+        tanaSearchDefinition: {
           clauses: [
             { fieldId: 'status', kind: 'field-defined' },
             { fieldId: 'status', kind: 'field-equals', value: { type: 'options', value: 'active' } },
@@ -221,7 +249,7 @@ describe('Tana relation integrity', () => {
       editor.tf.removeNodes({ at: [0] });
     });
 
-    assert.deepEqual(editor.children[0].tanaViewDefinition, {
+    assert.deepEqual(editor.children[0].tanaSearchDefinition, {
       clauses: [{ kind: 'text-contains', text: 'open' }],
     });
   });

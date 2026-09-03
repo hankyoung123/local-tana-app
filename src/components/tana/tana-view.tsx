@@ -20,7 +20,7 @@ export function TanaView({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const clauses = view.viewDefinition?.clauses ?? [];
+  const clauses = view.searchDefinition?.clauses ?? [];
   const results = runTanaQuery(index, clauses).filter(
     ({ id }) => id !== view.id
   );
@@ -41,7 +41,9 @@ export function TanaView({
             {results.length} 条结果
           </span>
         </div>
-        <p className="mb-1 text-muted-foreground text-xs">视图</p>
+        <p className="mb-1 text-muted-foreground text-xs">
+          {view.viewDefinition?.type === 'outline' ? '大纲视图' : '搜索结果'}
+        </p>
         <h1 className="font-semibold text-2xl">{view.text}</h1>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {clauses.length === 0 ? (
@@ -68,7 +70,7 @@ export function TanaView({
               <ListFilterIcon className="mx-auto mb-2 size-5 text-muted-foreground" />
               <p className="font-medium text-sm">没有匹配的节点</p>
               <p className="mt-1 text-muted-foreground text-xs">
-                请在检查器中编辑此视图的筛选条件。
+                请在检查器中编辑此搜索的筛选条件。
               </p>
             </div>
           </div>

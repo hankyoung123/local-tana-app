@@ -14,7 +14,7 @@ import type {
   TanaIndex,
   TanaQueryClause,
 } from '@/lib/tana';
-import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
+import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
 import { describeTanaQueryClause, getFieldValueCandidates } from '@/lib/tana';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ import {
 
 type ClauseKind = TanaQueryClause['kind'];
 
-export function TanaViewDefinitionEditor({
+export function TanaSearchDefinitionEditor({
   editor,
   index,
   node,
@@ -44,7 +44,7 @@ export function TanaViewDefinitionEditor({
   const [rawValue, setRawValue] = React.useState('');
   const [supertagId, setSupertagId] = React.useState('');
   const [text, setText] = React.useState('');
-  const definition = node.tanaViewDefinition;
+  const definition = node.tanaSearchDefinition;
   const supertags = Array.from(index.nodesById.values()).filter(
     ({ supertagDefinition }) => !!supertagDefinition
   );
@@ -62,10 +62,10 @@ export function TanaViewDefinitionEditor({
           className="w-full"
           size="sm"
           variant="outline"
-          onClick={() => editor.getTransforms(TanaViewPlugin).view.define(nodeId)}
+          onClick={() => editor.getTransforms(TanaSearchPlugin).search.define(nodeId)}
         >
           <ListFilterIcon />
-          定义为视图
+          定义为搜索
         </Button>
       </div>
     );
@@ -88,7 +88,7 @@ export function TanaViewDefinitionEditor({
 
     if (!clause) return;
 
-    if (!editor.getTransforms(TanaViewPlugin).view.addClause(nodeId, clause)) {
+    if (!editor.getTransforms(TanaSearchPlugin).search.addClause(nodeId, clause)) {
       return;
     }
 
@@ -101,13 +101,13 @@ export function TanaViewDefinitionEditor({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
           <ListFilterIcon className="size-3.5" />
-          视图定义
+          搜索定义
         </h3>
         <button
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
           type="button"
-          aria-label="移除视图定义"
-          onClick={() => editor.getTransforms(TanaViewPlugin).view.remove(nodeId)}
+          aria-label="移除搜索定义"
+          onClick={() => editor.getTransforms(TanaSearchPlugin).search.remove(nodeId)}
         >
           <Trash2Icon className="size-3.5" />
         </button>
@@ -128,8 +128,8 @@ export function TanaViewDefinitionEditor({
               aria-label={`移除筛选条件 ${indexInList + 1}`}
               onClick={() =>
                 editor
-                  .getTransforms(TanaViewPlugin)
-                  .view.removeClause(nodeId, indexInList)
+                  .getTransforms(TanaSearchPlugin)
+                  .search.removeClause(nodeId, indexInList)
               }
             >
               <Trash2Icon className="size-3" />

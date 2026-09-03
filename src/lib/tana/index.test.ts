@@ -53,6 +53,7 @@ describe('buildTanaIndex', () => {
     );
     assert.deepEqual(index.backlinks.get('project'), [
       {
+        kind: 'inline',
         path: [1, 1],
         sourceNodeId: 'task',
         targetNodeId: 'project',
@@ -68,6 +69,60 @@ describe('buildTanaIndex', () => {
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
     ]);
+  });
+
+  test('derives block Reference Nodes and inline Mentions through one backlink relation', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Project' }], id: 'project', type: 'p' },
+      {
+        children: [{ text: 'Project reference' }],
+        id: 'project-reference',
+        tanaReferenceTargetId: 'project',
+        type: 'p',
+      },
+      {
+        children: [
+          { text: 'See ' },
+          { children: [{ text: '' }], key: 'project', type: 'mention' },
+        ],
+        id: 'task',
+        type: 'p',
+      },
+    ]);
+
+    assert.equal(index.referenceTargetsByNode.get('project-reference'), 'project');
+    assert.deepEqual(index.references.map(({ kind, sourceNodeId, targetNodeId }) => ({
+      kind,
+      sourceNodeId,
+      targetNodeId,
+    })), [
+      { kind: 'node', sourceNodeId: 'project-reference', targetNodeId: 'project' },
+      { kind: 'inline', sourceNodeId: 'task', targetNodeId: 'project' },
+    ]);
+    assert.equal(index.backlinks.get('project')?.length, 2);
+  });
+
+  test('keeps a dangling Field Definition readable as a broken derived relation', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+      {
+        children: [{ text: '' }],
+        id: 'missing-field',
+        indent: 1,
+        tanaFieldId: 'deleted-definition',
+        type: 'p',
+      },
+      {
+        children: [{ text: 'Historical value' }],
+        id: 'missing-field-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
+        type: 'p',
+      },
+    ]);
+
+    assert.equal(index.fieldNodesById.get('missing-field')?.brokenFieldDefinition, true);
+    assert.deepEqual(index.fieldNodesById.get('missing-field')?.values, []);
   });
 
   test('derives Field values exclusively from occurrence and value Nodes', () => {

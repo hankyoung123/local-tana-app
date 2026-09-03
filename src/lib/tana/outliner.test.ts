@@ -200,6 +200,9 @@ describe('Tana outliner behavior', () => {
           tanaFieldValueType: 'plain',
           type: KEYS.p
         },
+        { children: [{ text: 'Note A' }], id: 'note-a', indent: 1, type: KEYS.p },
+        { children: [{ text: 'Detail' }], id: 'note-a-detail', indent: 2, type: KEYS.p },
+        { children: [{ text: 'Note B' }], id: 'note-b', indent: 1, type: KEYS.p },
         { children: [{ text: 'SQLite 在本地持久化文档。' }], id: 'sqlite', type: KEYS.p },
         {
           children: [{ text: 'Status' }],
@@ -231,11 +234,22 @@ describe('Tana outliner behavior', () => {
     assert.deepEqual(getTanaParentPath(editor.children, bodyPath!), [0]);
     assert.deepEqual(
       getTanaZoomRange(editor.children, 'project').map(([index]) => editor.children[index].id),
-      ['project', 'project-status', 'project-status-value', 'project-priority', 'project-priority-value', body!.id]
+      [
+        'project',
+        'project-status',
+        'project-status-value',
+        'project-priority',
+        'project-priority-value',
+        'note-a',
+        'note-a-detail',
+        'note-b',
+        body!.id
+      ]
     );
     assert.equal(isTanaNodeInteractable(editor.children, bodyPath!, openIds, 'project'), true);
     assert.deepEqual(editor.selection?.anchor.path, [bodyPath![0], 0]);
     assert.equal(getTanaNodePath(editor.children, 'sqlite')![0] > bodyPath![0], true);
+    assert.equal(editor.children[bodyPath![0] - 1].id, 'note-b');
     assert.deepEqual(
       buildTanaIndex(editor.children).fieldNodesByParent.get('project')?.map(({ id }) => id),
       ['project-status', 'project-priority']
@@ -629,7 +643,7 @@ describe('Tana outliner behavior', () => {
       {
         children: [{ text: 'Heading parent' }],
         id: 'heading',
-        tanaViewDefinition: { clauses: [] },
+        tanaViewDefinition: { type: 'outline' },
         type: KEYS.h1
       },
       {
@@ -687,7 +701,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(editor.children[0].type, KEYS.blockquote);
     assert.equal(isTanaNodeCollapsed(editor.children, [0], openIds), false);
     assert.equal(isTanaNodeHidden(editor.children, [1], openIds), false);
-    assert.deepEqual(editor.children[0].tanaViewDefinition, { clauses: [] });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'outline' });
 
     const beforeCollapse = structuredClone(editor.children);
 
@@ -953,6 +967,7 @@ describe('Tana outliner behavior', () => {
       assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project']);
       assert.deepEqual(index.backlinks.get('project'), [
         {
+          kind: 'inline',
           path: [4, 1],
           sourceNodeId: 'task',
           targetNodeId: 'project'

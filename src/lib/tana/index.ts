@@ -166,6 +166,8 @@ function isDerivedFieldValueValid(
 export function buildTanaIndex(document: Value): TanaIndex {
   const nodesById = new Map<NodeId, TanaNode>();
   const backlinks = new Map<NodeId, ReferenceRelation[]>();
+  const references: ReferenceRelation[] = [];
+  const referenceTargetsByNode = new Map<NodeId, NodeId>();
   const nodesBySupertag = new Map<NodeId, NodeId[]>();
   const fieldNodesById = new Map<NodeId, TanaFieldNode>();
   const fieldNodesByParent = new Map<NodeId, TanaFieldNode[]>();
@@ -186,6 +188,8 @@ export function buildTanaIndex(document: Value): TanaIndex {
       node: descendant,
       path,
       presentation: tanaNode.tanaPresentation,
+      referenceTargetId: tanaNode.tanaReferenceTargetId,
+      searchDefinition: tanaNode.tanaSearchDefinition,
       semanticType: getNodeSemanticType(tanaNode, semanticContext),
       semanticTypes: getNodeSemanticTypes(tanaNode, semanticContext),
       supertagDefinition: tanaNode.tanaSupertagDefinition,
@@ -252,6 +256,15 @@ export function buildTanaIndex(document: Value): TanaIndex {
     resolvedNodes.map((node) => [node.path[0], node.id])
   );
 
+  function addReference(relation: ReferenceRelation) {
+    references.push(relation);
+
+    const relations = backlinks.get(relation.targetNodeId) ?? [];
+
+    relations.push(relation);
+    backlinks.set(relation.targetNodeId, relations);
+  }
+
   function visitSemanticChild(
     descendant: Descendant,
     path: Path,
@@ -275,10 +288,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
     }
 
     if (targetNodeId) {
-      const relations = backlinks.get(targetNodeId) ?? [];
-
-      relations.push({ path, sourceNodeId, targetNodeId });
-      backlinks.set(targetNodeId, relations);
+      addReference({ kind: 'inline', path, sourceNodeId, targetNodeId });
     }
 
     descendant.children.forEach((child, index) => {
@@ -287,6 +297,16 @@ export function buildTanaIndex(document: Value): TanaIndex {
   }
 
   resolvedNodes.forEach((node) => {
+    if (node.referenceTargetId && nodesById.has(node.referenceTargetId)) {
+      referenceTargetsByNode.set(node.id, node.referenceTargetId);
+      addReference({
+        kind: 'node',
+        path: node.path,
+        sourceNodeId: node.id,
+        targetNodeId: node.referenceTargetId,
+      });
+    }
+
     node.node.children.forEach((child, index) => {
       visitSemanticChild(child, [...node.path, index], node.id);
     });
@@ -313,35 +333,41 @@ export function buildTanaIndex(document: Value): TanaIndex {
       })
         ? definitionNode.fieldDefinition
         : undefined;
-    const valuePath = getTanaDirectChildPaths(document, node.path).find(
+    const valueNodes = getTanaDirectChildPaths(document, node.path).flatMap(
       (childPath) => {
         const childId = nodeIdsByDocumentIndex.get(childPath[0]);
         const child = childId ? nodesById.get(childId) : undefined;
 
-        return !!child && hasNodeSemantic(child.node, 'value', {
+        return child && hasNodeSemantic(child.node, 'value', {
           document,
           path: child.path,
-        });
+        })
+          ? [child]
+          : [];
       }
     );
-    const valueNode = valuePath
-      ? nodesById.get(nodeIdsByDocumentIndex.get(valuePath[0]) ?? '')
-      : undefined;
-    const parsedValue = getFieldValueFromNode(definition, valueNode);
-    const value =
-      definition &&
-      parsedValue &&
-      isDerivedFieldValueValid(
-        document,
-        fieldId,
-        definition,
-        parsedValue,
-        nodesById,
-        nodesBySupertag
-      )
-        ? parsedValue
-        : undefined;
+    const values = definition
+      ? valueNodes.flatMap((valueNode) => {
+          const parsedValue = getFieldValueFromNode(definition, valueNode);
+
+          return parsedValue &&
+            isDerivedFieldValueValid(
+              document,
+              fieldId,
+              definition,
+              parsedValue,
+              nodesById,
+              nodesBySupertag
+            )
+            ? [parsedValue]
+            : [];
+        })
+      : [];
+    const cardinality = definition?.cardinality ?? 'single';
+    const valueNode = valueNodes[0];
+    const value = cardinality === 'single' ? values[0] : undefined;
     const fieldNode: TanaFieldNode = {
+      brokenFieldDefinition: !definition,
       fieldId,
       id: node.id,
       node: node.node as TanaBlockElement,
@@ -349,6 +375,8 @@ export function buildTanaIndex(document: Value): TanaIndex {
       path: node.path,
       value,
       valueNodeId: valueNode?.id,
+      valueNodeIds: valueNodes.map((valueNode) => valueNode.id),
+      values,
     };
     const fields = fieldNodesByParent.get(parentNodeId) ?? [];
 
@@ -372,6 +400,8 @@ export function buildTanaIndex(document: Value): TanaIndex {
     fieldValues,
     nodesById,
     nodesBySupertag,
+    references,
+    referenceTargetsByNode,
   };
 }
 

@@ -70,7 +70,10 @@ export const initialDocument = normalizeStaticValue([
   {
     id: 'view-projects',
     children: [{ text: '全部项目' }],
-    tanaViewDefinition: { clauses: [{ kind: 'has-supertag', supertagId: 'supertag-project' }] },
+    tanaSearchDefinition: {
+      clauses: [{ kind: 'has-supertag', supertagId: 'supertag-project' }],
+    },
+    tanaViewDefinition: { type: 'outline' },
     type: 'p',
   },
   { id: 'field-summary', children: [{ text: '摘要' }], tanaFieldDefinition: { type: 'plain' }, type: 'p' },

@@ -37,6 +37,17 @@ export function OutlineNodeView({
     editor.getApi(TanaZoomPlugin).zoom.focus(focusedNodeId);
   }, [editor, focusedNodeId]);
 
+  const materializeBodyInput = (input: HTMLInputElement) => {
+    const text = input.value;
+
+    if (!text) return;
+
+    if (editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild()) {
+      editor.tf.insertText(text);
+      input.value = '';
+    }
+  };
+
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white">
       <EditorContainer className="min-h-0 flex-1" variant="default">
@@ -47,16 +58,24 @@ export function OutlineNodeView({
         />
         {bodyChildIndent !== null && (
           <div className="px-8 pb-40 sm:px-[max(64px,calc(50%-374px))]">
-            <button
-              className="block min-h-6 w-full rounded-sm text-left text-[#a1a8a3] text-sm hover:bg-[#f6f8f6] hover:text-[#527664] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8bb69b]"
-              type="button"
+            <input
+              aria-label="新建正文节点"
+              className="block min-h-6 w-full rounded-sm bg-transparent text-left text-[#202421] text-sm placeholder:text-[#a1a8a3] hover:bg-[#f6f8f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8bb69b]"
+              placeholder="输入内容…"
+              type="text"
               style={{ paddingInlineStart: `${bodyChildIndent * 24}px` }}
-              onClick={() =>
-                editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild()
-              }
-            >
-              输入内容…
-            </button>
+              onInput={(event) => {
+                if ((event.nativeEvent as InputEvent).isComposing) return;
+
+                materializeBodyInput(event.currentTarget);
+              }}
+              onCompositionEnd={(event) => {
+                materializeBodyInput(event.currentTarget);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            />
           </div>
         )}
       </EditorContainer>

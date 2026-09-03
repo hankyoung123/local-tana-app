@@ -121,7 +121,8 @@ export function isTanaFieldHostNode(document: Value, path: Path): boolean {
     !!node &&
     node.tanaFieldDefinition === undefined &&
     node.tanaFieldId === undefined &&
-    node.tanaFieldValueType === undefined
+    node.tanaFieldValueType === undefined &&
+    node.tanaReferenceTargetId === undefined
   );
 }
 
@@ -152,6 +153,8 @@ function isFieldWorkflowSpecialNode(node: TanaBlockElement): boolean {
     node.tanaFieldDefinition !== undefined ||
     node.tanaFieldId !== undefined ||
     node.tanaSupertagDefinition !== undefined ||
+    node.tanaReferenceTargetId !== undefined ||
+    node.tanaSearchDefinition !== undefined ||
     node.tanaViewDefinition !== undefined
   );
 }
@@ -186,6 +189,8 @@ export function isSupertagFieldInputNode(
     tanaNode.tanaFieldId === undefined &&
     tanaNode.tanaSupertagDefinition === undefined &&
     tanaNode.tanaFieldValueType === undefined &&
+    tanaNode.tanaReferenceTargetId === undefined &&
+    tanaNode.tanaSearchDefinition === undefined &&
     tanaNode.tanaViewDefinition === undefined &&
     !!getDirectSupertagDefinitionParent(document, path)
   );

@@ -6,15 +6,20 @@ export type NodeId = string;
 export type FieldId = NodeId;
 
 export type FieldDefinition =
-  | { type: 'checkbox' }
-  | { type: 'date' }
-  | { sourceSupertagId: NodeId | null; type: 'from-supertag' }
-  | { type: 'number' }
+  | { cardinality?: FieldCardinality; type: 'checkbox' }
+  | { cardinality?: FieldCardinality; type: 'date' }
+  | {
+      cardinality?: FieldCardinality;
+      sourceSupertagId: NodeId | null;
+      type: 'from-supertag';
+    }
+  | { cardinality?: FieldCardinality; type: 'number' }
   /** Option candidates are ordered direct child Nodes of this definition. */
-  | { type: 'options' }
-  | { type: 'plain' };
+  | { cardinality?: FieldCardinality; type: 'options' }
+  | { cardinality?: FieldCardinality; type: 'plain' };
 
 export type FieldType = FieldDefinition['type'];
+export type FieldCardinality = 'list' | 'single';
 
 export type FieldValue =
   | { type: 'checkbox'; value: boolean }
@@ -31,8 +36,14 @@ export type TanaQueryClause =
   | { kind: 'has-supertag'; supertagId: NodeId }
   | { kind: 'text-contains'; text: string };
 
-export type TanaViewDefinition = {
+/** A Search owns the result set independently of how that set is rendered. */
+export type TanaSearchDefinition = {
   clauses: readonly TanaQueryClause[];
+};
+
+/** v1 renders the result set as an outline; future types stay presentation-only. */
+export type TanaViewDefinition = {
+  type: 'outline';
 };
 
 /**
@@ -56,6 +67,9 @@ export type TanaBlockElement = TElement & {
    */
   tanaFieldValueType?: FieldType;
   tanaPresentation?: TanaPresentation;
+  /** A block-level Reference occurrence; inline references remain Plate Mentions. */
+  tanaReferenceTargetId?: NodeId;
+  tanaSearchDefinition?: TanaSearchDefinition;
   tanaSupertagDefinition?: SupertagDefinition;
   tanaViewDefinition?: TanaViewDefinition;
 };
@@ -67,6 +81,8 @@ export type TanaNode = {
   text: string;
   fieldDefinition?: FieldDefinition;
   presentation?: TanaPresentation;
+  referenceTargetId?: NodeId;
+  searchDefinition?: TanaSearchDefinition;
   /** Derived runtime classification; it is never persisted on the Plate Node. */
   semanticType: TanaNodeSemanticType;
   /** Preserves composable semantics such as Field Definition + View. */
@@ -85,11 +101,17 @@ export type TanaFieldNode = {
   node: TanaBlockElement;
   parentNodeId: NodeId;
   path: Path;
+  /** Missing or non-Field targets are readable history, not an invalid document. */
+  brokenFieldDefinition: boolean;
   value?: FieldValue;
   valueNodeId?: NodeId;
+  /** Every valid direct Value Node, in document order. */
+  valueNodeIds: readonly NodeId[];
+  values: readonly FieldValue[];
 };
 
 export type ReferenceRelation = {
+  kind: 'inline' | 'node';
   path: Path;
   sourceNodeId: NodeId;
   targetNodeId: NodeId;
@@ -105,6 +127,10 @@ export type TanaIndex = {
   document: Value;
   nodesById: ReadonlyMap<NodeId, TanaNode>;
   nodesBySupertag: ReadonlyMap<string, readonly NodeId[]>;
+  /** All resolvable inline and block-level references in document order. */
+  references: readonly ReferenceRelation[];
+  /** Block-level Reference occurrences, keyed by their own NodeId. */
+  referenceTargetsByNode: ReadonlyMap<NodeId, NodeId>;
 };
 
 export function getNodeId(node: TElement): NodeId {

@@ -41,14 +41,20 @@ const document: Value = [
   {
     children: [{ text: 'Open tasks' }],
     id: 'view',
-    tanaViewDefinition: { clauses: [] },
+    tanaViewDefinition: { type: 'outline' },
     type: KEYS.p,
   },
   {
     children: [{ text: 'Combined' }],
     id: 'combined',
     tanaFieldDefinition: { type: 'plain' },
-    tanaViewDefinition: { clauses: [] },
+    tanaViewDefinition: { type: 'outline' },
+    type: KEYS.p,
+  },
+  {
+    children: [{ text: 'Project reference' }],
+    id: 'project-reference',
+    tanaReferenceTargetId: 'project',
     type: KEYS.p,
   },
 ];
@@ -72,6 +78,10 @@ describe('Node semantic runtime', () => {
       'supertag-definition'
     );
     assert.equal(getNodeSemanticType(nodeAt([7]), { document, path: [7] }), 'view');
+    assert.equal(
+      getNodeSemanticType(nodeAt([9]), { document, path: [9] }),
+      'reference'
+    );
   });
 
   test('preserves composable semantics while selecting the existing View renderer priority', () => {

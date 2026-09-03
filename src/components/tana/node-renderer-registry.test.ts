@@ -31,7 +31,7 @@ describe('Node renderer registry', () => {
     const node = {
       children: [{ text: 'Project view' }],
       tanaSupertagDefinition: {},
-      tanaViewDefinition: { clauses: [] },
+      tanaViewDefinition: { type: 'outline' },
       type: KEYS.p
     };
 

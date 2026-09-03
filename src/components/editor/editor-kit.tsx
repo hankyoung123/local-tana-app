@@ -21,6 +21,7 @@ import { SupertagKit } from '@/components/editor/plugins/supertag-kit';
 import { TanaIntegrityPlugin } from '@/components/editor/plugins/tana-integrity-plugin';
 import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
+import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
@@ -37,6 +38,7 @@ export const EditorKit = [
   ...MentionKit,
   ...SupertagKit,
   ...FieldKit,
+  TanaSearchPlugin,
   TanaViewPlugin,
   TanaPresentationPlugin,
   TanaIntegrityPlugin,
