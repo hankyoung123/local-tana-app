@@ -5,14 +5,17 @@ import { KEYS } from 'platejs';
 import { BlockPlaceholderPlugin } from 'platejs/react';
 
 import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export function isTanaContentPlaceholderNode(
   node: TElement,
   path: Path,
-  document: Value
+  document: Value,
+  focusedNodeId: string | null = null
 ): boolean {
   return (
     path.length === 1 &&
+    node.id !== focusedNodeId &&
     getNodeSemanticTypes(node, { document, path }).includes('content')
   );
 }
@@ -26,7 +29,12 @@ export const BlockPlaceholderKit = [
         [KEYS.p]: '输入内容…',
       },
       query: ({ editor, node, path }) =>
-        isTanaContentPlaceholderNode(node, path, editor.children),
+        isTanaContentPlaceholderNode(
+          node,
+          path,
+          editor.children,
+          editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null
+        ),
     },
   }),
 ];

@@ -81,11 +81,11 @@ describe('Tana outliner behavior', () => {
     assert.equal(focusedDocument[3].id, 'sibling');
   });
 
-  test('keeps the focused Host identity and Field ownership through Enter', () => {
-    for (const [name, offset, expectedHostText] of [
-      ['start', 0, 'Project'],
-      ['middle', 3, 'Project'],
-      ['end', 7, 'Project']
+  test('does not split the focused page Header on Enter', () => {
+    for (const [name, offset] of [
+      ['start', 0],
+      ['middle', 3],
+      ['end', 7]
     ] as const) {
       const editor = createPlateEditor({
         nodeId: {
@@ -120,6 +120,8 @@ describe('Tana outliner behavior', () => {
         ]
       });
 
+      const originalDocument = structuredClone(editor.children);
+
       assert.equal(zoomToTanaNode(editor, 'project'), true);
       editor.tf.select({
         anchor: { offset, path: [0, 0] },
@@ -137,8 +139,8 @@ describe('Tana outliner behavior', () => {
       assert.ok(valuePath, `${name}: Value remains`);
       assert.equal(
         editor.children[hostPath![0]].children[0].text,
-        expectedHostText,
-        `${name}: original NodeId stays with its original content`
+        'Project',
+        `${name}: Header text remains unchanged`
       );
       assert.deepEqual(
         getTanaParentPath(editor.children, fieldPath!),
@@ -156,22 +158,11 @@ describe('Tana outliner behavior', () => {
         `${name}: derived Field owner is unchanged`
       );
 
-      const splitNode = editor.children.find(
-        (node) =>
-          node.id !== 'project' &&
-          node.id !== 'project-status' &&
-          node.id !== 'project-status-value' &&
-          node.id !== 'sibling' &&
-          node.id !== 'status'
-      );
-
-      assert.ok(splitNode, `${name}: new Node exists`);
-      assert.equal('tanaFieldId' in splitNode!, false);
-      assert.equal('tanaFieldValueType' in splitNode!, false);
+      assert.deepEqual(editor.children, originalDocument, `${name}: Header Enter writes no Node`);
     }
   });
 
-  test('creates ordinary page body children after direct Field subtrees in Zoom', () => {
+  test('materializes the Zoom Body affordance after direct Field subtrees', () => {
     const editor = createPlateEditor({
       nodeId: {
         filter: isTanaNodeElement,
@@ -226,11 +217,7 @@ describe('Tana outliner behavior', () => {
     });
 
     assert.equal(zoomToTanaNode(editor, 'project'), true);
-    editor.tf.select({
-      anchor: { offset: 7, path: [0, 0] },
-      focus: { offset: 7, path: [0, 0] }
-    });
-    editor.tf.insertBreak();
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild(), true);
 
     const bodyPath = editor.selection?.anchor.path.slice(0, 1);
     const body = bodyPath ? editor.children[bodyPath[0]] : undefined;
@@ -268,6 +255,34 @@ describe('Tana outliner behavior', () => {
       true
     );
     assert.equal(getTanaZoomRange(editor.children, 'project').some(([index]) => editor.children[index].id === 'sqlite'), false);
+  });
+
+  test('materializes the first Zoom Body child on an empty page', () => {
+    const editor = createPlateEditor({
+      nodeId: {
+        filter: isTanaNodeElement,
+        idCreator: () => 'generated',
+        initialValueIds: 'always'
+      },
+      plugins: EditorKit,
+      value: [
+        { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+        { children: [{ text: 'Outside' }], id: 'outside', type: KEYS.p }
+      ]
+    });
+
+    assert.equal(zoomToTanaNode(editor, 'project'), true);
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild(), true);
+
+    const bodyPath = editor.selection?.anchor.path.slice(0, 1);
+
+    assert.ok(bodyPath);
+    assert.equal((editor.children[bodyPath![0]] as TElement).indent, 1);
+    assert.deepEqual(getTanaParentPath(editor.children, bodyPath!), [0]);
+    assert.deepEqual(
+      getTanaZoomRange(editor.children, 'project').map(([index]) => editor.children[index].id),
+      ['project', editor.children[bodyPath![0]].id]
+    );
   });
 
   test('keeps Enter on an ordinary page child as Plate native split behavior', () => {

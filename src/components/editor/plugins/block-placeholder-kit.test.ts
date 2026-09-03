@@ -31,6 +31,10 @@ test('only exposes the content placeholder for ordinary content Nodes', () => {
   ];
 
   assert.equal(isTanaContentPlaceholderNode(document[0], [0], document), true);
+  assert.equal(
+    isTanaContentPlaceholderNode(document[0], [0], document, 'content'),
+    false
+  );
   assert.equal(isTanaContentPlaceholderNode(document[1], [1], document), false);
   assert.equal(isTanaContentPlaceholderNode(document[2], [2], document), false);
   assert.equal(isTanaContentPlaceholderNode(document[3], [3], document), false);

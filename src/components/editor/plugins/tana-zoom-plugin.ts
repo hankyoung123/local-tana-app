@@ -4,8 +4,11 @@ import { ElementApi } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { isTanaFieldHostNode } from '@/lib/tana/fields';
 import {
   getTanaAncestorPaths,
+  getTanaDirectChildPaths,
+  getTanaNodeDescendantPaths,
   getTanaNodePath,
   hasTanaNodeDescendants,
   isTanaFieldNodePresentationHidden,
@@ -96,6 +99,51 @@ function navigate(editor: PlateEditor, targetPath: number[]) {
   });
 }
 
+function getTanaZoomBodyInsertionPath(editor: PlateEditor, hostPath: number[]) {
+  const afterFieldSubtrees = getTanaDirectChildPaths(editor.children, hostPath).flatMap(
+    (path) => {
+      const node = editor.api.node(path)?.[0];
+
+      if (!node || !('tanaFieldId' in node) || typeof node.tanaFieldId !== 'string') {
+        return [];
+      }
+
+      const lastDescendant = getTanaNodeDescendantPaths(editor.children, path).at(-1);
+
+      return [(lastDescendant ?? path)[0] + 1];
+    }
+  );
+
+  return [Math.max(hostPath[0] + 1, ...afterFieldSubtrees)];
+}
+
+/**
+ * Materializes the page-level Body affordance as one ordinary direct child.
+ * It performs no projection or state tracking: the new Node immediately joins
+ * the regular Plate editing flow.
+ */
+function insertZoomBodyChild(editor: PlateEditor) {
+  const focusedNodeId = getFocusedNodeId(editor);
+
+  if (!focusedNodeId) return false;
+
+  const hostEntry = getTanaNodeEntry(editor, focusedNodeId);
+
+  if (!hostEntry || !isTanaFieldHostNode(editor.children, hostEntry[1])) return false;
+
+  const [host, hostPath] = hostEntry;
+  const childPath = getTanaZoomBodyInsertionPath(editor, hostPath);
+  const indent = typeof host.indent === 'number' ? host.indent + 1 : 1;
+
+  editor.tf.insertNodes(
+    editor.api.create.block({ children: [{ text: '' }], indent }),
+    { at: childPath }
+  );
+  editor.getApi(TogglePlugin).toggle.toggleIds([focusedNodeId], true);
+
+  return navigate(editor, childPath);
+}
+
 function focus(editor: PlateEditor, targetNodeId: NodeId) {
   const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
@@ -177,6 +225,7 @@ export const TanaZoomPlugin = createPlatePlugin<
   }))
   .extendEditorTransforms(({ editor }) => ({
     zoom: {
+      insertBodyChild: () => insertZoomBodyChild(editor),
       out: () => zoomOut(editor),
       root: () => zoomRoot(editor),
       to: (nodeId: NodeId) => zoomTo(editor, nodeId),

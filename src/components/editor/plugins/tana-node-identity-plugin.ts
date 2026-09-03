@@ -2,8 +2,6 @@ import { ElementApi, nanoid } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { isTanaFieldHostNode } from '@/lib/tana/fields';
-import { getTanaDirectChildPaths, getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { TanaBlockElement } from '@/lib/tana/types';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
@@ -43,52 +41,9 @@ function isSelectionAtStart(editor: PlateEditor, path: number[]): boolean {
   return !!selection && editor.api.isStart(selection.anchor, path);
 }
 
-function getFocusedHostBodyInsertionPath(editor: PlateEditor, hostPath: number[]) {
-  const afterFieldSubtrees = getTanaDirectChildPaths(editor.children, hostPath).flatMap(
-    (path) => {
-      const node = editor.api.node(path)?.[0] as TanaBlockElement | undefined;
-
-      if (typeof node?.tanaFieldId !== 'string') return [];
-
-      const lastDescendant = getTanaNodeDescendantPaths(editor.children, path).at(-1);
-
-      return [(lastDescendant ?? path)[0] + 1];
-    }
-  );
-
-  return [Math.max(hostPath[0] + 1, ...afterFieldSubtrees)];
-}
-
-function insertFocusedHostBodyChild(
-  editor: PlateEditor,
-  host: TanaBlockElement,
-  hostPath: number[]
-) {
-  const indent = typeof host.indent === 'number' ? host.indent + 1 : 1;
-  const childPath = getFocusedHostBodyInsertionPath(editor, hostPath);
-
-  editor.tf.insertNodes(
-    editor.api.create.block({ children: [{ text: '' }], indent }),
-    { at: childPath }
-  );
-
-  const point = editor.api.start(childPath);
-
-  if (!point) return;
-
-  editor.tf.navigation.navigate({
-    flash: false,
-    focus: true,
-    scroll: true,
-    select: point,
-    target: { path: childPath, type: 'node' },
-  });
-}
-
 /**
- * Plate owns ordinary splits. A focused Field Host creates a direct body child
- * after Field subtrees, keeping page body editing inside the current Zoom
- * range and leaving Field ownership untouched.
+ * Plate owns ordinary Node splitting. The focused Zoom Node is page Header
+ * presentation, so Enter there deliberately leaves the document unchanged.
  */
 export const TanaNodeIdentityPlugin = createPlatePlugin({
   key: TANA_NODE_IDENTITY_PLUGIN_KEY
@@ -102,9 +57,7 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       const [node, path] = entry;
       const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
 
-      if (focusedNodeId === node.id && isTanaFieldHostNode(editor.children, path)) {
-        return insertFocusedHostBodyChild(editor, node, path);
-      }
+      if (focusedNodeId === node.id) return;
 
       const previousId = node.id;
       const selectionAtStart = isSelectionAtStart(editor, path);
