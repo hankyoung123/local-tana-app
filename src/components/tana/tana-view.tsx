@@ -1,22 +1,20 @@
 "use client";
 
-import { ArrowLeftIcon, ListFilterIcon } from "lucide-react";
-import { useEditorRef } from "platejs/react";
+import { ListFilterIcon } from "lucide-react";
 
 import type { TanaIndex, TanaNode } from "@/lib/tana";
 import {
-  createAndQuery,
   describeTanaQueryExpression,
-  resolveTanaNodeTitle,
-  runTanaQuery,
+  resolveTanaCollectionSource,
 } from "@/lib/tana";
-import { TanaZoomPlugin } from "@/components/editor/plugins/tana-zoom-plugin";
-import { Button } from "@/components/ui/button";
-
 import { NodeProjection } from "./node-projection";
-import { TanaCalendarView } from "./tana-calendar-view";
-import { TanaCardsView } from "./tana-cards-view";
-import { TanaTableView } from "./tana-table-view";
+import {
+  TanaCalendarToolbarControls,
+  TanaCalendarView,
+} from "./tana-calendar-view";
+import { TanaCardsToolbarControls, TanaCardsView } from "./tana-cards-view";
+import { TanaTableToolbarControls, TanaTableView } from "./tana-table-view";
+import { TanaViewToolbar } from "./tana-view-toolbar";
 
 export function TanaView({
   index,
@@ -25,44 +23,39 @@ export function TanaView({
   index: TanaIndex;
   view: TanaNode;
 }) {
-  const editor = useEditorRef();
-  const query = view.searchDefinition?.query ?? createAndQuery();
-  const results = runTanaQuery(index, query).filter(({ id }) => id !== view.id);
+  const source = resolveTanaCollectionSource(index, view);
+  const results = source.nodes;
+  const viewType = view.viewDefinition?.type ?? "outline";
+  const sourceDescription =
+    source.kind === "search"
+      ? describeTanaQueryExpression(index, view.searchDefinition!.query)
+      : source.kind === "supertag-instances"
+        ? `#${view.text || "未命名超级标签"} 的实例`
+        : "直接正文子节点";
+  const emptyMessage =
+    source.kind === "search"
+      ? "请在检查器中编辑此搜索的筛选条件。"
+      : source.kind === "supertag-instances"
+        ? "暂无超级标签实例。"
+        : "此视图还没有普通正文子节点。";
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <header className="shrink-0 border-b px-6 py-5 sm:px-10">
-        <div className="mb-3 flex items-center justify-between gap-4">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.out()}
-          >
-            <ArrowLeftIcon />
-            返回上级
-          </Button>
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {results.length} 条结果
-          </span>
-        </div>
-        <p className="mb-1 text-muted-foreground text-xs">
-          {view.viewDefinition?.type === "table"
-            ? "表格视图"
-            : view.viewDefinition?.type === "calendar"
-              ? "日历视图"
-              : view.viewDefinition?.type === "cards"
-                ? "卡片视图"
-                : "大纲视图"}
-        </p>
-        <h1 className="font-semibold text-2xl">
-          {resolveTanaNodeTitle(index, view.id)}
-        </h1>
-        <div className="mt-3">
-          <span className="inline-block rounded bg-muted px-2 py-1 text-muted-foreground text-xs">
-            {describeTanaQueryExpression(index, query)}
-          </span>
-        </div>
-      </header>
+      <TanaViewToolbar
+        controls={
+          viewType === "table" ? (
+            <TanaTableToolbarControls index={index} results={results} view={view} />
+          ) : viewType === "calendar" ? (
+            <TanaCalendarToolbarControls index={index} results={results} view={view} />
+          ) : viewType === "cards" ? (
+            <TanaCardsToolbarControls index={index} results={results} view={view} />
+          ) : undefined
+        }
+        index={index}
+        resultCount={results.length}
+        sourceDescription={sourceDescription}
+        view={view}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
         {results.length === 0 ? (
@@ -71,15 +64,15 @@ export function TanaView({
               <ListFilterIcon className="mx-auto mb-2 size-5 text-muted-foreground" />
               <p className="font-medium text-sm">没有匹配的节点</p>
               <p className="mt-1 text-muted-foreground text-xs">
-                请在检查器中编辑此搜索的筛选条件。
+                {emptyMessage}
               </p>
             </div>
           </div>
-        ) : view.viewDefinition?.type === "table" ? (
+        ) : viewType === "table" ? (
           <TanaTableView index={index} results={results} view={view} />
-        ) : view.viewDefinition?.type === "calendar" ? (
+        ) : viewType === "calendar" ? (
           <TanaCalendarView index={index} results={results} view={view} />
-        ) : view.viewDefinition?.type === "cards" ? (
+        ) : viewType === "cards" ? (
           <TanaCardsView index={index} results={results} view={view} />
         ) : (
           <div className="mx-auto max-w-3xl divide-y rounded-lg border">

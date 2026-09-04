@@ -3,6 +3,11 @@ import type { Path } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import {
+  buildTanaIndex,
+  getNodeReferenceCandidatesFromIndex,
+  isTanaNodeActive,
+} from '@/lib/tana/index';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 export const TANA_REFERENCE_PLUGIN_KEY = 'tanaReference' as const;
@@ -18,11 +23,16 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: NodeId): boolean {
   const reference = getTanaNodeEntry(editor, referenceNodeId);
   const target = getTanaNodeEntry(editor, targetNodeId);
+  const index = buildTanaIndex(editor.children);
 
   if (
     !reference ||
     !target ||
     referenceNodeId === targetNodeId ||
+    !isTanaNodeActive(index, referenceNodeId) ||
+    !getNodeReferenceCandidatesFromIndex(index).some(
+      (candidate) => candidate.id === targetNodeId
+    ) ||
     reference[0].tanaSystemNode !== undefined ||
     reference[0].tanaReferenceTargetId !== undefined
   ) {

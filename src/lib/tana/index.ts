@@ -532,7 +532,9 @@ export function getSupertagCandidatesFromIndex(
   return Array.from(index.nodesById.values())
     .filter(
       (node): node is TanaNode & { supertagDefinition: SupertagDefinition } =>
-        node.semanticTypes.includes('supertag-definition') && node.text.length > 0
+        isTanaNodeActive(index, node.id) &&
+        node.semanticTypes.includes('supertag-definition') &&
+        node.text.length > 0
     )
     .map(({ id, supertagDefinition: definition, text }) => ({
       definition,
@@ -552,7 +554,13 @@ export function getNodeReferenceCandidatesFromIndex(
   index: TanaIndex
 ): NodeReferenceCandidate[] {
   return Array.from(index.nodesById.values())
-    .filter(({ text }) => text.length > 0)
+    .filter(
+      (node) =>
+        isTanaNodeActive(index, node.id) &&
+        !node.semanticTypes.includes('field') &&
+        !node.semanticTypes.includes('value') &&
+        node.text.length > 0
+    )
     .map(({ id, text }) => ({ id, text }));
 }
 
@@ -578,6 +586,31 @@ export function isTanaNodeInTrash(index: TanaIndex, nodeId: NodeId): boolean {
   return false;
 }
 
+/**
+ * Discovery surfaces share this transient scope: system Nodes and the Trash
+ * subtree remain resolvable canonical Nodes, but are never active results or
+ * candidates for new user-authored relations.
+ */
+export function isTanaNodeActive(index: TanaIndex, nodeId: NodeId): boolean {
+  const node = index.nodesById.get(nodeId);
+
+  return (
+    !!node && node.systemNode === undefined && !isTanaNodeInTrash(index, nodeId)
+  );
+}
+
+/** Active instances are derived from membership at the point of use. */
+export function getActiveSupertagInstances(
+  index: TanaIndex,
+  supertagId: NodeId
+): TanaNode[] {
+  return (index.nodesBySupertag.get(supertagId) ?? []).flatMap((nodeId) => {
+    const node = index.nodesById.get(nodeId);
+
+    return node && isTanaNodeActive(index, node.id) ? [node] : [];
+  });
+}
+
 /** Performs transient document-order node search without writing any state. */
 export function searchTanaNodes(
   index: TanaIndex,
@@ -593,7 +626,7 @@ export function searchTanaNodes(
   const contains: TanaNode[] = [];
 
   for (const node of index.nodesById.values()) {
-    if (isTanaNodeInTrash(index, node.id)) continue;
+    if (!isTanaNodeActive(index, node.id)) continue;
 
     const text = node.text.toLocaleLowerCase();
 

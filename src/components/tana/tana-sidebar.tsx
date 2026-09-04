@@ -6,14 +6,19 @@ import {
   ChevronRightIcon,
   HashIcon,
   HomeIcon,
-  ListFilterIcon,
+  SearchIcon,
 } from 'lucide-react';
 import * as React from 'react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import type { NodeId, TanaIndex } from '@/lib/tana';
+import {
+  getActiveSupertagInstances,
+  isTanaNodeActive,
+  type NodeId,
+  type TanaIndex,
+} from '@/lib/tana';
 import { cn } from '@/lib/utils';
 
 type TanaSidebarProps = {
@@ -21,7 +26,7 @@ type TanaSidebarProps = {
   collapsed: boolean;
   index: TanaIndex;
   onCollapsedChange: (collapsed: boolean) => void;
-  workspaceRootActive: boolean;
+  onOpenSearch: () => void;
 };
 
 /** Quiet text navigation. Global search deliberately lives in the main shell. */
@@ -30,16 +35,16 @@ export function TanaSidebar({
   collapsed,
   index,
   onCollapsedChange,
-  workspaceRootActive,
+  onOpenSearch,
 }: TanaSidebarProps) {
   const editor = useEditorRef();
   const [dayInput, setDayInput] = React.useState('');
   const supertags = Array.from(index.nodesById.values()).filter(
-    ({ semanticTypes }) => semanticTypes.includes('supertag-definition')
+    (node) =>
+      isTanaNodeActive(index, node.id) &&
+      node.semanticTypes.includes('supertag-definition')
   );
-  const views = Array.from(index.nodesById.values()).filter(
-    ({ semanticTypes }) => semanticTypes.includes('view')
-  );
+  const homeNodeId = index.systemNodeIds.get('home');
 
   if (collapsed) {
     return (
@@ -78,11 +83,15 @@ export function TanaSidebar({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-5">
         <SidebarSection title="工作区">
           <SidebarButton
-            active={workspaceRootActive}
-            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
+            active={activeNodeId === homeNodeId}
+            onClick={() =>
+              homeNodeId
+                ? editor.getTransforms(TanaZoomPlugin).zoom.to(homeNodeId)
+                : editor.getTransforms(TanaZoomPlugin).zoom.root()
+            }
           >
             <HomeIcon className="size-3.5 text-[#6f7d75]" />
-            工作区
+            主页
           </SidebarButton>
         </SidebarSection>
 
@@ -143,28 +152,19 @@ export function TanaSidebar({
                 <HashIcon className="size-3.5 shrink-0 text-[#4f725f]" />
                 <span className="truncate">#{node.text || '未命名超级标签'}</span>
                 <span className="ml-auto text-[#8b938d] text-[10px] tabular-nums">
-                  {index.nodesBySupertag.get(node.id)?.length ?? 0}
+                  {getActiveSupertagInstances(index, node.id).length}
                 </span>
               </SidebarButton>
             ))
           )}
         </SidebarSection>
 
-        <SidebarSection title="视图">
-          {views.length === 0 ? (
-            <p className="px-2 py-1 text-[#8b938d] text-xs">暂无视图</p>
-          ) : (
-            views.map((view) => (
-              <SidebarButton
-                key={view.id}
-                active={activeNodeId === view.id}
-                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(view.id)}
-              >
-                <ListFilterIcon className="size-3.5 shrink-0 text-[#6f7d75]" />
-                <span className="truncate">{view.text || '未命名视图'}</span>
-              </SidebarButton>
-            ))
-          )}
+        <SidebarSection title="搜索">
+          <SidebarButton onClick={onOpenSearch}>
+            <SearchIcon className="size-3.5 shrink-0 text-[#4f725f]" />
+            搜索节点
+            <span className="ml-auto text-[#8b938d] text-[10px]">⌘ P</span>
+          </SidebarButton>
         </SidebarSection>
       </div>
     </aside>

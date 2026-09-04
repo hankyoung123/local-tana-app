@@ -665,9 +665,22 @@ describe('Field occurrence Nodes', () => {
     ]));
   });
 
-  test('pins a real Field occurrence for presentation without changing document hierarchy', () => {
+  test('derives pinned instance presentation from its Supertag template without copying it', () => {
     const editor = createEditor([
-      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagIds: ['tag'],
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Project' }],
+        id: 'tag',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'template-first', indent: 1, tanaFieldId: 'first', type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-first-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
       { children: [{ text: 'First' }], id: 'first', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Second' }], id: 'second', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
     ]);
@@ -678,7 +691,8 @@ describe('Field occurrence Nodes', () => {
     assert.ok(first);
     assert.ok(second);
     const documentOrder = editor.children.map((node) => node.id);
-    assert.equal(transforms.setPinned(second, true), true);
+    assert.equal(transforms.setPinned('template-first', true), true);
+    assert.equal(transforms.setPinned(first, true), false);
     assert.equal(transforms.setPinned('task', true), false);
     assert.deepEqual(editor.children.map((node) => node.id), documentOrder);
 
@@ -688,8 +702,8 @@ describe('Field occurrence Nodes', () => {
     assert.deepEqual(
       descriptors.map(({ fieldId, pinned }) => ({ fieldId, pinned })),
       [
-        { fieldId: 'second', pinned: true },
-        { fieldId: 'first', pinned: false },
+        { fieldId: 'first', pinned: true },
+        { fieldId: 'second', pinned: false },
       ]
     );
   });
@@ -753,9 +767,22 @@ describe('Field occurrence Nodes', () => {
       transforms.setValueAt('task', 'tags', firstValueId, { type: 'plain', value: 'One' }),
       true
     );
-    const secondValueId = transforms.addValue('task', 'tags', { type: 'plain', value: 'Two' });
+    const secondValueId = transforms.addValue('task', 'tags');
 
     assert.ok(secondValueId);
+    const secondValuePath = getTanaNodePath(editor.children, secondValueId);
+    assert.ok(secondValuePath);
+    assert.deepEqual(editor.selection, {
+      anchor: { offset: 0, path: [...secondValuePath, 0] },
+      focus: { offset: 0, path: [...secondValuePath, 0] },
+    });
+    assert.equal(
+      transforms.setValueAt('task', 'tags', secondValueId, {
+        type: 'plain',
+        value: 'Two',
+      }),
+      true
+    );
     let index = buildTanaIndex(editor.children);
     const fieldNode = index.fieldNodesByParent.get('task')![0]!;
     assert.deepEqual(fieldNode.valueNodeIds, [firstValueId, secondValueId]);

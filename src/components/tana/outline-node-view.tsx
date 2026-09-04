@@ -8,6 +8,8 @@ import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import { isTanaFieldHostNode, type NodeId } from '@/lib/tana';
 
+import { useTanaIndex } from './tana-index-context';
+import { TanaReferencesSection } from './tana-references-section';
 /** Renders the Plate editor and focuses a Zoom target only after it has mounted. */
 export function OutlineNodeView({
   focusedNodeId,
@@ -16,6 +18,7 @@ export function OutlineNodeView({
   selectedNodeId: NodeId | null;
 }) {
   const editor = useEditorRef();
+  const index = useTanaIndex();
   const bodyChildIndent = useEditorSelector(
     (currentEditor) => {
       if (!focusedNodeId) return null;
@@ -76,6 +79,11 @@ export function OutlineNodeView({
                 if (event.key === 'Enter') event.preventDefault();
               }}
             />
+          </div>
+        )}
+        {focusedNodeId && (
+          <div className="px-8 pb-12 sm:px-[max(64px,calc(50%-374px))]">
+            <TanaReferencesSection index={index} nodeId={focusedNodeId} />
           </div>
         )}
       </EditorContainer>

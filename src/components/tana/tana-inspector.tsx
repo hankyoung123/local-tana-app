@@ -9,7 +9,6 @@ import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
-import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -20,15 +19,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  getActiveSupertagInstances,
+  getNodeReferenceCandidatesFromIndex,
   getNodeFieldDescriptors,
   getSupertagTemplateFields,
+  isTanaNodeActive,
   resolveTanaNodeTitle,
   type FieldDefinition,
   type FieldType,
   type NodeId,
   type TanaBlockElement,
   type TanaFieldDescriptor,
-  type TanaNodeSemanticType,
 } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
@@ -55,12 +56,6 @@ const fieldTypes: readonly FieldType[] = [
   'from-supertag',
   'url',
 ];
-
-const semanticLabels: Partial<Record<TanaNodeSemanticType, string>> = {
-  'field-definition': '字段定义',
-  'supertag-definition': '超级标签',
-  view: '视图',
-};
 
 /**
  * The Inspector owns semantic configuration, Field source navigation, and
@@ -90,11 +85,6 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
   const isSupertagTemplateField =
     parentNode?.semanticTypes.includes('supertag-definition') === true &&
     (node.fieldDefinition !== undefined || (node.node as TanaBlockElement).tanaFieldId !== undefined);
-  const semanticBadges = node.semanticTypes.flatMap((semantic) => {
-    const label = semanticLabels[semantic];
-
-    return label ? [{ label, semantic }] : [];
-  });
   const supertagGroups = new Map<NodeId, TanaFieldDescriptor[]>();
 
   descriptors
@@ -119,21 +109,6 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
         <h2 className="truncate font-medium text-[15px] text-[#242a26]">
           {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
         </h2>
-        {semanticBadges.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {semanticBadges.map(({ label, semantic }) => (
-            <span
-              key={semantic}
-              className="rounded-full bg-[#eaf1ed] px-2 py-0.5 text-[#3f6856] text-[10px]"
-            >
-              {semantic === 'supertag-definition' ? `# ${label}` : label}
-            </span>
-            ))}
-          </div>
-        )}
-        <p className="mt-2 truncate font-mono text-[#a0a6a2] text-[9px]" title={node.id}>
-          {node.id}
-        </p>
       </div>
 
       {node.fieldDefinition && (
@@ -149,8 +124,6 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
           templateNodeId={node.id}
         />
       )}
-
-      {node.viewDefinition && <ViewPresentationSection nodeId={node.id} type={node.viewDefinition.type} />}
 
       <FieldSection title="属性">
         {systemFields.map((field) => (
@@ -244,37 +217,6 @@ function FieldSection({
   );
 }
 
-function ViewPresentationSection({
-  nodeId,
-  type,
-}: {
-  nodeId: NodeId;
-  type: 'calendar' | 'cards' | 'outline' | 'table';
-}) {
-  const editor = useEditorRef();
-
-  return (
-    <FieldSection title="视图展示">
-      <Select
-        value={type}
-        onValueChange={(nextType) =>
-          editor.getTransforms(TanaViewPlugin).view.setType(nodeId, nextType as typeof type)
-        }
-      >
-        <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="outline">大纲</SelectItem>
-          <SelectItem value="table">表格</SelectItem>
-          <SelectItem value="cards">卡片</SelectItem>
-          <SelectItem value="calendar">日历</SelectItem>
-        </SelectContent>
-      </Select>
-    </FieldSection>
-  );
-}
-
 function TemplateFieldOptionalSection({
   optional,
   templateNodeId,
@@ -283,6 +225,7 @@ function TemplateFieldOptionalSection({
   templateNodeId: NodeId;
 }) {
   const editor = useEditorRef();
+  const index = useTanaIndex();
 
   return (
     <FieldSection title="模板字段">
@@ -298,6 +241,20 @@ function TemplateFieldOptionalSection({
         />
         应用标签时不自动添加
       </label>
+      <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">
+        <Checkbox
+          aria-label="设为置顶字段"
+          checked={
+            index.nodesById.get(templateNodeId)?.node.tanaFieldPinned === true
+          }
+          onCheckedChange={(checked) => {
+            if (typeof checked === 'boolean') {
+              editor.getTransforms(TanaFieldPlugin).field.setPinned(templateNodeId, checked);
+            }
+          }}
+        />
+        在实例中置顶显示
+      </label>
     </FieldSection>
   );
 }
@@ -311,6 +268,7 @@ function SupertagInheritanceSection({ supertagId }: { supertagId: NodeId }) {
   const candidates = Array.from(index.nodesById.values()).filter(
     (node) =>
       node.id !== supertagId &&
+      isTanaNodeActive(index, node.id) &&
       node.semanticTypes.includes('supertag-definition') &&
       !parentIds.includes(node.id)
   );
@@ -369,7 +327,9 @@ function SupertagPresentationSection({ supertagId }: { supertagId: NodeId }) {
   const definition = index.nodesById.get(supertagId)?.supertagDefinition;
   const candidates = Array.from(index.nodesById.values()).filter(
     (node) =>
-      node.id !== supertagId && node.semanticTypes.includes('supertag-definition')
+      node.id !== supertagId &&
+      isTanaNodeActive(index, node.id) &&
+      node.semanticTypes.includes('supertag-definition')
   );
   const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
   const emptyValue = '__no-default-child__';
@@ -529,8 +489,10 @@ function FieldDefinitionEditor({
   const index = useTanaIndex();
   const [cardinalityNotice, setCardinalityNotice] = React.useState<string>();
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const supertags = Array.from(index.nodesById.values()).filter((node) =>
-    node.semanticTypes.includes('supertag-definition')
+  const supertags = Array.from(index.nodesById.values()).filter(
+    (node) =>
+      isTanaNodeActive(index, node.id) &&
+      node.semanticTypes.includes('supertag-definition')
   );
 
   const changeType = (type: FieldType) => {
@@ -722,35 +684,29 @@ function FieldDefinitionEditor({
 function SupertagInstancesSection({ supertagId }: { supertagId: NodeId }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
-  const instanceIds = index.nodesBySupertag.get(supertagId) ?? [];
+  const instances = getActiveSupertagInstances(index, supertagId);
 
   return (
-    <FieldSection title={`实例 · ${instanceIds.length}`}>
-      {instanceIds.length === 0 ? (
+    <FieldSection title={`实例 · ${instances.length}`}>
+      {instances.length === 0 ? (
         <p className="text-[#7b827d] text-xs">暂无实例。</p>
       ) : (
         <div className="space-y-0.5">
-          {instanceIds.map((instanceId) => {
-            const instance = index.nodesById.get(instanceId);
-
-            if (!instance) return null;
-
-            return (
-              <button
-                key={instance.id}
-                className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
-                type="button"
-                onClick={() =>
-                  editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
-                }
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {instance.text || '未命名节点'}
-                </span>
-                <ArrowUpRightIcon className="size-3 shrink-0 text-[#9aa19d] opacity-0 group-hover:opacity-100" />
-              </button>
-            );
-          })}
+          {instances.map((instance) => (
+            <button
+              key={instance.id}
+              className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+              type="button"
+              onClick={() =>
+                editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
+              }
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {instance.text || '未命名节点'}
+              </span>
+              <ArrowUpRightIcon className="size-3 shrink-0 text-[#9aa19d] opacity-0 group-hover:opacity-100" />
+            </button>
+          ))}
         </div>
       )}
     </FieldSection>
@@ -765,8 +721,8 @@ function ReferenceBindingSection({ nodeId }: { nodeId: NodeId }) {
 
   if (!node || node.systemNode || node.referenceTargetId) return null;
 
-  const candidates = Array.from(index.nodesById.values()).filter(
-    (candidate) => candidate.id !== nodeId && !candidate.systemNode
+  const candidates = getNodeReferenceCandidatesFromIndex(index).filter(
+    (candidate) => candidate.id !== nodeId
   );
 
   return (

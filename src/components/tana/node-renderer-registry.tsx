@@ -31,7 +31,11 @@ import type {
   TanaNode,
   TanaNodeSemanticType,
 } from '@/lib/tana';
-import { getFieldValueCandidates } from '@/lib/tana';
+import {
+  getActiveSupertagInstances,
+  getFieldValueCandidates,
+  getSupertagTemplateFields,
+} from '@/lib/tana';
 
 import { OutlineNodeView } from './outline-node-view';
 import { NodeProjection } from './node-projection';
@@ -134,25 +138,37 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
 function SupertagInstancesRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps) {
   if (!node) return <OutlineRenderer index={index} {...props} />;
 
-  const instanceIds = index.nodesBySupertag.get(node.id) ?? [];
+  const instances = getActiveSupertagInstances(index, node.id);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-white">
       <header className="shrink-0 border-b px-6 py-5 sm:px-10">
-        <p className="mb-1 text-muted-foreground text-xs">超级标签</p>
+        <p className="mb-1 text-muted-foreground text-xs">超级标签节点</p>
         <h1 className="font-semibold text-2xl">#{node.text || '未命名超级标签'}</h1>
-        <p className="mt-2 text-muted-foreground text-xs">{instanceIds.length} 个实例</p>
+        <div aria-label="超级标签内容" className="mt-4 flex items-center gap-3 border-b text-sm" role="tablist">
+          <button
+            aria-selected="true"
+            className="border-[#4f725f] border-b-2 px-1 pb-2 font-medium text-[#2c604b]"
+            role="tab"
+            type="button"
+          >
+            全部实例
+          </button>
+          <span className="pb-2 text-muted-foreground text-xs">
+            {instances.length} 个活跃实例
+          </span>
+        </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
-        {instanceIds.length === 0 ? (
+        {instances.length === 0 ? (
           <p className="text-muted-foreground text-sm">暂无实例。</p>
         ) : (
           <div className="mx-auto max-w-3xl divide-y rounded-lg border">
-            {instanceIds.map((instanceId) => (
+            {instances.map((instance) => (
               <NodeProjection
-                key={instanceId}
+                key={instance.id}
                 index={index}
-                targetNodeId={instanceId}
+                targetNodeId={instance.id}
                 variant="search-result"
               />
             ))}
@@ -177,7 +193,12 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const labelLeft = `${indent * 24}px`;
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
-  const pinned = (element as TanaBlockElement).tanaFieldPinned === true;
+  const pinned = (index.nodesById.get(fieldNode.parentNodeId)?.supertagIds ?? []).some(
+    (supertagId) =>
+      getSupertagTemplateFields(index, supertagId).some(
+        (template) => template.fieldId === fieldId && template.pinned
+      )
+  );
   const canAddValue = field?.fieldDefinition?.cardinality === 'list';
 
   return (
@@ -221,12 +242,6 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
           onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
         >
           <EyeOffIcon />
-        </FieldAction>
-        <FieldAction
-          label={pinned ? '取消置顶字段' : '置顶字段'}
-          onClick={() => fieldTransforms.setPinned(fieldNode.id, !pinned)}
-        >
-          <PinIcon />
         </FieldAction>
       </div>
     </div>
@@ -298,9 +313,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
     definition.type === 'email' ||
     definition.type === 'url'
   ) {
-    const text = fieldNode.valueNodeId
-      ? index.nodesById.get(fieldNode.valueNodeId)?.text
-      : undefined;
+    const text = index.nodesById.get(nodeId)?.text;
 
     return text ? null : <UnsetValuePlaceholder />;
   }

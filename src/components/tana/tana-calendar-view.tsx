@@ -30,7 +30,7 @@ export type TanaCalendarEntry = {
   node: TanaNode;
 };
 
-function getTanaDateFieldIds(index: TanaIndex, results: readonly TanaNode[]) {
+export function getTanaDateFieldIds(index: TanaIndex, results: readonly TanaNode[]) {
   return Array.from(
     new Set(
       results.flatMap((node) =>
@@ -141,27 +141,6 @@ export function TanaCalendarView({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={activeDateFieldId ?? ALL_DATES}
-          onValueChange={(value) =>
-            editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-              calendarDateFieldId: value === ALL_DATES ? undefined : value,
-            })
-          }
-        >
-          <SelectTrigger aria-label="选择日历日期字段" className="h-8 w-44 bg-white text-xs shadow-none">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_DATES}>所有日期字段</SelectItem>
-            {dateFieldIds.map((fieldId) => (
-              <SelectItem key={fieldId} value={fieldId}>
-                {index.nodesById.get(fieldId)?.text || '未命名日期字段'}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         <div className="ml-auto flex items-center gap-1">
           <Button
             aria-label="上个月"
@@ -238,5 +217,44 @@ export function TanaCalendarView({
         </div>
       )}
     </div>
+  );
+}
+
+export function TanaCalendarToolbarControls({
+  index,
+  results,
+  view,
+}: {
+  index: TanaIndex;
+  results: readonly TanaNode[];
+  view: TanaNode;
+}) {
+  const editor = useEditorRef();
+  const dateFieldIds = getTanaDateFieldIds(index, results);
+  const dateFieldId = view.viewDefinition?.calendarDateFieldId;
+  const activeDateFieldId =
+    dateFieldId && dateFieldIds.includes(dateFieldId) ? dateFieldId : undefined;
+
+  return (
+    <Select
+      value={activeDateFieldId ?? ALL_DATES}
+      onValueChange={(value) =>
+        editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+          calendarDateFieldId: value === ALL_DATES ? undefined : value,
+        })
+      }
+    >
+      <SelectTrigger aria-label="选择日历日期字段" className="h-8 w-40 bg-white text-xs shadow-none">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL_DATES}>所有日期字段</SelectItem>
+        {dateFieldIds.map((fieldId) => (
+          <SelectItem key={fieldId} value={fieldId}>
+            {index.nodesById.get(fieldId)?.text || '未命名日期字段'}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

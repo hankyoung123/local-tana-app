@@ -2,6 +2,7 @@
 
 import type { PlateEditor } from 'platejs/react';
 
+import { canTurnInto } from '@/lib/tana/node-behavior';
 import { triggerFloatingLink } from '@platejs/link/react';
 import {
   type NodeEntry,
@@ -128,6 +129,18 @@ export const setBlockType = (
   type: string,
   { at }: { at?: Path } = {}
 ) => {
+  const entry = at ? editor.api.node<TElement>(at) : undefined;
+  const entries = entry ? [entry] : at ? [] : editor.api.blocks({ mode: 'lowest' });
+
+  if (
+    entries.length === 0 ||
+    entries.some(([node, path]) =>
+      !canTurnInto(node, { document: editor.children, path })
+    )
+  ) {
+    return false;
+  }
+
   editor.tf.withoutNormalizing(() => {
     if (type === KEYS.blockquote) {
       const target = at ?? editor.selection;
@@ -168,6 +181,8 @@ export const setBlockType = (
 
     editor.api.blocks({ mode: 'lowest' }).forEach(setEntry);
   });
+
+  return true;
 };
 
 export const getBlockType = (block: TElement) => {

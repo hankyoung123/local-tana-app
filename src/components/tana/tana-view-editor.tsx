@@ -18,6 +18,7 @@ import {
 import {
   describeTanaQueryClause,
   getFieldValueCandidates,
+  isTanaNodeActive,
   type FieldDefinition,
   type FieldValue,
   type NodeId,
@@ -393,12 +394,18 @@ function QueryPredicateForm({
   const [targetNodeId, setTargetNodeId] = React.useState(
     getGraphTargetNodeId(initial),
   );
-  const supertags = Array.from(index.nodesById.values()).filter((item) =>
-    item.semanticTypes.includes("supertag-definition"),
+  const supertags = Array.from(index.nodesById.values()).filter(
+    (item) =>
+      isTanaNodeActive(index, item.id) &&
+      item.semanticTypes.includes("supertag-definition"),
   );
   const fields = new Map(
     Array.from(index.nodesById.values())
-      .filter((item) => item.semanticTypes.includes("field-definition"))
+      .filter(
+        (item) =>
+          isTanaNodeActive(index, item.id) &&
+          item.semanticTypes.includes("field-definition"),
+      )
       .map((item) => [item.id, item]),
   );
   const selectedField = fields.get(fieldId);
@@ -492,11 +499,13 @@ function QueryPredicateForm({
             <SelectValue placeholder="选择节点" />
           </SelectTrigger>
           <SelectContent>
-            {Array.from(index.nodesById.values()).map((candidate) => (
-              <SelectItem key={candidate.id} value={candidate.id}>
-                {candidate.text || "未命名节点"}
-              </SelectItem>
-            ))}
+            {Array.from(index.nodesById.values())
+              .filter((candidate) => isTanaNodeActive(index, candidate.id))
+              .map((candidate) => (
+                <SelectItem key={candidate.id} value={candidate.id}>
+                  {candidate.text || "未命名节点"}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       )}

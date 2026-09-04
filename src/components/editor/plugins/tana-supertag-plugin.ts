@@ -7,7 +7,11 @@ import {
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
 import { getSupertagTemplateFields } from '@/lib/tana/fields';
-import { buildTanaIndex, getSupertagInheritance } from '@/lib/tana/index';
+import {
+  buildTanaIndex,
+  getSupertagInheritance,
+  isTanaNodeActive,
+} from '@/lib/tana/index';
 import { hasNodeSemantic } from '@/lib/tana/node-semantic';
 import {
   getTanaDirectChildPaths,
@@ -372,8 +376,16 @@ function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression:
 function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const nodeEntry = getTanaNodeEntry(editor, nodeId);
   const definitionEntry = getDefinitionEntry(editor, supertagId);
+  const index = buildTanaIndex(editor.children);
 
-  if (!nodeEntry || !definitionEntry) return false;
+  if (
+    !nodeEntry ||
+    !definitionEntry ||
+    !isTanaNodeActive(index, nodeId) ||
+    !isTanaNodeActive(index, supertagId)
+  ) {
+    return false;
+  }
 
   const currentSupertagIds = nodeEntry[0].tanaSupertagIds ?? [];
 
@@ -385,8 +397,8 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     { at: nodePath }
   );
 
-  const index = buildTanaIndex(editor.children);
-  const templates = getSupertagTemplateFields(index, supertagId);
+  const updatedIndex = buildTanaIndex(editor.children);
+  const templates = getSupertagTemplateFields(updatedIndex, supertagId);
   templates.forEach((template) => {
     if (template.optional) return;
 
@@ -402,7 +414,7 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     }
   });
   const templateDefinitionIds = [
-    ...getSupertagInheritance(index, supertagId),
+    ...getSupertagInheritance(updatedIndex, supertagId),
     supertagId,
   ];
   templateDefinitionIds.forEach((templateDefinitionId) => {

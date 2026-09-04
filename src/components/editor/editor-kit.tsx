@@ -13,6 +13,7 @@ import { DndKit } from '@/components/editor/plugins/dnd-kit';
 import { ExitBreakKit } from '@/components/editor/plugins/exit-break-kit';
 import { FieldKit } from '@/components/editor/plugins/field-kit';
 import { FloatingToolbarKit } from '@/components/editor/plugins/floating-toolbar-kit';
+import { IndentKit } from '@/components/editor/plugins/indent-kit';
 import { LinkKit } from '@/components/editor/plugins/link-kit';
 import { ListKit } from '@/components/editor/plugins/list-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
@@ -53,6 +54,7 @@ export const EditorKit = [
   ...BasicMarksKit,
 
   // Block Style
+  ...IndentKit,
   ...ListKit,
 
   // Editing

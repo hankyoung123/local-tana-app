@@ -8,7 +8,7 @@ import type {
   TanaQueryPredicate,
 } from "./types";
 import { isFieldDefined, isFieldValueValid } from "./fields";
-import { isTanaNodeInTrash } from "./index";
+import { isTanaNodeActive } from "./index";
 
 export function getFieldDefinition(
   index: TanaIndex,
@@ -257,7 +257,7 @@ export function runTanaQuery(
 ): TanaNode[] {
   return Array.from(index.nodesById.values()).filter(
     (node) =>
-      !isTanaNodeInTrash(index, node.id) &&
+      isTanaNodeActive(index, node.id) &&
       matchesTanaQueryExpression(node, index, expression),
   );
 }

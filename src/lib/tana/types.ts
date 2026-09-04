@@ -124,7 +124,7 @@ export type TanaBlockElement = TElement & {
   tanaFieldDefinition?: FieldDefinition;
   /** Applies only to a Field binding directly beneath a Supertag definition. */
   tanaFieldOptional?: true;
-  /** A Field occurrence may opt into pinned presentation without moving its Node. */
+  /** Applies only to a Field template directly beneath a Supertag definition. */
   tanaFieldPinned?: true;
   /** A Field occurrence is still an ordinary top-level Tana Node. */
   tanaFieldId?: FieldId;

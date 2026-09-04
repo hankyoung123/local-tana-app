@@ -3,7 +3,12 @@ import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
 import { isTanaNumberInRange, isTanaStringFieldValueValid } from './field-value';
-import { getNodeSupertagIds, getSupertagInheritance } from './index';
+import {
+  getActiveSupertagInstances,
+  getNodeSupertagIds,
+  getSupertagInheritance,
+  isTanaNodeActive,
+} from './index';
 import { isTanaDay } from './time';
 import { hasNodeSemantic } from './node-semantic';
 import {
@@ -26,6 +31,8 @@ export type ResolvedSupertagTemplateField = {
   fieldId: NodeId;
   field: TanaNode;
   optional: boolean;
+  /** Pinned is a template presentation preference, derived by instances. */
+  pinned: boolean;
   /** Explicit template defaults live on real Value child Nodes in document order. */
   values: readonly FieldValue[];
 };
@@ -110,8 +117,9 @@ export function isFieldValueValid(
   if (definition.type === 'from-supertag' && value.type === 'from-supertag') {
     return (
       definition.sourceSupertagId !== null &&
-      (index.nodesBySupertag.get(definition.sourceSupertagId)?.includes(value.value) ??
-        false)
+      getActiveSupertagInstances(index, definition.sourceSupertagId).some(
+        (candidate) => candidate.id === value.value
+      )
     );
   }
 
@@ -311,7 +319,9 @@ export function getFieldDefinitionCandidatesFromIndex(
   index: TanaIndex
 ): FieldDefinitionCandidate[] {
   return Array.from(index.nodesById.values()).flatMap((node) =>
-    node.semanticTypes.includes('field-definition') && node.fieldDefinition
+    isTanaNodeActive(index, node.id) &&
+    node.semanticTypes.includes('field-definition') &&
+    node.fieldDefinition
       ? [{ ...node, fieldDefinition: node.fieldDefinition }]
       : []
   );
@@ -405,6 +415,7 @@ function getDirectSupertagTemplateFields(
         field: child,
         fieldId: child.id,
         optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
+        pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
         values: [],
       }];
     }
@@ -425,6 +436,7 @@ function getDirectSupertagTemplateFields(
       field,
       fieldId: template.fieldId,
       optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
+      pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
       values: template.values,
     }];
   });
@@ -476,13 +488,7 @@ export function getFieldValueCandidates(
     return [];
   }
 
-  return (index.nodesBySupertag.get(definition.sourceSupertagId) ?? []).flatMap(
-    (nodeId) => {
-      const node = index.nodesById.get(nodeId);
-
-      return node ? [node] : [];
-    }
-  );
+  return getActiveSupertagInstances(index, definition.sourceSupertagId);
 }
 
 function formatNodeNames(nodes: readonly TanaNode[]): string {
@@ -586,11 +592,12 @@ export function getNodeFieldDescriptors(
 
     if (!field?.fieldDefinition) return [];
 
-    const matchingSupertagIds = supertagIds.filter((supertagId) =>
-      getSupertagTemplateFields(index, supertagId).some(
-        (template) => template.fieldId === fieldNode.fieldId
+    const matchingTemplates = supertagIds.flatMap((supertagId) =>
+      getSupertagTemplateFields(index, supertagId).flatMap((template) =>
+        template.fieldId === fieldNode.fieldId ? [{ supertagId, template }] : []
       )
     );
+    const matchingSupertagIds = matchingTemplates.map(({ supertagId }) => supertagId);
 
     return [
       withVisibility({
@@ -599,7 +606,7 @@ export function getNodeFieldDescriptors(
         fieldNodeId: fieldNode.id,
         key: fieldNode.id,
         label: field.text || '未命名字段',
-        pinned: fieldNode.node.tanaFieldPinned === true,
+        pinned: matchingTemplates.some(({ template }) => template.pinned),
         source: matchingSupertagIds.length > 0 ? 'supertag' : 'custom',
         ...(matchingSupertagIds.length > 0
           ? { supertagIds: matchingSupertagIds }

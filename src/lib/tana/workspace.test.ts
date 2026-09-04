@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { BlockSelectionPlugin } from '@platejs/selection/react';
+import { SlashPlugin } from '@platejs/slash-command/react';
 import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
@@ -9,6 +10,7 @@ import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { setBlockType } from '@/components/editor/transforms';
 import { isTanaNodeElement } from './constants';
 import { initialDocument } from './initial-document';
 import { buildTanaIndex } from './index';
@@ -239,6 +241,104 @@ describe('canonical Tana workspace document', () => {
 
     assert.equal(editor.children.some((node) => node.id === 'note'), false);
     assert.ok(editor.children.some((node) => node.id === 'schema'));
+  });
+
+  test('blocks generic Block Selection mutations for protected Nodes while retaining ordinary Plate actions', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Note' }], id: 'note', indent: 2, type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        indent: 2,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'note-status',
+        indent: 3,
+        tanaFieldId: 'status',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'note-status-value',
+        indent: 4,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p,
+      },
+    ]);
+    const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+    const transforms = editor.getTransforms(BlockSelectionPlugin).blockSelection;
+    const beforeProtectedActions = structuredClone(editor.children);
+    const schemaPath = editor.children.findIndex((node) => node.id === 'schema');
+    const fieldPath = editor.children.findIndex((node) => node.id === 'note-status');
+    const trashPath = editor.children.findIndex((node) => node.id === 'trash');
+
+    selection.set('workspace');
+    transforms.duplicate();
+    selection.set('note-status-value');
+    transforms.duplicate();
+    selection.set('schema');
+    transforms.setIndent(1);
+    selection.set('note-status');
+    transforms.setIndent(1);
+
+    assert.equal(setBlockType(editor, KEYS.h1, { at: [fieldPath] }), false);
+    assert.equal(setBlockType(editor, KEYS.h1, { at: [trashPath] }), false);
+    assert.deepEqual(editor.children, beforeProtectedActions);
+
+    assert.equal(setBlockType(editor, KEYS.h1, { at: [schemaPath + 4] }), true);
+    const countBeforeDuplicate = editor.children.length;
+    selection.set('note');
+    transforms.duplicate();
+
+    assert.equal(editor.children.length, countBeforeDuplicate + 1);
+    assert.equal(editor.children.some((node) => node.id === 'ws'), true);
+  });
+
+  test('only lets ordinary content invoke Plate Slash commands', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Note' }], id: 'note', indent: 2, type: KEYS.p },
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        indent: 2,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'note-status',
+        indent: 3,
+        tanaFieldId: 'status',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'note-status-value',
+        indent: 4,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p,
+      },
+    ]);
+    const triggerQuery = editor.getOptions(SlashPlugin).triggerQuery;
+
+    assert.ok(triggerQuery);
+
+    const canTriggerAt = (nodeId: string) => {
+      const path = editor.children.findIndex((node) => node.id === nodeId);
+      editor.tf.select([path], { edge: 'start' });
+
+      return triggerQuery(editor);
+    };
+
+    assert.equal(canTriggerAt('note'), true);
+    assert.equal(canTriggerAt('ws'), false);
+    assert.equal(canTriggerAt('note-status'), false);
+    assert.equal(canTriggerAt('note-status-value'), false);
   });
 
   test('blocks Backspace at the start of Schema', () => {
@@ -477,13 +577,20 @@ describe('canonical Tana workspace document', () => {
   });
 
   test('creates a shared template occurrence and a direct local Definition, then materializes on apply', () => {
+    const [workspace, home, daily, schema, library, settings, trash] = minimalWorkspace();
     const editor = createEditor([
-      ...minimalWorkspace(),
+      workspace!,
+      home!,
+      { children: [{ text: 'Task' }], id: 'task', indent: 2, type: KEYS.p },
+      daily!,
+      schema!,
       { children: [{ text: 'Status' }], id: 'status', indent: 2, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
       { children: [{ text: 'Project' }], id: 'project', indent: 2, tanaSupertagDefinition: {}, type: KEYS.p },
       { children: [{ text: '' }], id: 'shared-input', indent: 3, type: KEYS.p },
       { children: [{ text: '' }], id: 'local-input', indent: 3, type: KEYS.p },
-      { children: [{ text: 'Task' }], id: 'task', indent: 2, type: KEYS.p },
+      library!,
+      settings!,
+      trash!,
     ]);
     const fields = editor.getTransforms(TanaFieldPlugin).field;
 

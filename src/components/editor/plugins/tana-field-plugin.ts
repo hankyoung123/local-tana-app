@@ -424,6 +424,21 @@ function addValue(
 
   const entry = insertValueChild(editor, fieldEntry, definition, value);
 
+  if (entry && value === undefined) {
+    const [, valuePath] = entry;
+    const point = editor.api.start(valuePath);
+
+    if (point) {
+      editor.tf.navigation.navigate({
+        flash: false,
+        focus: true,
+        scroll: true,
+        select: point,
+        target: { path: valuePath, type: 'node' },
+      });
+    }
+  }
+
   return typeof entry?.[0].id === 'string' ? entry[0].id : undefined;
 }
 
@@ -604,11 +619,21 @@ function setOptional(editor: PlateEditor, templateNodeId: NodeId, optional: bool
   return true;
 }
 
-/** Pinned presentation is carried by the real Field occurrence Node itself. */
-function setPinned(editor: PlateEditor, fieldNodeId: NodeId, pinned: boolean) {
-  const entry = getTanaNodeEntry(editor, fieldNodeId);
+/** Pinned presentation belongs to a direct Supertag template, never an instance. */
+function setPinned(editor: PlateEditor, templateNodeId: NodeId, pinned: boolean) {
+  const entry = getTanaNodeEntry(editor, templateNodeId);
+  const parentPath = entry && getTanaParentPath(editor.children, entry[1]);
+  const parent = parentPath
+    ? (editor.api.node(parentPath)?.[0] as TanaBlockElement | undefined)
+    : undefined;
 
-  if (!entry?.[0].tanaFieldId) return false;
+  if (
+    !entry ||
+    !parent?.tanaSupertagDefinition ||
+    (entry[0].tanaFieldDefinition === undefined && entry[0].tanaFieldId === undefined)
+  ) {
+    return false;
+  }
 
   if (pinned) {
     if (entry[0].tanaFieldPinned === true) return false;

@@ -42,6 +42,95 @@ function hasFieldStructureAncestor(
   return false;
 }
 
+function isSystemNode(node: TElement): boolean {
+  return (node as TElement & { tanaSystemNode?: unknown }).tanaSystemNode !== undefined;
+}
+
+function hasGenericStructuralProtection(
+  node: TElement,
+  context: TanaNodeSemanticContext
+): boolean {
+  const semantics = getNodeSemanticTypes(node, context);
+
+  return semantics.some(
+    (semantic) =>
+      semantic === 'field' ||
+      semantic === 'field-definition' ||
+      semantic === 'option' ||
+      semantic === 'value'
+  );
+}
+
+/**
+ * Block Selection is a generic structural action surface. Field structures
+ * and System Nodes keep their normal Plate caret editing, but cannot enter
+ * this multi-block mutation path.
+ */
+export function canSelect(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return !isSystemNode(node) && !hasGenericStructuralProtection(node, context);
+}
+
+/** Generic duplication is safe only for ordinary content and Reference Nodes. */
+export function canDuplicate(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  if (!canSelect(node, context)) return false;
+
+  const semantics = getNodeSemanticTypes(node, context);
+
+  return !semantics.some(
+    (semantic) =>
+      semantic === 'search' || semantic === 'supertag-definition' || semantic === 'view'
+  );
+}
+
+/** Generic hierarchy changes must not separate Field structure or System Nodes. */
+export function canIndent(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return canSelect(node, context);
+}
+
+export function canOutdent(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return canIndent(node, context);
+}
+
+/** Plate type is presentation, but protected semantic structure cannot turn generically. */
+export function canTurnInto(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return canSelect(node, context);
+}
+
+/** Trash lifecycle only accepts Nodes whose semantic subtree is not Field-owned. */
+export function canTrash(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return canSelect(node, context);
+}
+
+/** Slash remains Plate-owned, but only ordinary content can start a generic command. */
+export function canUseSlashCommand(
+  node: TElement,
+  context: TanaNodeSemanticContext = {}
+): boolean {
+  return (
+    !isSystemNode(node) &&
+    getNodeSemanticTypes(node, context).length === 1 &&
+    getNodeSemanticTypes(node, context)[0] === 'content'
+  );
+}
+
 /**
  * Tana-specific policy for Plate's existing drag, drop, and navigation APIs.
  * The policy is deliberately small: Plate still owns the interaction
@@ -52,7 +141,7 @@ export function canDrag(
   context: TanaNodeSemanticContext = {}
 ): boolean {
   return (
-    (node as TElement & { tanaSystemNode?: unknown }).tanaSystemNode === undefined &&
+    !isSystemNode(node) &&
     !getNodeSemanticTypes(node, context).includes('value')
   );
 }

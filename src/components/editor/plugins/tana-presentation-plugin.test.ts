@@ -156,7 +156,7 @@ describe('Tana Field presentation', () => {
     selection.selectAll();
     assert.deepEqual(
       selection.getNodes({ sort: true }).map(([node]) => node.id),
-      ['task', 'status']
+      ['task']
     );
   });
 });

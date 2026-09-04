@@ -6,6 +6,7 @@ import type { PlateEditor, PlateElementProps } from 'platejs/react';
 
 import {
   ChevronRightIcon,
+  Columns3Icon,
   Heading1Icon,
   Heading2Icon,
   Heading3Icon,
@@ -23,6 +24,8 @@ import {
   insertBlock,
   insertInlineElement,
 } from '@/components/editor/transforms';
+import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 
 import {
   InlineCombobox,
@@ -66,8 +69,51 @@ const inlineItems = [
   },
 ] satisfies SlashItem[];
 
+function getCurrentNodeId(editor: PlateEditor): string | undefined {
+  const block = editor.api.block();
+  const id = block?.[0].id;
+
+  return typeof id === 'string' ? id : undefined;
+}
+
+const tanaItems = [
+  {
+    icon: <ListIcon />,
+    label: '创建搜索节点',
+    value: 'tana-search',
+    onSelect: (editor: PlateEditor) => {
+      const nodeId = getCurrentNodeId(editor);
+
+      if (nodeId) editor.getTransforms(TanaSearchPlugin).search.define(nodeId);
+    },
+  },
+  {
+    icon: <Columns3Icon />,
+    label: '添加视图',
+    value: 'tana-view',
+    onSelect: (editor: PlateEditor) => {
+      const nodeId = getCurrentNodeId(editor);
+
+      if (nodeId) editor.getTransforms(TanaViewPlugin).view.define(nodeId);
+    },
+  },
+  {
+    icon: <LinkIcon />,
+    label: '插入节点引用',
+    value: 'tana-reference',
+    onSelect: (editor: PlateEditor) => editor.tf.insertText('@'),
+  },
+  {
+    icon: <ListIcon />,
+    label: '添加字段',
+    value: 'tana-field',
+    onSelect: (editor: PlateEditor) => editor.tf.insertText('>'),
+  },
+] satisfies SlashItem[];
+
 const groups = [
-  { group: '大纲', items: blockItems },
+  { group: 'Tana', items: tanaItems },
+  { group: '内容', items: blockItems },
   { group: '行内', items: inlineItems },
 ];
 

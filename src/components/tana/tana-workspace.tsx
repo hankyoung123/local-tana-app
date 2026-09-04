@@ -178,7 +178,7 @@ function TanaWorkspaceContent({
         collapsed={sidebarCollapsed}
         index={index}
         onCollapsedChange={setSidebarCollapsed}
-        workspaceRootActive={!focusedNodeId}
+        onOpenSearch={openSearch}
       />
 
       <main className="relative flex min-w-0 flex-1 flex-col">
