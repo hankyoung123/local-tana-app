@@ -452,7 +452,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
           : [];
       }
     );
-    const values = definition
+    const valueEntries = definition
       ? valueNodes.flatMap((valueNode) => {
           const parsedValue = getFieldValueFromNode(definition, valueNode);
 
@@ -465,10 +465,11 @@ export function buildTanaIndex(document: Value): TanaIndex {
               nodesById,
               nodesBySupertag
             )
-            ? [parsedValue]
+            ? [[valueNode.id, parsedValue] as const]
             : [];
         })
       : [];
+    const values = valueEntries.map(([, value]) => value);
     const cardinality = definition?.cardinality ?? 'single';
     const valueNode = valueNodes[0];
     const value = cardinality === 'single' ? values[0] : undefined;
@@ -480,6 +481,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
       parentNodeId,
       path: node.path,
       value,
+      valueByNodeId: new Map(valueEntries),
       valueNodeId: valueNode?.id,
       valueNodeIds: valueNodes.map((valueNode) => valueNode.id),
       values,

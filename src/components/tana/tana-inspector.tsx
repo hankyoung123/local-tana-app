@@ -533,10 +533,28 @@ function FieldDefinitionEditor({
   );
 
   const changeType = (type: FieldType) => {
+    const shared = {
+      ...(definition.cardinality === 'list' ? { cardinality: 'list' as const } : {}),
+      ...(definition.required === true ? { required: true as const } : {}),
+    };
     const nextDefinition: FieldDefinition =
-      type === 'from-supertag' ? { sourceSupertagId: null, type } : { type };
+      type === 'from-supertag'
+        ? { ...shared, sourceSupertagId: null, type }
+        : { ...shared, type };
 
     fieldTransforms.updateDefinition(fieldId, nextDefinition);
+  };
+
+  const setCardinality = (cardinality: 'list' | 'single') => {
+    const next = { ...definition } as FieldDefinition & { cardinality?: 'list' | 'single' };
+
+    if (cardinality === 'list') {
+      next.cardinality = 'list';
+    } else {
+      delete next.cardinality;
+    }
+
+    fieldTransforms.updateDefinition(fieldId, next);
   };
 
   const setRequired = (required: boolean) => {
@@ -559,17 +577,16 @@ function FieldDefinitionEditor({
 
     if (value !== undefined && !Number.isFinite(value)) return;
 
-    const next = {
-      ...(definition.max === undefined || boundary === 'max'
-        ? {}
-        : { max: definition.max }),
-      ...(definition.min === undefined || boundary === 'min'
-        ? {}
-        : { min: definition.min }),
-      ...(boundary === 'max' && value !== undefined ? { max: value } : {}),
-      ...(boundary === 'min' && value !== undefined ? { min: value } : {}),
-      type: 'number' as const,
-    };
+    const next = { ...definition };
+
+    if (boundary === 'max') {
+      if (value === undefined) delete next.max;
+      else next.max = value;
+    } else if (value === undefined) {
+      delete next.min;
+    } else {
+      next.min = value;
+    }
 
     if (
       next.min !== undefined &&
@@ -601,6 +618,22 @@ function FieldDefinitionEditor({
         </SelectContent>
       </Select>
 
+      <div className="mt-3">
+        <p className="mb-1.5 text-[#7b827d] text-[11px]">字段值数量</p>
+        <Select
+          value={definition.cardinality ?? 'single'}
+          onValueChange={(value) => setCardinality(value as 'list' | 'single')}
+        >
+          <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="single">单个值</SelectItem>
+            <SelectItem value="list">多个值</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">
         <Checkbox
           aria-label="设为必填字段"
@@ -619,6 +652,8 @@ function FieldDefinitionEditor({
             value={definition.sourceSupertagId ?? undefined}
             onValueChange={(sourceSupertagId) =>
               fieldTransforms.updateDefinition(fieldId, {
+                ...(definition.cardinality === 'list' ? { cardinality: 'list' as const } : {}),
+                ...(definition.required === true ? { required: true as const } : {}),
                 sourceSupertagId,
                 type: 'from-supertag',
               })

@@ -1,11 +1,27 @@
 'use client';
 
-import { ArrowUpRightIcon } from 'lucide-react';
+import * as React from 'react';
+import {
+  ArrowDownAZIcon,
+  ArrowUpRightIcon,
+  Columns3Icon,
+  GroupIcon,
+  RotateCcwIcon,
+} from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Select,
   SelectContent,
@@ -16,13 +32,110 @@ import {
 import {
   getFieldValueCandidates,
   resolveTanaNodeTitle,
+  type FieldDefinition,
   type FieldValue,
   type NodeId,
+  type TanaFieldNode,
   type TanaIndex,
   type TanaNode,
 } from '@/lib/tana';
 
 import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
+
+const NO_GROUP = '__no-group__';
+const TITLE_SORT = '__title__';
+
+type TanaTableSort = {
+  direction: 'asc' | 'desc';
+  fieldId: NodeId | typeof TITLE_SORT;
+};
+
+type ScalarDefinition = Exclude<
+  FieldDefinition,
+  { type: 'from-supertag' | 'options' }
+>;
+
+function getField(index: TanaIndex, nodeId: NodeId, fieldId: NodeId) {
+  return (index.fieldNodesByParent.get(nodeId) ?? []).find(
+    (candidate) => candidate.fieldId === fieldId
+  );
+}
+
+function getFieldValueLabel(
+  index: TanaIndex,
+  field: TanaFieldNode | undefined
+): string {
+  const labels = (field?.values ?? []).map((value) => {
+    if (value.type === 'options' || value.type === 'from-supertag') {
+      return resolveTanaNodeTitle(index, value.value);
+    }
+
+    return String(value.value);
+  });
+
+  return labels.join('、');
+}
+
+/** Derives columns from real Field occurrence Nodes, never a table row cache. */
+export function getTanaTableFieldIds(
+  index: TanaIndex,
+  results: readonly TanaNode[]
+): NodeId[] {
+  return Array.from(
+    new Set(
+      results.flatMap((node) =>
+        (index.fieldNodesByParent.get(node.id) ?? []).map((field) => field.fieldId)
+      )
+    )
+  );
+}
+
+/** Sorting changes only this View's projection order; canonical Node order stays intact. */
+export function sortTanaTableNodes(
+  index: TanaIndex,
+  nodes: readonly TanaNode[],
+  sort: TanaTableSort | undefined
+): TanaNode[] {
+  if (!sort) return [...nodes];
+
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  const valueFor = (node: TanaNode) =>
+    sort.fieldId === TITLE_SORT
+      ? resolveTanaNodeTitle(index, node.id)
+      : getFieldValueLabel(index, getField(index, node.id, sort.fieldId));
+
+  return [...nodes].sort(
+    (left, right) =>
+      valueFor(left).localeCompare(valueFor(right), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }) * direction
+  );
+}
+
+/** Grouping derives labels from Field Nodes and never retains a result copy. */
+export function groupTanaTableNodes(
+  index: TanaIndex,
+  nodes: readonly TanaNode[],
+  fieldId: NodeId | undefined
+): Array<{ label: string; nodes: TanaNode[] }> {
+  if (!fieldId) return [{ label: '', nodes: [...nodes] }];
+
+  const groups = new Map<string, TanaNode[]>();
+
+  for (const node of nodes) {
+    const label = getFieldValueLabel(index, getField(index, node.id, fieldId)) || '未设置';
+    const group = groups.get(label) ?? [];
+
+    group.push(node);
+    groups.set(label, group);
+  }
+
+  return Array.from(groups, ([label, groupedNodes]) => ({
+    label,
+    nodes: groupedNodes,
+  }));
+}
 
 function FieldCell({
   fieldId,
@@ -34,27 +147,42 @@ function FieldCell({
   nodeId: NodeId;
 }) {
   const editor = useEditorRef();
-  const field = (index.fieldNodesByParent.get(nodeId) ?? []).find(
-    (candidate) => candidate.fieldId === fieldId
-  );
+  const field = getField(index, nodeId, fieldId);
   const definition = index.nodesById.get(fieldId)?.fieldDefinition;
+  const fieldLabel = index.nodesById.get(fieldId)?.text || '字段';
 
   if (!field || !definition) return <span className="text-muted-foreground">—</span>;
 
   const setValue = (value: FieldValue) =>
     editor.getTransforms(TanaFieldPlugin).field.setValue(nodeId, fieldId, value);
+  const clearValue = () =>
+    editor.getTransforms(TanaFieldPlugin).field.clearValue(nodeId, fieldId);
+
+  if (definition.cardinality === 'list') {
+    const label = getFieldValueLabel(index, field);
+
+    return (
+      <div className="flex min-w-28 items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate text-xs">{label || '未设置'}</span>
+        {field.values.length > 0 && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+      </div>
+    );
+  }
 
   if (definition.type === 'checkbox') {
     const value = field.value?.type === 'checkbox' ? field.value.value : false;
 
     return (
-      <Checkbox
-        aria-label={`${index.nodesById.get(fieldId)?.text || '字段'}字段值`}
-        checked={value}
-        onCheckedChange={(checked) => {
-          if (typeof checked === 'boolean') setValue({ type: 'checkbox', value: checked });
-        }}
-      />
+      <div className="flex items-center gap-1">
+        <Checkbox
+          aria-label={`${fieldLabel}字段值`}
+          checked={value}
+          onCheckedChange={(checked) => {
+            if (typeof checked === 'boolean') setValue({ type: 'checkbox', value: checked });
+          }}
+        />
+        {field.value && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+      </div>
     );
   }
 
@@ -63,68 +191,170 @@ function FieldCell({
     const candidates = getFieldValueCandidates(index, fieldId);
 
     return (
-      <Select
-        value={value}
-        onValueChange={(candidateId) =>
-          setValue({ type: definition.type, value: candidateId } as Extract<FieldValue, { type: 'options' | 'from-supertag' }>)
-        }
-      >
-        <SelectTrigger className="h-7 min-w-28 border-0 bg-transparent px-1.5 text-xs shadow-none">
-          <SelectValue placeholder="未设置" />
-        </SelectTrigger>
-        <SelectContent>
-          {candidates.map((candidate) => (
-            <SelectItem key={candidate.id} value={candidate.id}>
-              {candidate.text || '未命名节点'}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-1">
+        <Select
+          value={value}
+          onValueChange={(candidateId) =>
+            setValue({ type: definition.type, value: candidateId } as Extract<
+              FieldValue,
+              { type: 'options' | 'from-supertag' }
+            >)
+          }
+        >
+          <SelectTrigger className="h-7 min-w-28 border-0 bg-transparent px-1.5 text-xs shadow-none">
+            <SelectValue placeholder="未设置" />
+          </SelectTrigger>
+          <SelectContent>
+            {candidates.map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.text || '未命名节点'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {value && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+      </div>
     );
   }
 
-  const value = field.value?.type === definition.type ? String(field.value.value) : '';
+  const committedValue =
+    field.value?.type === definition.type ? String(field.value.value) : '';
 
   return (
-    <input
-      aria-label={`${index.nodesById.get(fieldId)?.text || '字段'}字段值`}
-      className="h-7 min-w-28 rounded bg-transparent px-1.5 text-xs outline-none hover:bg-muted/60 focus:bg-white focus:ring-1 focus:ring-[#8bb69b]"
-      type={
-        definition.type === 'number'
-          ? 'number'
-          : definition.type === 'date'
-            ? 'date'
-            : definition.type === 'email'
-              ? 'email'
-              : definition.type === 'url'
-                ? 'url'
-                : 'text'
-      }
-      value={value}
-      onChange={(event) => {
-        const raw = event.target.value;
-
-        if (!raw) return;
-        if (definition.type === 'number') {
-          const number = Number(raw);
-          if (Number.isFinite(number)) setValue({ type: 'number', value: number });
-          return;
-        }
-        if (definition.type === 'date') {
-          setValue({ type: 'date', value: raw });
-          return;
-        }
-        if (definition.type === 'email') {
-          setValue({ type: 'email', value: raw });
-          return;
-        }
-        if (definition.type === 'url') {
-          setValue({ type: 'url', value: raw });
-          return;
-        }
-        setValue({ type: 'plain', value: raw });
-      }}
+    <ScalarFieldCell
+      key={committedValue}
+      committedValue={committedValue}
+      definition={definition}
+      fieldLabel={fieldLabel}
+      onClear={clearValue}
+      onCommit={setValue}
     />
+  );
+}
+
+function ClearValueButton({
+  fieldLabel,
+  onClear,
+}: {
+  fieldLabel: string;
+  onClear: () => boolean;
+}) {
+  return (
+    <button
+      aria-label={`清除${fieldLabel}字段值`}
+      className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+      type="button"
+      onClick={onClear}
+    >
+      <RotateCcwIcon className="size-3" />
+    </button>
+  );
+}
+
+function ScalarFieldCell({
+  committedValue,
+  definition,
+  fieldLabel,
+  onClear,
+  onCommit,
+}: {
+  committedValue: string;
+  definition: ScalarDefinition;
+  fieldLabel: string;
+  onClear: () => boolean;
+  onCommit: (value: FieldValue) => boolean;
+}) {
+  const [draft, setDraft] = React.useState(committedValue);
+  const [invalid, setInvalid] = React.useState(false);
+
+  const commit = () => {
+    if (draft === '') {
+      onClear();
+      setInvalid(false);
+      return;
+    }
+
+    let next: FieldValue;
+
+    switch (definition.type) {
+      case 'number': {
+        const number = Number(draft);
+
+        if (!Number.isFinite(number)) {
+          setInvalid(true);
+          return;
+        }
+        next = { type: 'number', value: number };
+        break;
+      }
+      case 'date':
+        next = { type: 'date', value: draft };
+        break;
+      case 'email':
+        next = { type: 'email', value: draft };
+        break;
+      case 'url':
+        next = { type: 'url', value: draft };
+        break;
+      case 'checkbox':
+        return;
+      default:
+        next = { type: 'plain', value: draft };
+    }
+
+    setInvalid(!onCommit(next));
+  };
+
+  const inputType =
+    definition.type === 'number'
+      ? 'number'
+      : definition.type === 'date'
+        ? 'date'
+        : definition.type === 'email'
+          ? 'email'
+          : definition.type === 'url'
+            ? 'url'
+            : 'text';
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        aria-invalid={invalid || undefined}
+        aria-label={`${fieldLabel}字段值`}
+        className="h-7 min-w-28 rounded bg-transparent px-1.5 text-xs outline-none hover:bg-muted/60 focus:bg-white focus:ring-1 focus:ring-[#8bb69b] aria-invalid:ring-1 aria-invalid:ring-destructive"
+        type={inputType}
+        value={draft}
+        onBlur={commit}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setInvalid(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commit();
+            event.currentTarget.blur();
+          }
+          if (event.key === 'Escape') {
+            setDraft(committedValue);
+            setInvalid(false);
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      {committedValue && (
+        <ClearValueButton
+          fieldLabel={fieldLabel}
+          onClear={() => {
+            const cleared = onClear();
+
+            setDraft('');
+            setInvalid(false);
+            return cleared;
+          }}
+        />
+      )}
+    </div>
   );
 }
 
@@ -171,28 +401,154 @@ function TableRow({
   );
 }
 
-export function TanaTableView({ index, results }: { index: TanaIndex; results: readonly TanaNode[] }) {
-  const fieldIds = Array.from(
-    new Set(
-      results.flatMap((node) => (index.fieldNodesByParent.get(node.id) ?? []).map((field) => field.fieldId))
-    )
-  );
+export function TanaTableView({
+  index,
+  results,
+}: {
+  index: TanaIndex;
+  results: readonly TanaNode[];
+}) {
+  const fieldIds = getTanaTableFieldIds(index, results);
+  const [hiddenFieldIds, setHiddenFieldIds] = React.useState<readonly NodeId[]>([]);
+  const [sort, setSort] = React.useState<TanaTableSort>();
+  const [groupFieldId, setGroupFieldId] = React.useState<NodeId>();
+
+  const visibleFields = fieldIds.filter((fieldId) => !hiddenFieldIds.includes(fieldId));
+  const activeSort =
+    sort && sort.fieldId !== TITLE_SORT && !fieldIds.includes(sort.fieldId) ? undefined : sort;
+  const activeGroupFieldId =
+    groupFieldId && fieldIds.includes(groupFieldId) ? groupFieldId : undefined;
+  const sortedResults = sortTanaTableNodes(index, results, activeSort);
+  const groups = groupTanaTableNodes(index, sortedResults, activeGroupFieldId);
+  const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="min-w-full border-collapse">
-        <thead className="bg-muted/30 text-left text-muted-foreground text-xs">
-          <tr>
-            <th className="px-3 py-2 font-medium">节点</th>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label="选择表格字段列"
+              className="inline-flex h-8 items-center gap-1.5 rounded border bg-white px-2 text-xs hover:bg-muted"
+              type="button"
+            >
+              <Columns3Icon className="size-3.5" />
+              字段列
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>显示字段</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {fieldIds.length === 0 ? (
+              <DropdownMenuItem disabled>当前结果没有字段</DropdownMenuItem>
+            ) : (
+              fieldIds.map((fieldId) => (
+                <DropdownMenuCheckboxItem
+                  key={fieldId}
+                  checked={!hiddenFieldIds.includes(fieldId)}
+                  onCheckedChange={(checked) =>
+                    setHiddenFieldIds((current) =>
+                      checked
+                        ? current.filter((currentFieldId) => currentFieldId !== fieldId)
+                        : Array.from(new Set([...current, fieldId]))
+                    )
+                  }
+                >
+                  {fieldName(fieldId)}
+                </DropdownMenuCheckboxItem>
+              ))
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Select
+          value={sort ? `${sort.fieldId}:${sort.direction}` : undefined}
+          onValueChange={(value) => {
+            if (value === '__none__') {
+              setSort(undefined);
+              return;
+            }
+            const [fieldId, direction] = value.split(':');
+
+            if ((direction === 'asc' || direction === 'desc') && fieldId) {
+              setSort({ direction, fieldId: fieldId as NodeId | typeof TITLE_SORT });
+            }
+          }}
+        >
+          <SelectTrigger aria-label="排序表格结果" className="h-8 w-36 bg-white text-xs shadow-none">
+            <ArrowDownAZIcon className="size-3.5" />
+            <SelectValue placeholder="排序" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">文档顺序</SelectItem>
+            <SelectItem value={`${TITLE_SORT}:asc`}>标题 A → Z</SelectItem>
+            <SelectItem value={`${TITLE_SORT}:desc`}>标题 Z → A</SelectItem>
             {fieldIds.map((fieldId) => (
-              <th key={fieldId} className="px-3 py-2 font-medium">
-                {index.nodesById.get(fieldId)?.text || '未命名字段'}
-              </th>
+              <React.Fragment key={fieldId}>
+                <SelectItem value={`${fieldId}:asc`}>{fieldName(fieldId)} ↑</SelectItem>
+                <SelectItem value={`${fieldId}:desc`}>{fieldName(fieldId)} ↓</SelectItem>
+              </React.Fragment>
             ))}
-          </tr>
-        </thead>
-        <tbody>{results.map((node) => <TableRow key={node.id} fieldIds={fieldIds} index={index} node={node} />)}</tbody>
-      </table>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={activeGroupFieldId ?? NO_GROUP}
+          onValueChange={(value) => setGroupFieldId(value === NO_GROUP ? undefined : value)}
+        >
+          <SelectTrigger aria-label="按字段分组" className="h-8 w-36 bg-white text-xs shadow-none">
+            <GroupIcon className="size-3.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_GROUP}>不分组</SelectItem>
+            {fieldIds.map((fieldId) => (
+              <SelectItem key={fieldId} value={fieldId}>
+                按{fieldName(fieldId)}分组
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="min-w-full border-collapse">
+          <thead className="bg-muted/30 text-left text-muted-foreground text-xs">
+            <tr>
+              <th className="px-3 py-2 font-medium">节点</th>
+              {visibleFields.map((fieldId) => (
+                <th key={fieldId} className="px-3 py-2 font-medium">
+                  {fieldName(fieldId)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <React.Fragment key={group.label || '__all__'}>
+                {activeGroupFieldId && (
+                  <tr className="border-y bg-muted/20 text-muted-foreground text-xs">
+                    <th
+                      className="px-3 py-1.5 text-left font-medium"
+                      colSpan={visibleFields.length + 1}
+                    >
+                      {group.label} · {group.nodes.length}
+                    </th>
+                  </tr>
+                )}
+                {group.nodes.map((node) => (
+                  <TableRow
+                    key={node.id}
+                    fieldIds={visibleFields}
+                    index={index}
+                    node={node}
+                  />
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

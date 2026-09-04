@@ -733,4 +733,82 @@ describe('Field occurrence Nodes', () => {
     assert.equal(index.nodesById.get('summary')?.fieldDefinition?.required, true);
     assert.equal(index.fieldNodesByParent.get('task')?.[0]?.valueNodeIds.length, 1);
   });
+
+  test('edits list cardinality through real sibling Value Nodes without a parent map', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Tags' }],
+        id: 'tags',
+        tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'tags'));
+    const firstValueId = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]
+      .valueNodeIds[0]!;
+    assert.equal(
+      transforms.setValueAt('task', 'tags', firstValueId, { type: 'plain', value: 'One' }),
+      true
+    );
+    const secondValueId = transforms.addValue('task', 'tags', { type: 'plain', value: 'Two' });
+
+    assert.ok(secondValueId);
+    let index = buildTanaIndex(editor.children);
+    const fieldNode = index.fieldNodesByParent.get('task')![0]!;
+    assert.deepEqual(fieldNode.valueNodeIds, [firstValueId, secondValueId]);
+    assert.deepEqual(fieldNode.values, [
+      { type: 'plain', value: 'One' },
+      { type: 'plain', value: 'Two' },
+    ]);
+    assert.equal(index.fieldValues.get('task')?.has('tags') ?? false, false);
+    assert.equal(isFieldSet(index, 'task', 'tags'), true);
+
+    assert.equal(transforms.removeValue('task', 'tags', firstValueId), true);
+    index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.values, [
+      { type: 'plain', value: 'Two' },
+    ]);
+
+    assert.equal(transforms.clearValue('task', 'tags'), true);
+    index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.valueNodeIds, []);
+    assert.equal(isFieldSet(index, 'task', 'tags'), false);
+    assert.equal('tanaFieldValues' in editor.children[0], false);
+  });
+
+  test('keeps existing values intact when Field cardinality changes', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Summary' }],
+        id: 'summary',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'summary'));
+    assert.equal(
+      transforms.setValue('task', 'summary', { type: 'plain', value: 'Keep this' }),
+      true
+    );
+    assert.equal(
+      transforms.updateDefinition('summary', { cardinality: 'list', required: true, type: 'plain' }),
+      true
+    );
+    const index = buildTanaIndex(editor.children);
+
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.values, [
+      { type: 'plain', value: 'Keep this' },
+    ]);
+    assert.deepEqual(index.nodesById.get('summary')?.fieldDefinition, {
+      cardinality: 'list',
+      required: true,
+      type: 'plain',
+    });
+  });
 });

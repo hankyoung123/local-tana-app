@@ -1,6 +1,14 @@
 'use client';
 
-import { EyeOffIcon, HashIcon, ListFilterIcon, PinIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import {
+  EyeOffIcon,
+  HashIcon,
+  ListFilterIcon,
+  PinIcon,
+  PlusIcon,
+  SlidersHorizontalIcon,
+  XIcon,
+} from 'lucide-react';
 import type { TElement } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
@@ -170,6 +178,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const pinned = (element as TanaBlockElement).tanaFieldPinned === true;
+  const canAddValue = field?.fieldDefinition?.cardinality === 'list';
 
   return (
     <div
@@ -199,6 +208,14 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       </button>
 
       <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-white/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
+        {canAddValue && (
+          <FieldAction
+            label="添加字段值"
+            onClick={() => fieldTransforms.addValue(fieldNode.parentNodeId, fieldNode.fieldId)}
+          >
+            <PlusIcon />
+          </FieldAction>
+        )}
         <FieldAction
           label="在正文中隐藏"
           onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
@@ -255,7 +272,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   if (!nodeId) return null;
 
   const fieldNode = Array.from(index.fieldNodesById.values()).find(
-    (candidate) => candidate.valueNodeId === nodeId
+    (candidate) => candidate.valueNodeIds.includes(nodeId)
   );
 
   if (!fieldNode) return null;
@@ -265,9 +282,15 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   if (!definition) return null;
 
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const currentFieldValue = fieldNode.valueByNodeId.get(nodeId);
   const setValue = (value: FieldValue) =>
-    fieldTransforms.setValue(fieldNode.parentNodeId, fieldNode.fieldId, value);
-  const clearValue = () => fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
+    definition.cardinality === 'list'
+      ? fieldTransforms.setValueAt(fieldNode.parentNodeId, fieldNode.fieldId, nodeId, value)
+      : fieldTransforms.setValue(fieldNode.parentNodeId, fieldNode.fieldId, value);
+  const clearValue = () =>
+    definition.cardinality === 'list'
+      ? fieldTransforms.removeValue(fieldNode.parentNodeId, fieldNode.fieldId, nodeId)
+      : fieldTransforms.clearValue(fieldNode.parentNodeId, fieldNode.fieldId);
 
   if (
     definition.type === 'plain' ||
@@ -283,7 +306,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   }
 
   if (definition.type === 'checkbox') {
-    const value = fieldNode.value?.type === 'checkbox' ? fieldNode.value.value : undefined;
+    const value = currentFieldValue?.type === 'checkbox' ? currentFieldValue.value : undefined;
 
     return (
       <ValueControl>
@@ -299,13 +322,15 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
           />
           <span>{value === undefined ? '未设置' : value ? '已完成' : '未完成'}</span>
         </label>
-        {value !== undefined && <ValueClearButton onClear={clearValue} />}
+        {(value !== undefined || definition.cardinality === 'list') && (
+          <ValueClearButton onClear={clearValue} />
+        )}
       </ValueControl>
     );
   }
 
   if (definition.type === 'date') {
-    const value = fieldNode.value?.type === 'date' ? fieldNode.value.value : '';
+    const value = currentFieldValue?.type === 'date' ? currentFieldValue.value : '';
 
     return (
       <ValueControl>
@@ -330,7 +355,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   }
 
   const currentValue =
-    fieldNode.value?.type === definition.type ? fieldNode.value.value : undefined;
+    currentFieldValue?.type === definition.type ? currentFieldValue.value : undefined;
   const candidates = getFieldValueCandidates(index, fieldNode.fieldId);
 
   return (
@@ -362,7 +387,9 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
           )}
         </SelectContent>
       </Select>
-      {currentValue && <ValueClearButton onClear={clearValue} />}
+      {(currentValue || definition.cardinality === 'list') && (
+        <ValueClearButton onClear={clearValue} />
+      )}
     </ValueControl>
   );
 }

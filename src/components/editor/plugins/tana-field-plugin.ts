@@ -176,17 +176,27 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   return isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
 }
 
-function getDirectChildEntry(
+/** Value Nodes are real direct children, so a list needs no parallel value array. */
+function getDirectValueEntries(editor: PlateEditor, fieldPath: Path) {
+  return getTanaDirectChildPaths(editor.children, fieldPath).flatMap((path) => {
+    const entry = editor.api.node(path);
+
+    return entry &&
+      isTanaNodeElement(entry) &&
+      (entry[0] as TanaBlockElement).tanaFieldValueType !== undefined
+      ? [(entry as NodeEntry<TanaBlockElement>)]
+      : [];
+  });
+}
+
+function getDirectValueEntryById(
   editor: PlateEditor,
-  parentPath: Path
-): NodeEntry<TanaBlockElement> | undefined {
-  const directChildPath = getTanaDirectChildPaths(editor.children, parentPath)[0];
-
-  if (!directChildPath) return;
-
-  const entry = editor.api.node(directChildPath);
-
-  return entry && isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
+  fieldPath: Path,
+  valueNodeId: NodeId
+) {
+  return getDirectValueEntries(editor, fieldPath).find(
+    ([node]) => node.id === valueNodeId
+  );
 }
 
 function createValueChildren(value?: FieldValue): Descendant[] {
@@ -270,11 +280,16 @@ function insertValueChild(
   const [fieldNode, fieldPath] = fieldEntry;
   const indent = typeof fieldNode.indent === 'number' ? fieldNode.indent + 1 : 1;
 
-  editor.tf.insertNodes(createValueNode(editor, indent, definition, value), {
-    at: [fieldPath[0] + 1]
-  });
+  const path = [
+    (getTanaNodeDescendantPaths(editor.children, fieldPath).at(-1)?.[0] ??
+      fieldPath[0]) + 1,
+  ];
 
-  return getDirectChildEntry(editor, fieldPath);
+  editor.tf.insertNodes(createValueNode(editor, indent, definition, value), { at: path });
+
+  const entry = editor.api.node(path);
+
+  return entry && isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
 }
 
 /**
@@ -324,7 +339,8 @@ function writeValue(
   editor: PlateEditor,
   parentNodeId: NodeId,
   fieldId: NodeId,
-  value?: FieldValue
+  value?: FieldValue,
+  valueNodeId?: NodeId
 ): boolean {
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getFieldNodeEntry(editor, parentNodeId, fieldId);
@@ -344,8 +360,10 @@ function writeValue(
     return false;
   }
 
-  const valueEntry =
-    getDirectChildEntry(editor, fieldEntry[1]) ?? insertValueChild(editor, fieldEntry, definition);
+  const valueEntries = getDirectValueEntries(editor, fieldEntry[1]);
+  const valueEntry = valueNodeId
+    ? getDirectValueEntryById(editor, fieldEntry[1], valueNodeId)
+    : (valueEntries[0] ?? insertValueChild(editor, fieldEntry, definition));
 
   if (!valueEntry) return false;
 
@@ -374,6 +392,65 @@ function setValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: F
   return writeValue(editor, nodeId, fieldId, value);
 }
 
+/** Writes one existing list Value Node; the Field itself remains the owner. */
+function setValueAt(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  valueNodeId: NodeId,
+  value: FieldValue
+) {
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+
+  if (definition?.cardinality !== 'list') return false;
+
+  return writeValue(editor, nodeId, fieldId, value, valueNodeId);
+}
+
+/** Adds one empty/initialised Value Node only for a list Field. */
+function addValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  value?: FieldValue
+): NodeId | undefined {
+  const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+
+  if (!fieldEntry || definition?.cardinality !== 'list') return;
+  if (value !== undefined && !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)) {
+    return;
+  }
+
+  const entry = insertValueChild(editor, fieldEntry, definition, value);
+
+  return typeof entry?.[0].id === 'string' ? entry[0].id : undefined;
+}
+
+/** Removes one direct list Value Node while preserving the Field occurrence. */
+function removeValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  valueNodeId: NodeId
+) {
+  const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+
+  if (!fieldEntry || definition?.cardinality !== 'list') return false;
+
+  const valueEntry = getDirectValueEntryById(editor, fieldEntry[1], valueNodeId);
+
+  if (!valueEntry) return false;
+
+  getTanaNodeDescendantPaths(editor.children, valueEntry[1])
+    .reverse()
+    .forEach((path) => editor.tf.removeNodes({ at: path }));
+  editor.tf.removeNodes({ at: valueEntry[1] });
+
+  return true;
+}
+
 /** Applies a valid template default only when the real Field Node is unset. */
 function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: FieldValue) {
   const index = buildTanaIndex(editor.children);
@@ -382,7 +459,11 @@ function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, valu
   const fieldNodeId = materialize(editor, nodeId, fieldId);
 
   if (!fieldNodeId) return false;
-  if (buildTanaIndex(editor.children).fieldValues.get(nodeId)?.has(fieldId)) {
+  if (
+    buildTanaIndex(editor.children)
+      .fieldNodesByParent.get(nodeId)
+      ?.some((fieldNode) => fieldNode.fieldId === fieldId && fieldNode.values.length > 0)
+  ) {
     return false;
   }
 
@@ -391,8 +472,24 @@ function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, valu
 
 function clearValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
-  if (!fieldEntry) return false;
+  if (!fieldEntry || !definition) return false;
+
+  if (definition.cardinality === 'list') {
+    const values = getDirectValueEntries(editor, fieldEntry[1]);
+
+    if (values.length === 0) return false;
+
+    editor.tf.withoutNormalizing(() => {
+      values
+        .flatMap((entry) => [...getTanaNodeDescendantPaths(editor.children, entry[1]), entry[1]])
+        .sort((left, right) => right[0] - left[0])
+        .forEach((path) => editor.tf.removeNodes({ at: path }));
+    });
+
+    return true;
+  }
 
   return writeValue(editor, nodeId, fieldId);
 }
@@ -745,6 +842,8 @@ export const TanaFieldPlugin = createPlatePlugin({
 })
   .extendEditorTransforms(({ editor }) => ({
     field: {
+      addValue: (nodeId: NodeId, fieldId: NodeId, value?: FieldValue) =>
+        addValue(editor, nodeId, fieldId, value),
       applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
         applyDefault(editor, nodeId, fieldId, value),
       clearValue: (nodeId: NodeId, fieldId: NodeId) => clearValue(editor, nodeId, fieldId),
@@ -763,9 +862,17 @@ export const TanaFieldPlugin = createPlatePlugin({
       createOption: (fieldId: NodeId, name: string) => createOption(editor, fieldId, name),
       deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) => deleteAdHoc(editor, nodeId, fieldId),
       materialize: (nodeId: NodeId, fieldId: NodeId) => materialize(editor, nodeId, fieldId),
+      removeValue: (nodeId: NodeId, fieldId: NodeId, valueNodeId: NodeId) =>
+        removeValue(editor, nodeId, fieldId, valueNodeId),
       removeOption: (fieldId: NodeId, optionId: NodeId) => removeOption(editor, fieldId, optionId),
       setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
         setValue(editor, nodeId, fieldId, value),
+      setValueAt: (
+        nodeId: NodeId,
+        fieldId: NodeId,
+        valueNodeId: NodeId,
+        value: FieldValue
+      ) => setValueAt(editor, nodeId, fieldId, valueNodeId, value),
       setOptional: (templateNodeId: NodeId, optional: boolean) =>
         setOptional(editor, templateNodeId, optional),
       setPinned: (fieldNodeId: NodeId, pinned: boolean) =>

@@ -107,6 +107,27 @@ describe('Tana Supertag operations', () => {
     assert.deepEqual(index.nodesById.get('new-task')?.supertagIds, ['project']);
   });
 
+  test('initializes every real list-template Value Node without a default-value map', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-labels', indent: 1, tanaFieldId: 'labels', type: KEYS.p },
+      { children: [{ text: 'One' }], id: 'template-label-one', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Two' }], id: 'template-label-two', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Labels' }], id: 'labels', tanaFieldDefinition: { cardinality: 'list', type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    assert.equal(editor.getTransforms(TanaSupertagPlugin).supertag.apply('task', 'project'), true);
+
+    const index = buildTanaIndex(editor.children);
+
+    assert.deepEqual(index.fieldNodesByParent.get('task')?.[0]?.values, [
+      { type: 'plain', value: 'One' },
+      { type: 'plain', value: 'Two' },
+    ]);
+    assert.equal('tanaFieldValues' in editor.children.find((node) => node.id === 'task')!, false);
+  });
+
   test('materializes a local Field Definition template without copying the definition', () => {
     const editor = createEditor([
       {

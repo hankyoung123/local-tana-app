@@ -393,8 +393,12 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
     fieldTransforms.materialize(nodeId, template.fieldId);
-    if (template.value !== undefined) {
-      fieldTransforms.applyDefault(nodeId, template.fieldId, template.value);
+    if (template.values.length > 0) {
+      if (fieldTransforms.applyDefault(nodeId, template.fieldId, template.values[0]!)) {
+        template.values.slice(1).forEach((value) => {
+          fieldTransforms.addValue(nodeId, template.fieldId, value);
+        });
+      }
     }
   });
   const templateDefinitionIds = [

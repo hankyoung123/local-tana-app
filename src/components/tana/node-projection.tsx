@@ -17,14 +17,15 @@ import {
 type ProjectionVariant = 'block-reference' | 'search-result';
 
 function getFieldValueLabel(index: TanaIndex, field: TanaFieldNode): string | undefined {
-  const value = field.value;
+  const labels = field.values.map((value) => {
+    if (value.type === 'options' || value.type === 'from-supertag') {
+      return index.nodesById.get(value.value)?.text || '已删除的节点';
+    }
 
-  if (!value) return;
-  if (value.type === 'options' || value.type === 'from-supertag') {
-    return index.nodesById.get(value.value)?.text || '已删除的节点';
-  }
+    return String(value.value);
+  });
 
-  return String(value.value);
+  return labels.length > 0 ? labels.join('、') : undefined;
 }
 
 export function ProjectionTitleInput({
@@ -81,10 +82,13 @@ export function getProjectionEditableTitle(target: TanaNode): string {
  * from TanaIndex and title edits go through TanaReferencePlugin.
  */
 export function NodeProjection({
+  fieldIds,
   index,
   targetNodeId,
   variant,
 }: {
+  /** Optional presentation-only Field selection used by Cards. */
+  fieldIds?: readonly NodeId[];
   index: TanaIndex;
   targetNodeId: NodeId | undefined;
   variant: ProjectionVariant;
@@ -118,6 +122,8 @@ export function NodeProjection({
     text: index.nodesById.get(supertagId)?.text || '未命名标签',
   }));
   const fields = (index.fieldNodesByParent.get(target.id) ?? []).flatMap((field) => {
+    if (fieldIds && !fieldIds.includes(field.fieldId)) return [];
+
     const definition = index.nodesById.get(field.fieldId);
     const value = getFieldValueLabel(index, field);
 

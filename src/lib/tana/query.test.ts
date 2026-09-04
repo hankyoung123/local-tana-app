@@ -172,6 +172,34 @@ describe("runTanaQuery", () => {
     );
   });
 
+  test("matches any valid Value Node of a list Field", () => {
+    const listIndex = buildTanaIndex([
+      {
+        children: [{ text: "Labels" }],
+        id: "labels",
+        tanaFieldDefinition: { cardinality: "list", type: "plain" },
+        type: "p",
+      },
+      { children: [{ text: "Task" }], id: "task", type: "p" },
+      { children: [{ text: "" }], id: "task-labels", indent: 1, tanaFieldId: "labels", type: "p" },
+      { children: [{ text: "one" }], id: "task-label-one", indent: 2, tanaFieldValueType: "plain", type: "p" },
+      { children: [{ text: "two" }], id: "task-label-two", indent: 2, tanaFieldValueType: "plain", type: "p" },
+    ]);
+
+    assert.deepEqual(
+      runTanaQuery(listIndex, createAndQuery([
+        { fieldId: "labels", kind: "field-equals", value: { type: "plain", value: "two" } },
+      ])).map(({ id }) => id),
+      ["task"],
+    );
+    assert.deepEqual(
+      runTanaQuery(listIndex, createAndQuery([
+        { fieldId: "labels", kind: "field-exists" },
+      ])).map(({ id }) => id),
+      ["task"],
+    );
+  });
+
   test("treats both a template-derived and an ad-hoc Field Node as field-defined", () => {
     assert.deepEqual(
       run([{ fieldId: "estimate", kind: "field-defined" }]).map(({ id }) => id),

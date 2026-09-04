@@ -26,8 +26,8 @@ export type ResolvedSupertagTemplateField = {
   fieldId: NodeId;
   field: TanaNode;
   optional: boolean;
-  /** Explicit template defaults live only on external Field occurrence Values. */
-  value?: FieldValue;
+  /** Explicit template defaults live on real Value child Nodes in document order. */
+  values: readonly FieldValue[];
 };
 
 export type FieldDefinitionCandidate = Pick<
@@ -299,7 +299,12 @@ export function isFieldSet(
   nodeId: NodeId,
   fieldId: NodeId
 ): boolean {
-  return index.fieldValues.get(nodeId)?.has(fieldId) ?? false;
+  return (
+    index.fieldNodesByParent
+      .get(nodeId)
+      ?.some((fieldNode) => fieldNode.fieldId === fieldId && fieldNode.values.length > 0) ??
+    false
+  );
 }
 
 export function getFieldDefinitionCandidatesFromIndex(
@@ -400,6 +405,7 @@ function getDirectSupertagTemplateFields(
         field: child,
         fieldId: child.id,
         optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
+        values: [],
       }];
     }
 
@@ -419,7 +425,7 @@ function getDirectSupertagTemplateFields(
       field,
       fieldId: template.fieldId,
       optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
-      value: template.value,
+      values: template.values,
     }];
   });
 }

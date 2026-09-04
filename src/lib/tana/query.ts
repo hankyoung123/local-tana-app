@@ -149,11 +149,18 @@ function fieldValuesEqual(
   node: TanaNode,
   index: TanaIndex,
 ) {
-  const actual = index.fieldValues.get(node.id)?.get(predicate.fieldId);
-
   return (
-    actual?.type === predicate.value.type &&
-    actual.value === predicate.value.value
+    index.fieldNodesByParent
+      .get(node.id)
+      ?.some(
+        (field) =>
+          field.fieldId === predicate.fieldId &&
+          field.values.some(
+            (actual) =>
+              actual.type === predicate.value.type &&
+              actual.value === predicate.value.value,
+          ),
+      ) ?? false
   );
 }
 
@@ -183,7 +190,14 @@ export function matchesTanaQueryPredicate(
     case "field-defined":
       return isFieldDefined(index, node.id, predicate.fieldId);
     case "field-exists":
-      return index.fieldValues.get(node.id)?.get(predicate.fieldId) != null;
+      return (
+        index.fieldNodesByParent
+          .get(node.id)
+          ?.some(
+            (field) =>
+              field.fieldId === predicate.fieldId && field.values.length > 0,
+          ) ?? false
+      );
     case "has-supertag":
       return (
         index.nodesBySupertag.get(predicate.supertagId)?.includes(node.id) ??

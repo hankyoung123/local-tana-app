@@ -180,6 +180,8 @@ export type TanaFieldNode = {
   /** Missing or non-Field targets are readable history, not an invalid document. */
   brokenFieldDefinition: boolean;
   value?: FieldValue;
+  /** Read-only value lookup by real Value NodeId, including list Fields. */
+  valueByNodeId: ReadonlyMap<NodeId, FieldValue>;
   valueNodeId?: NodeId;
   /** Every valid direct Value Node, in document order. */
   valueNodeIds: readonly NodeId[];
