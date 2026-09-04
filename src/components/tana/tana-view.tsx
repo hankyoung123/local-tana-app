@@ -58,7 +58,7 @@ export function TanaView({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
-        {results.length === 0 ? (
+        {results.length === 0 && viewType !== "table" ? (
           <div className="grid min-h-48 place-items-center rounded-lg border border-dashed text-center">
             <div>
               <ListFilterIcon className="mx-auto mb-2 size-5 text-muted-foreground" />

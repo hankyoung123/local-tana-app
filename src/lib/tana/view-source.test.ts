@@ -23,6 +23,29 @@ const document: Value = [
     type: KEYS.p,
   },
   {
+    children: [{ text: 'Block reference' }],
+    id: 'block-reference',
+    indent: 1,
+    tanaReferenceTargetId: 'ordinary-child',
+    type: KEYS.p,
+  },
+  {
+    children: [{ text: 'Child search' }],
+    id: 'child-search',
+    indent: 1,
+    tanaSearchDefinition: {
+      query: createAndQuery([]),
+    },
+    type: KEYS.p,
+  },
+  {
+    children: [{ text: 'Child view' }],
+    id: 'child-view',
+    indent: 1,
+    tanaViewDefinition: { type: 'outline' },
+    type: KEYS.p,
+  },
+  {
     children: [{ text: '' }],
     id: 'field-occurrence',
     indent: 1,
@@ -67,7 +90,12 @@ describe('Tana View source resolver', () => {
     const source = resolveTanaCollectionSource(index, index.nodesById.get('children-view')!);
 
     assert.equal(source.kind, 'children');
-    assert.deepEqual(source.nodes.map(({ id }) => id), ['ordinary-child']);
+    assert.deepEqual(source.nodes.map(({ id }) => id), [
+      'ordinary-child',
+      'block-reference',
+      'child-search',
+      'child-view',
+    ]);
   });
 
   test('uses the Search query when a Search also carries View presentation', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRightIcon, Link2Icon } from 'lucide-react';
+import { ArrowUpRightIcon, CircleIcon, Link2Icon } from 'lucide-react';
 import { TextApi } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
@@ -76,6 +76,106 @@ export function getProjectionEditableTitle(target: TanaNode): string {
   return text?.text ?? '';
 }
 
+/** Shared presentation for every transient projection of a canonical Node. */
+export function TanaNodeRowChrome({
+  fieldIds,
+  index,
+  target,
+  variant,
+}: {
+  /** Optional presentation-only Field selection used by Cards. */
+  fieldIds?: readonly NodeId[];
+  index: TanaIndex;
+  target: TanaNode;
+  variant: ProjectionVariant;
+}) {
+  const editor = useEditorRef();
+  const tags = target.supertagIds.map((supertagId) => ({
+    id: supertagId,
+    text: index.nodesById.get(supertagId)?.text || '未命名标签',
+  }));
+  const fields = (index.fieldNodesByParent.get(target.id) ?? []).flatMap((field) => {
+    if (fieldIds && !fieldIds.includes(field.fieldId)) return [];
+
+    const definition = index.nodesById.get(field.fieldId);
+    const value = getFieldValueLabel(index, field);
+
+    return value === undefined
+      ? []
+      : [{ id: field.id, label: definition?.text || '未命名字段', value }];
+  });
+  const displayTitle = resolveTanaNodeTitle(index, target.id);
+  const editableTitle = getProjectionEditableTitle(target);
+  const titleIsExpression = target.titleExpression !== undefined;
+  const isBlockReference = variant === 'block-reference';
+  const LeadingIcon = isBlockReference ? Link2Icon : CircleIcon;
+  const navigate = () => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
+
+  return (
+    <div
+      className={
+        isBlockReference
+          ? 'flex min-h-8 items-center gap-2 bg-white pr-4 text-[13px] text-[#3d4941]'
+          : 'flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50'
+      }
+      contentEditable={false}
+    >
+      <button
+        aria-label={`打开 ${displayTitle || '未命名节点'}`}
+        className={
+          isBlockReference
+            ? 'shrink-0 text-[#789083]'
+            : 'mt-0.5 shrink-0 text-muted-foreground'
+        }
+        type="button"
+        onClick={navigate}
+      >
+        <LeadingIcon aria-hidden="true" className={isBlockReference ? 'size-3.5' : 'size-4'} />
+      </button>
+      <div className="min-w-0 flex-1">
+        {target.systemNode ? (
+          <p className="truncate px-1 py-0.5 font-medium text-sm">{displayTitle}</p>
+        ) : (
+          <ProjectionTitleInput
+            displayTitle={displayTitle}
+            readOnly={titleIsExpression}
+            targetNodeId={target.id}
+            title={editableTitle}
+          />
+        )}
+        {tags.length > 0 && (
+          <div className={isBlockReference ? 'flex flex-wrap gap-1' : 'mt-1 flex flex-wrap gap-1'}>
+            {tags.map((tag) => (
+              <span
+                key={tag.id}
+                className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800"
+              >
+                #{tag.text}
+              </span>
+            ))}
+          </div>
+        )}
+        {fields.length > 0 && (
+          <div className={isBlockReference ? 'flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-[11px]' : 'mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-xs'}>
+            {fields.map((field) => (
+              <span key={field.id}>{field.label}: {field.value}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      <button
+        aria-label={`进入 ${displayTitle || '未命名节点'}`}
+        className="shrink-0 text-[#7d8a82] hover:text-[#275d48]"
+        title="打开节点"
+        type="button"
+        onClick={navigate}
+      >
+        <ArrowUpRightIcon aria-hidden="true" className={isBlockReference ? 'size-3.5' : 'size-4'} />
+      </button>
+    </div>
+  );
+}
+
 /**
  * Runtime-only canonical Node projection used by block References and Search
  * results. It never stores target content: every displayed field is derived
@@ -87,17 +187,12 @@ export function NodeProjection({
   targetNodeId,
   variant,
 }: {
-  /** Optional presentation-only Field selection used by Cards. */
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
   targetNodeId: NodeId | undefined;
   variant: ProjectionVariant;
 }) {
-  const editor = useEditorRef();
   const target = targetNodeId ? index.nodesById.get(targetNodeId) : undefined;
-  const navigate = () => {
-    if (target) editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
-  };
 
   if (!target) {
     return variant === 'block-reference' ? (
@@ -117,108 +212,5 @@ export function NodeProjection({
     );
   }
 
-  const tags = target.supertagIds.map((supertagId) => ({
-    id: supertagId,
-    text: index.nodesById.get(supertagId)?.text || '未命名标签',
-  }));
-  const fields = (index.fieldNodesByParent.get(target.id) ?? []).flatMap((field) => {
-    if (fieldIds && !fieldIds.includes(field.fieldId)) return [];
-
-    const definition = index.nodesById.get(field.fieldId);
-    const value = getFieldValueLabel(index, field);
-
-    return value === undefined
-      ? []
-      : [{ id: field.id, label: definition?.text || '未命名字段', value }];
-  });
-  const displayTitle = resolveTanaNodeTitle(index, target.id);
-  const editableTitle = getProjectionEditableTitle(target);
-  const titleIsExpression = target.titleExpression !== undefined;
-
-  if (variant === 'block-reference') {
-    return (
-      <div
-        aria-label={`引用：${displayTitle || '未命名节点'}`}
-        className="flex h-8 items-center gap-2 bg-white pr-4 text-[13px] text-[#3d4941]"
-        contentEditable={false}
-        role="link"
-        tabIndex={0}
-        onClick={navigate}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            navigate();
-          }
-        }}
-      >
-        <Link2Icon aria-hidden="true" className="size-3.5 shrink-0 text-[#789083]" />
-        {target.systemNode ? (
-          <span className="min-w-0 flex-1 truncate font-medium">{displayTitle}</span>
-        ) : (
-          <ProjectionTitleInput
-            displayTitle={displayTitle}
-            readOnly={titleIsExpression}
-            targetNodeId={target.id}
-            title={editableTitle}
-          />
-        )}
-        {tags.length > 0 && (
-          <span className="flex shrink-0 items-center gap-1 text-[#6d8778] text-[11px]">
-            {tags.map((tag) => <span key={tag.id}>#{tag.text}</span>)}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <article className="flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50">
-      <button
-        aria-label={`打开 ${displayTitle || '未命名节点'}`}
-        className="mt-0.5 shrink-0 text-muted-foreground"
-        type="button"
-        onClick={navigate}
-      >
-        <ArrowUpRightIcon className="size-4" />
-      </button>
-      <div className="min-w-0 flex-1">
-        {target.systemNode ? (
-          <p className="truncate px-1 py-0.5 font-medium text-sm">{displayTitle}</p>
-        ) : (
-          <ProjectionTitleInput
-            displayTitle={displayTitle}
-            readOnly={titleIsExpression}
-            targetNodeId={target.id}
-            title={editableTitle}
-          />
-        )}
-        {tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800"
-              >
-                #{tag.text}
-              </span>
-            ))}
-          </div>
-        )}
-        {fields.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-xs">
-            {fields.map((field) => (
-              <span key={field.id}>{field.label}: {field.value}</span>
-            ))}
-          </div>
-        )}
-      </div>
-      <button
-        className="shrink-0 text-[#7d8a82] text-xs hover:text-[#275d48]"
-        type="button"
-        onClick={navigate}
-      >
-        检查
-      </button>
-    </article>
-  );
+  return <TanaNodeRowChrome fieldIds={fieldIds} index={index} target={target} variant={variant} />;
 }

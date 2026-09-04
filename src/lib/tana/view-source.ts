@@ -12,6 +12,28 @@ function getNode(index: TanaIndex, nodeId: string): TanaNode | undefined {
 }
 
 /**
+ * A direct child can be projected when it owns user-visible content or an
+ * explicit presentation. Field/Value/Option nodes remain structural and are
+ * rendered only through their owning Field UI.
+ */
+export function isTanaViewDisplayableChild(node: TanaNode): boolean {
+  if (
+    node.semanticTypes.includes('field') ||
+    node.semanticTypes.includes('value') ||
+    node.semanticTypes.includes('option')
+  ) {
+    return false;
+  }
+
+  return (
+    node.semanticTypes.includes('content') ||
+    node.semanticTypes.includes('reference') ||
+    node.semanticTypes.includes('search') ||
+    node.semanticTypes.includes('view')
+  );
+}
+
+/**
  * Resolves the canonical Nodes shown by a View without storing any result
  * list. A Search owns its query, a Supertag Definition owns its instances,
  * and an ordinary View owns only the presentation of its direct content
@@ -47,8 +69,7 @@ export function resolveTanaCollectionSource(
         (node): node is TanaNode =>
           !!node &&
           isTanaNodeActive(index, node.id) &&
-          node.semanticTypes.length === 1 &&
-          node.semanticTypes[0] === 'content'
+          isTanaViewDisplayableChild(node)
       ),
   };
 }

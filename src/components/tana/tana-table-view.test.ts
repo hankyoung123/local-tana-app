@@ -6,6 +6,7 @@ import { KEYS, type Value } from 'platejs';
 import { buildTanaIndex } from '@/lib/tana';
 
 import {
+  getTanaTableAvailableFieldIds,
   getTanaTableFieldIds,
   groupTanaTableNodes,
   sortTanaTableNodes,
@@ -60,5 +61,57 @@ describe('Tana Table View', () => {
       ]
     );
     assert.deepEqual(nodes.map((node) => node.id), ['beta', 'alpha']);
+  });
+
+  test('keeps configured and optional Supertag template Fields available before instances materialize them', () => {
+    const value: Value = [
+      {
+        children: [{ text: 'Configured' }],
+        id: 'configured',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Project' }],
+        id: 'project',
+        tanaSupertagDefinition: {},
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Due date' }],
+        id: 'due-date',
+        indent: 1,
+        tanaFieldDefinition: { type: 'date' },
+        tanaFieldOptional: true,
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Occurrence only' }],
+        id: 'occurrence-only',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Instance' }],
+        id: 'instance',
+        tanaSupertagIds: ['project'],
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'instance-occurrence',
+        indent: 1,
+        tanaFieldId: 'occurrence-only',
+        type: KEYS.p,
+      },
+    ];
+    const index = buildTanaIndex(value);
+    const instance = index.nodesById.get('instance')!;
+
+    assert.deepEqual(
+      getTanaTableAvailableFieldIds(index, [instance], ['configured']),
+      ['configured', 'due-date', 'occurrence-only']
+    );
+    assert.deepEqual(getTanaTableAvailableFieldIds(index, [], ['configured']), ['configured']);
   });
 });

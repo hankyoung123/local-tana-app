@@ -32,7 +32,6 @@ import type {
   TanaNodeSemanticType,
 } from '@/lib/tana';
 import {
-  getActiveSupertagInstances,
   getFieldValueCandidates,
   getSupertagTemplateFields,
 } from '@/lib/tana';
@@ -40,6 +39,7 @@ import {
 import { OutlineNodeView } from './outline-node-view';
 import { NodeProjection } from './node-projection';
 import { TanaView } from './tana-view';
+import { TanaSupertagPage } from './tana-supertag-page';
 
 export type TanaNodeBlockRendererProps = {
   element: TElement;
@@ -138,45 +138,7 @@ function ViewRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps)
 function SupertagInstancesRenderer({ index, node, ...props }: TanaNodeWorkspaceRendererProps) {
   if (!node) return <OutlineRenderer index={index} {...props} />;
 
-  const instances = getActiveSupertagInstances(index, node.id);
-
-  return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <header className="shrink-0 border-b px-6 py-5 sm:px-10">
-        <p className="mb-1 text-muted-foreground text-xs">超级标签节点</p>
-        <h1 className="font-semibold text-2xl">#{node.text || '未命名超级标签'}</h1>
-        <div aria-label="超级标签内容" className="mt-4 flex items-center gap-3 border-b text-sm" role="tablist">
-          <button
-            aria-selected="true"
-            className="border-[#4f725f] border-b-2 px-1 pb-2 font-medium text-[#2c604b]"
-            role="tab"
-            type="button"
-          >
-            全部实例
-          </button>
-          <span className="pb-2 text-muted-foreground text-xs">
-            {instances.length} 个活跃实例
-          </span>
-        </div>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
-        {instances.length === 0 ? (
-          <p className="text-muted-foreground text-sm">暂无实例。</p>
-        ) : (
-          <div className="mx-auto max-w-3xl divide-y rounded-lg border">
-            {instances.map((instance) => (
-              <NodeProjection
-                key={instance.id}
-                index={index}
-                targetNodeId={instance.id}
-                variant="search-result"
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
+  return <TanaSupertagPage index={index} node={node} />;
 }
 
 /** Field occurrence labels are derived from their Field Definition Node. */
@@ -325,6 +287,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       <ValueControl>
         <label className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] text-[#59615c] hover:bg-[#f5f7f5]">
           <Checkbox
+            aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
             checked={value ?? false}
             data-plate-prevent-deselect
             onCheckedChange={(checked) => {
@@ -383,6 +346,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         }
       >
         <SelectTrigger
+          aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
           className="h-7 max-w-56 border-0 bg-transparent px-1.5 text-[13px] shadow-none hover:bg-[#f5f7f5] focus:ring-1"
           data-plate-prevent-deselect
         >

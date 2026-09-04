@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import {
   getFieldValueCandidates,
+  getSupertagTemplateFields,
   resolveTanaNodeTitle,
   type FieldDefinition,
   type FieldValue,
@@ -53,6 +54,19 @@ type ScalarDefinition = Exclude<
   FieldDefinition,
   { type: 'from-supertag' | 'options' }
 >;
+
+function getConfiguredTanaTableFieldIds(
+  settings: TanaViewDefinition | undefined
+): NodeId[] {
+  const configured = [...(settings?.visibleFieldIds ?? [])];
+
+  if (settings?.sort?.fieldId && settings.sort.fieldId !== TITLE_SORT) {
+    configured.push(settings.sort.fieldId);
+  }
+  if (settings?.groupFieldId) configured.push(settings.groupFieldId);
+
+  return configured;
+}
 
 function getField(index: TanaIndex, nodeId: NodeId, fieldId: NodeId) {
   return (index.fieldNodesByParent.get(nodeId) ?? []).find(
@@ -87,6 +101,38 @@ export function getTanaTableFieldIds(
       )
     )
   );
+}
+
+/**
+ * A Table may expose a configured Field before an instance materializes it.
+ * The ordering remains document-derived: persisted columns first, then
+ * Supertag template order in result order, then occurrence-only Fields.
+ */
+export function getTanaTableAvailableFieldIds(
+  index: TanaIndex,
+  results: readonly TanaNode[],
+  configuredFieldIds: readonly NodeId[] = []
+): NodeId[] {
+  const available: NodeId[] = [];
+  const seen = new Set<NodeId>();
+  const add = (fieldId: NodeId) => {
+    if (seen.has(fieldId) || !index.nodesById.get(fieldId)?.fieldDefinition) return;
+
+    seen.add(fieldId);
+    available.push(fieldId);
+  };
+
+  configuredFieldIds.forEach(add);
+
+  for (const node of results) {
+    node.supertagIds.forEach((supertagId) => {
+      getSupertagTemplateFields(index, supertagId).forEach((template) => add(template.fieldId));
+    });
+  }
+
+  getTanaTableFieldIds(index, results).forEach(add);
+
+  return available;
 }
 
 /** Sorting changes only this View's projection order; canonical Node order stays intact. */
@@ -409,9 +455,13 @@ export function TanaTableView({
   results: readonly TanaNode[];
   view: TanaNode;
 }) {
-  const fieldIds = getTanaTableFieldIds(index, results);
   const viewSettings = view.viewDefinition;
   const configuredVisibleFieldIds = viewSettings?.visibleFieldIds;
+  const fieldIds = getTanaTableAvailableFieldIds(
+    index,
+    results,
+    getConfiguredTanaTableFieldIds(viewSettings)
+  );
   const configuredSort = viewSettings?.sort;
   const configuredGroupFieldId = viewSettings?.groupFieldId;
   const visibleFields = configuredVisibleFieldIds
@@ -446,28 +496,39 @@ export function TanaTableView({
             </tr>
           </thead>
           <tbody>
-            {groups.map((group) => (
-              <React.Fragment key={group.label || '__all__'}>
-                {activeGroupFieldId && (
-                  <tr className="border-y bg-muted/20 text-muted-foreground text-xs">
-                    <th
-                      className="px-3 py-1.5 text-left font-medium"
-                      colSpan={visibleFields.length + 1}
-                    >
-                      {group.label} · {group.nodes.length}
-                    </th>
-                  </tr>
-                )}
-                {group.nodes.map((node) => (
-                  <TableRow
-                    key={node.id}
-                    fieldIds={visibleFields}
-                    index={index}
-                    node={node}
-                  />
-                ))}
-              </React.Fragment>
-            ))}
+            {results.length === 0 ? (
+              <tr>
+                <td
+                  className="px-3 py-8 text-center text-muted-foreground text-xs"
+                  colSpan={visibleFields.length + 1}
+                >
+                  没有匹配的节点
+                </td>
+              </tr>
+            ) : (
+              groups.map((group) => (
+                <React.Fragment key={group.label || '__all__'}>
+                  {activeGroupFieldId && (
+                    <tr className="border-y bg-muted/20 text-muted-foreground text-xs">
+                      <th
+                        className="px-3 py-1.5 text-left font-medium"
+                        colSpan={visibleFields.length + 1}
+                      >
+                        {group.label} · {group.nodes.length}
+                      </th>
+                    </tr>
+                  )}
+                  {group.nodes.map((node) => (
+                    <TableRow
+                      key={node.id}
+                      fieldIds={visibleFields}
+                      index={index}
+                      node={node}
+                    />
+                  ))}
+                </React.Fragment>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -486,8 +547,12 @@ export function TanaTableToolbarControls({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const fieldIds = getTanaTableFieldIds(index, results);
   const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
+  const fieldIds = getTanaTableAvailableFieldIds(
+    index,
+    results,
+    getConfiguredTanaTableFieldIds(view.viewDefinition)
+  );
   const configuredSort = view.viewDefinition?.sort;
   const configuredGroupFieldId = view.viewDefinition?.groupFieldId;
   const visibleFields = configuredVisibleFieldIds

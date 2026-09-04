@@ -171,6 +171,28 @@ function HiddenTanaNode({ children }: Pick<PlateElementProps, 'children'>) {
   );
 }
 
+/**
+ * Structured Value Nodes retain their canonical text for the Field plugin,
+ * while the adjacent control is their only editable and accessible surface.
+ */
+function StructuredValueChildren({ children }: Pick<PlateElementProps, 'children'>) {
+  if (!React.isValidElement<{ attributes?: Record<string, unknown> }>(children)) {
+    return <MemoizedChildren>{children}</MemoizedChildren>;
+  }
+
+  return (
+    <MemoizedChildren>
+      {React.cloneElement(children, {
+        attributes: {
+          ...children.props.attributes,
+          'aria-hidden': true,
+          contentEditable: false,
+        },
+      })}
+    </MemoizedChildren>
+  );
+}
+
 export const canDropOnInteractableTanaNode: CanDropCallback = ({
   dragEntry,
   dragItem,
@@ -502,7 +524,7 @@ function Draggable({
             className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
             contentEditable={false}
           >
-            <MemoizedChildren>{children}</MemoizedChildren>
+            <StructuredValueChildren>{children}</StructuredValueChildren>
           </div>
         ) : (
           <MemoizedChildren>{children}</MemoizedChildren>

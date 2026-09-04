@@ -16,7 +16,7 @@ import {
 import type { TanaIndex, TanaNode } from '@/lib/tana';
 
 import { NodeProjection } from './node-projection';
-import { getTanaTableFieldIds } from './tana-table-view';
+import { getTanaTableAvailableFieldIds } from './tana-table-view';
 
 /** Cards project title, tags, and selected real Fields; no Card entity exists. */
 export function TanaCardsView({
@@ -29,8 +29,8 @@ export function TanaCardsView({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const fieldIds = getTanaTableFieldIds(index, results);
   const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
+  const fieldIds = getTanaTableAvailableFieldIds(index, results, configuredVisibleFieldIds);
   const visibleFieldIds = configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds;
@@ -67,8 +67,8 @@ export function TanaCardsToolbarControls({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const fieldIds = getTanaTableFieldIds(index, results);
   const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
+  const fieldIds = getTanaTableAvailableFieldIds(index, results, configuredVisibleFieldIds);
   const visibleFieldIds = configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds;
