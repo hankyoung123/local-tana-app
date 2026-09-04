@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRightIcon, CircleIcon, Link2Icon } from 'lucide-react';
+import { Link2Icon } from 'lucide-react';
 import { TextApi } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
@@ -13,6 +13,8 @@ import {
   type TanaIndex,
   type TanaNode,
 } from '@/lib/tana';
+
+import { TanaNodeBullet } from './tana-node-gutter';
 
 type ProjectionVariant = 'block-reference' | 'search-result';
 
@@ -51,7 +53,7 @@ export function ProjectionTitleInput({
   return (
     <input
       aria-label="编辑引用目标标题"
-      className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 font-medium outline-none hover:bg-[#f3f6f4] focus:bg-white focus:ring-1 focus:ring-[#8bb69b]"
+      className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 font-medium outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
       data-plate-prevent-deselect
       type="text"
       value={title}
@@ -108,15 +110,15 @@ export function TanaNodeRowChrome({
   const editableTitle = getProjectionEditableTitle(target);
   const titleIsExpression = target.titleExpression !== undefined;
   const isBlockReference = variant === 'block-reference';
-  const LeadingIcon = isBlockReference ? Link2Icon : CircleIcon;
+  const semanticType = isBlockReference ? 'reference' : target.semanticType;
   const navigate = () => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
 
   return (
     <div
       className={
         isBlockReference
-          ? 'flex min-h-8 items-center gap-2 bg-white pr-4 text-[13px] text-[#3d4941]'
-          : 'flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50'
+          ? 'flex min-h-8 items-center gap-2 pr-4 text-[13px] text-[var(--tana-text-secondary)]'
+          : 'flex min-h-7 items-center gap-2 px-1 py-0.5 text-left hover:bg-[var(--tana-hover)]'
       }
       contentEditable={false}
     >
@@ -124,13 +126,13 @@ export function TanaNodeRowChrome({
         aria-label={`打开 ${displayTitle || '未命名节点'}`}
         className={
           isBlockReference
-            ? 'shrink-0 text-[#789083]'
-            : 'mt-0.5 shrink-0 text-muted-foreground'
+            ? 'shrink-0 text-[var(--tana-reference)]'
+            : 'shrink-0 text-[var(--tana-node-bullet)]'
         }
         type="button"
         onClick={navigate}
       >
-        <LeadingIcon aria-hidden="true" className={isBlockReference ? 'size-3.5' : 'size-4'} />
+        <TanaNodeBullet compact={isBlockReference} semanticType={semanticType} />
       </button>
       <div className="min-w-0 flex-1">
         {target.systemNode ? (
@@ -148,7 +150,7 @@ export function TanaNodeRowChrome({
             {tags.map((tag) => (
               <span
                 key={tag.id}
-                className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-800"
+                className="rounded bg-[var(--tana-accent-soft)] px-1.5 py-0.5 text-[10px] text-[var(--tana-accent)]"
               >
                 #{tag.text}
               </span>
@@ -156,22 +158,13 @@ export function TanaNodeRowChrome({
           </div>
         )}
         {fields.length > 0 && (
-          <div className={isBlockReference ? 'flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-[11px]' : 'mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground text-xs'}>
+          <div className={isBlockReference ? 'flex flex-wrap gap-x-2 gap-y-1 text-[var(--tana-text-tertiary)] text-[11px]' : 'mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[var(--tana-text-tertiary)] text-xs'}>
             {fields.map((field) => (
               <span key={field.id}>{field.label}: {field.value}</span>
             ))}
           </div>
         )}
       </div>
-      <button
-        aria-label={`进入 ${displayTitle || '未命名节点'}`}
-        className="shrink-0 text-[#7d8a82] hover:text-[#275d48]"
-        title="打开节点"
-        type="button"
-        onClick={navigate}
-      >
-        <ArrowUpRightIcon aria-hidden="true" className={isBlockReference ? 'size-3.5' : 'size-4'} />
-      </button>
     </div>
   );
 }
@@ -198,7 +191,7 @@ export function NodeProjection({
     return variant === 'block-reference' ? (
       <div
         aria-label="引用：目标已删除"
-        className="flex h-8 items-center gap-2 bg-white pr-4 text-[13px] text-[#9a736d]"
+        className="flex h-8 items-center gap-2 pr-4 text-[13px] text-[#9a736d]"
         contentEditable={false}
       >
         <Link2Icon aria-hidden="true" className="size-3.5 shrink-0" />

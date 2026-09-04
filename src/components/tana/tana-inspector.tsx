@@ -68,9 +68,9 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
 
   if (!node) {
     return (
-      <aside className="h-full w-80 shrink-0 border-l border-[#e6ebe8] bg-[#fbfcfb] p-5">
+      <aside className="h-full w-80 shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
         <h2 className="font-medium text-sm">检查器</h2>
-        <p className="mt-3 text-[#7b827d] text-xs">选择一个节点以查看详细信息。</p>
+        <p className="mt-3 text-[var(--tana-text-tertiary)] text-xs">选择一个节点以查看详细信息。</p>
       </aside>
     );
   }
@@ -101,12 +101,12 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
     });
 
   return (
-    <aside className="h-full w-80 shrink-0 overflow-y-auto border-l border-[#e6ebe8] bg-[#fbfcfb]">
+    <aside className="h-full w-80 shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
       <div className="px-5 pt-5 pb-4">
-        <p className="mb-2 text-[#8b938d] text-[10px] uppercase tracking-[0.12em]">
+        <p className="mb-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.12em]">
           当前节点
         </p>
-        <h2 className="truncate font-medium text-[15px] text-[#242a26]">
+        <h2 className="truncate font-medium text-[15px] text-[var(--tana-text)]">
           {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
         </h2>
       </div>
@@ -133,11 +133,11 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
 
       <FieldSection title="标签字段">
         {supertagGroups.size === 0 ? (
-          <p className="text-[#7b827d] text-xs">当前节点没有标签字段。</p>
+          <p className="text-[var(--tana-text-tertiary)] text-xs">当前节点没有标签字段。</p>
         ) : (
           Array.from(supertagGroups.entries()).map(([supertagId, fields]) => (
             <div key={supertagId} className="mb-3 last:mb-0">
-              <p className="mb-1.5 text-[#3b6d58] text-xs">
+              <p className="mb-1.5 text-[var(--tana-accent)] text-xs">
                 #{index.nodesById.get(supertagId)?.text || '未命名超级标签'}
               </p>
               <div className="space-y-0.5">
@@ -158,7 +158,7 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
 
       <FieldSection title={isSupertagDefinition ? '模板字段' : '自定义字段'}>
         {customFields.length === 0 ? (
-          <p className="mb-2 text-[#7b827d] text-xs">
+          <p className="mb-2 text-[var(--tana-text-tertiary)] text-xs">
             {isSupertagDefinition ? '暂无模板字段。' : '暂无自定义字段。'}
           </p>
         ) : (
@@ -172,7 +172,7 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
             ))}
           </div>
         )}
-        <p className="mt-2 text-[#8b938d] text-[11px]">
+        <p className="mt-2 text-[var(--tana-text-tertiary)] text-[11px]">
           在正文空节点输入 &gt; 添加字段
         </p>
       </FieldSection>
@@ -208,8 +208,8 @@ function FieldSection({
   title: string;
 }) {
   return (
-    <section className="border-t border-[#edf0ee] px-5 py-4">
-      <h3 className="mb-2.5 font-medium text-[#7b827d] text-[10px] uppercase tracking-[0.1em]">
+    <section className="border-t border-[var(--tana-divider)] px-5 py-4">
+      <h3 className="mb-2.5 font-medium text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
         {title}
       </h3>
       {children}
@@ -229,7 +229,7 @@ function TemplateFieldOptionalSection({
 
   return (
     <FieldSection title="模板字段">
-      <label className="flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--tana-text-secondary)]">
         <Checkbox
           aria-label="设为可选字段"
           checked={optional}
@@ -241,7 +241,7 @@ function TemplateFieldOptionalSection({
         />
         应用标签时不自动添加
       </label>
-      <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">
+      <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--tana-text-secondary)]">
         <Checkbox
           aria-label="设为置顶字段"
           checked={
@@ -281,13 +281,13 @@ function SupertagInheritanceSection({ supertagId }: { supertagId: NodeId }) {
           {parentIds.map((parentId) => (
             <div
               key={parentId}
-              className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[#f1f5f2]"
+              className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[var(--tana-hover)]"
             >
               <span className="min-w-0 flex-1 truncate">
                 #{index.nodesById.get(parentId)?.text || '已删除超级标签'}
               </span>
               <button
-                className="text-[#7b827d] hover:text-[#a94b40]"
+                className="text-[var(--tana-text-tertiary)] hover:text-destructive"
                 type="button"
                 onClick={() =>
                   supertag.setExtends(
@@ -304,7 +304,7 @@ function SupertagInheritanceSection({ supertagId }: { supertagId: NodeId }) {
       )}
       {candidates.length > 0 && (
         <Select onValueChange={(parentId) => supertag.setExtends(supertagId, [...parentIds, parentId])}>
-          <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+          <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
             <SelectValue placeholder="添加父标签" />
           </SelectTrigger>
           <SelectContent>
@@ -336,20 +336,20 @@ function SupertagPresentationSection({ supertagId }: { supertagId: NodeId }) {
 
   return (
     <FieldSection title="标签展示">
-      <label className="mb-2 block text-xs text-[#4b544e]" htmlFor={`title-expression-${supertagId}`}>
+      <label className="mb-2 block text-xs text-[var(--tana-text-secondary)]" htmlFor={`title-expression-${supertagId}`}>
         标题表达式
       </label>
       <input
-        className="mb-3 h-8 w-full rounded border border-[#dfe5e1] bg-white px-2 text-xs outline-none focus:border-[#4b8f70]"
+        className="mb-3 h-8 w-full rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] px-2 text-xs outline-none focus:border-[var(--tana-accent)]"
         defaultValue={definition?.titleExpression ?? ''}
         id={`title-expression-${supertagId}`}
         placeholder="例如：${状态} ${名称}"
         onBlur={(event) => supertag.setTitleExpression(supertagId, event.currentTarget.value)}
       />
-      <p className="mb-3 text-[#8b938d] text-[11px]">
+      <p className="mb-3 text-[var(--tana-text-tertiary)] text-[11px]">
         支持 ${'{name}'}、${'{字段名}'} 和 ${'{字段名?|30…}'}；不会改写原始节点标题。
       </p>
-      <label className="mb-2 block text-xs text-[#4b544e]">默认子超级标签</label>
+      <label className="mb-2 block text-xs text-[var(--tana-text-secondary)]">默认子超级标签</label>
       <Select
         value={definition?.defaultChildSupertagId ?? emptyValue}
         onValueChange={(value) =>
@@ -359,7 +359,7 @@ function SupertagPresentationSection({ supertagId }: { supertagId: NodeId }) {
           )
         }
       >
-        <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+        <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -378,8 +378,8 @@ function SupertagPresentationSection({ supertagId }: { supertagId: NodeId }) {
 function SystemFieldRow({ descriptor }: { descriptor: TanaFieldDescriptor }) {
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 py-1 text-xs">
-      <span className="text-[#7b827d]">{descriptor.label}</span>
-      <span className="truncate text-[#4c534e]">{descriptor.systemValue}</span>
+      <span className="text-[var(--tana-text-tertiary)]">{descriptor.label}</span>
+      <span className="truncate text-[var(--tana-text-secondary)]">{descriptor.systemValue}</span>
     </div>
   );
 }
@@ -396,12 +396,12 @@ function PresentationFieldRow({
   const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
 
   return (
-    <div className="group flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[#f1f5f2]">
+    <div className="group flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[var(--tana-hover)]">
       <button
         className={
           descriptor.visible
-            ? 'min-w-0 flex-1 truncate text-left hover:text-[#1f6f52]'
-            : 'min-w-0 flex-1 truncate text-left text-[#9aa19d] line-through hover:text-[#68716b]'
+            ? 'min-w-0 flex-1 truncate text-left hover:text-[var(--tana-link)]'
+            : 'min-w-0 flex-1 truncate text-left text-[var(--tana-text-tertiary)] line-through hover:text-[var(--tana-text-secondary)]'
         }
         title="打开字段定义"
         type="button"
@@ -410,7 +410,7 @@ function PresentationFieldRow({
         {descriptor.label}
       </button>
       <button
-        className="opacity-0 text-[#7b827d] text-[11px] transition-opacity hover:text-[#202421] focus:opacity-100 group-hover:opacity-100"
+        className="opacity-0 text-[var(--tana-text-tertiary)] text-[11px] transition-opacity hover:text-[var(--tana-text)] focus:opacity-100 group-hover:opacity-100"
         type="button"
         onClick={() => {
           if (!descriptor.fieldNodeId) return;
@@ -425,7 +425,7 @@ function PresentationFieldRow({
         {descriptor.visible ? '隐藏' : '显示'}
       </button>
       {descriptor.pinned && (
-        <span className="shrink-0 text-[#4f725f] text-[10px]">置顶</span>
+        <span className="shrink-0 text-[var(--tana-accent)] text-[10px]">置顶</span>
       )}
     </div>
   );
@@ -461,7 +461,7 @@ function OptionalSupertagFieldsSection({ nodeId }: { nodeId: NodeId }) {
         {templates.map((template) => (
           <button
             key={`${template.supertagId}:${template.fieldId}`}
-            className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+            className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
             type="button"
             onClick={() =>
               editor.getTransforms(TanaFieldPlugin).field.materialize(nodeId, template.fieldId)
@@ -470,7 +470,7 @@ function OptionalSupertagFieldsSection({ nodeId }: { nodeId: NodeId }) {
             <span className="min-w-0 flex-1 truncate">
               {template.field.text || '未命名字段'}
             </span>
-            <span className="text-[#4f725f] text-[11px]">添加</span>
+            <span className="text-[var(--tana-accent)] text-[11px]">添加</span>
           </button>
         ))}
       </div>
@@ -570,12 +570,12 @@ function FieldDefinitionEditor({
 
   return (
     <FieldSection title="字段设置">
-      <div className="mb-3 flex items-center gap-2 text-[#4b544e] text-xs">
-        <Settings2Icon className="size-3.5 text-[#718078]" />
+      <div className="mb-3 flex items-center gap-2 text-[var(--tana-text-secondary)] text-xs">
+        <Settings2Icon className="size-3.5 text-[var(--tana-text-tertiary)]" />
         <span>字段类型</span>
       </div>
       <Select value={definition.type} onValueChange={(value) => changeType(value as FieldType)}>
-        <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+        <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -588,12 +588,12 @@ function FieldDefinitionEditor({
       </Select>
 
       <div className="mt-3">
-        <p className="mb-1.5 text-[#7b827d] text-[11px]">字段值数量</p>
+        <p className="mb-1.5 text-[var(--tana-text-tertiary)] text-[11px]">字段值数量</p>
         <Select
           value={definition.cardinality ?? 'single'}
           onValueChange={(value) => setCardinality(value as 'list' | 'single')}
         >
-          <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+          <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -608,7 +608,7 @@ function FieldDefinitionEditor({
         )}
       </div>
 
-      <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">
+      <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-[var(--tana-text-secondary)]">
         <Checkbox
           aria-label="设为必填字段"
           checked={definition.required === true}
@@ -621,7 +621,7 @@ function FieldDefinitionEditor({
 
       {definition.type === 'from-supertag' && (
         <div className="mt-3">
-          <p className="mb-1.5 text-[#7b827d] text-[11px]">候选来源</p>
+          <p className="mb-1.5 text-[var(--tana-text-tertiary)] text-[11px]">候选来源</p>
           <Select
             value={definition.sourceSupertagId ?? undefined}
             onValueChange={(sourceSupertagId) =>
@@ -633,7 +633,7 @@ function FieldDefinitionEditor({
               })
             }
           >
-            <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+            <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
               <SelectValue placeholder="选择超级标签" />
             </SelectTrigger>
             <SelectContent>
@@ -648,27 +648,27 @@ function FieldDefinitionEditor({
       )}
 
       {definition.type === 'options' && (
-        <p className="mt-3 text-[#8b938d] text-[11px]">
+        <p className="mt-3 text-[var(--tana-text-tertiary)] text-[11px]">
           选项由正文中的直接子节点定义，可使用 Enter、拖拽与删除编辑。
         </p>
       )}
 
       {definition.type === 'number' && (
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-[#7b827d] text-[11px]">
+          <label className="text-[var(--tana-text-tertiary)] text-[11px]">
             最小值
             <input
-              className="mt-1 h-8 w-full rounded border border-[#e1e7e3] bg-white px-2 text-xs text-[#39433d] outline-none focus:border-[#83a894] focus:ring-1 focus:ring-[#c3d7c8]"
+              className="mt-1 h-8 w-full rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] px-2 text-[var(--tana-text-secondary)] text-xs outline-none focus:border-[var(--tana-accent)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
               defaultValue={definition.min ?? ''}
               inputMode="decimal"
               type="number"
               onBlur={(event) => updateNumberBoundary('min', event.currentTarget.value)}
             />
           </label>
-          <label className="text-[#7b827d] text-[11px]">
+          <label className="text-[var(--tana-text-tertiary)] text-[11px]">
             最大值
             <input
-              className="mt-1 h-8 w-full rounded border border-[#e1e7e3] bg-white px-2 text-xs text-[#39433d] outline-none focus:border-[#83a894] focus:ring-1 focus:ring-[#c3d7c8]"
+              className="mt-1 h-8 w-full rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] px-2 text-[var(--tana-text-secondary)] text-xs outline-none focus:border-[var(--tana-accent)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
               defaultValue={definition.max ?? ''}
               inputMode="decimal"
               type="number"
@@ -689,13 +689,13 @@ function SupertagInstancesSection({ supertagId }: { supertagId: NodeId }) {
   return (
     <FieldSection title={`实例 · ${instances.length}`}>
       {instances.length === 0 ? (
-        <p className="text-[#7b827d] text-xs">暂无实例。</p>
+        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无实例。</p>
       ) : (
         <div className="space-y-0.5">
           {instances.map((instance) => (
             <button
               key={instance.id}
-              className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+              className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
               type="button"
               onClick={() =>
                 editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
@@ -704,7 +704,7 @@ function SupertagInstancesSection({ supertagId }: { supertagId: NodeId }) {
               <span className="min-w-0 flex-1 truncate">
                 {instance.text || '未命名节点'}
               </span>
-              <ArrowUpRightIcon className="size-3 shrink-0 text-[#9aa19d] opacity-0 group-hover:opacity-100" />
+              <ArrowUpRightIcon className="size-3 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 group-hover:opacity-100" />
             </button>
           ))}
         </div>
@@ -732,7 +732,7 @@ function ReferenceBindingSection({ nodeId }: { nodeId: NodeId }) {
           editor.getTransforms(TanaReferencePlugin).reference.setTarget(nodeId, targetNodeId)
         }
       >
-        <SelectTrigger className="h-8 w-full bg-white text-xs shadow-none">
+        <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
           <SelectValue placeholder="选择被引用节点" />
         </SelectTrigger>
         <SelectContent>
@@ -756,7 +756,7 @@ function ReferencesSection({ nodeId }: { nodeId: NodeId }) {
   return (
     <FieldSection title={`引用 · ${references.length}`}>
       {references.length === 0 ? (
-        <p className="text-[#7b827d] text-xs">暂无引用。</p>
+        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无引用。</p>
       ) : (
         <div className="space-y-0.5">
           {references.map((reference, position) => {
@@ -766,18 +766,18 @@ function ReferencesSection({ nodeId }: { nodeId: NodeId }) {
             return (
               <button
                 key={`${reference.kind}-${reference.sourceNodeId}-${reference.path.join('.')}-${position}`}
-                className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[#f1f5f2]"
+                className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
                 type="button"
                 onClick={() =>
                   editor.getTransforms(TanaZoomPlugin).zoom.to(reference.sourceNodeId)
                 }
               >
-                <Link2Icon className="size-3 shrink-0 text-[#7f9386]" />
+                <Link2Icon className="size-3 shrink-0 text-[var(--tana-reference)]" />
                 <span className="min-w-0 flex-1 truncate">
                   {source?.text || '未命名节点'}
                 </span>
-                <span className="shrink-0 text-[#929a95] text-[10px]">{kindLabel}</span>
-                <ArrowUpRightIcon className="size-3 shrink-0 text-[#9aa19d] opacity-0 group-hover:opacity-100" />
+                <span className="shrink-0 text-[var(--tana-text-tertiary)] text-[10px]">{kindLabel}</span>
+                <ArrowUpRightIcon className="size-3 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 group-hover:opacity-100" />
               </button>
             );
           })}

@@ -52,7 +52,7 @@ export function OutlineNodeView({
   };
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
+    <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
       <EditorContainer className="min-h-0 flex-1" variant="default">
         <Editor
           className="px-8 pt-10 pb-2 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
@@ -63,7 +63,7 @@ export function OutlineNodeView({
           <div className="px-8 pb-40 sm:px-[max(64px,calc(50%-374px))]">
             <input
               aria-label="新建正文节点"
-              className="block min-h-6 w-full rounded-sm bg-transparent text-left text-[#202421] text-sm placeholder:text-[#a1a8a3] hover:bg-[#f6f8f6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8bb69b]"
+              className="block min-h-6 w-full rounded-sm bg-transparent text-left text-[var(--tana-text)] text-sm placeholder:text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent-soft)]"
               placeholder="输入内容…"
               type="text"
               style={{ paddingInlineStart: `${bodyChildIndent * 24}px` }}

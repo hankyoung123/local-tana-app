@@ -3,7 +3,6 @@
 import * as React from 'react';
 import {
   ArrowDownAZIcon,
-  ArrowUpRightIcon,
   Columns3Icon,
   GroupIcon,
   RotateCcwIcon,
@@ -44,6 +43,7 @@ import {
 } from '@/lib/tana';
 
 import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
+import { TanaNodeBullet } from './tana-node-gutter';
 
 const NO_GROUP = '__no-group__';
 const TITLE_SORT = '$title';
@@ -384,7 +384,7 @@ function ScalarFieldCell({
       <input
         aria-invalid={invalid || undefined}
         aria-label={`${fieldLabel}字段值`}
-        className="h-7 min-w-28 rounded bg-transparent px-1.5 text-xs outline-none hover:bg-muted/60 focus:bg-white focus:ring-1 focus:ring-[#8bb69b] aria-invalid:ring-1 aria-invalid:ring-destructive"
+        className="h-7 min-w-28 rounded bg-transparent px-1.5 text-xs outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)] aria-invalid:ring-1 aria-invalid:ring-destructive"
         type={inputType}
         value={draft}
         onBlur={commit}
@@ -436,16 +436,17 @@ function TableRow({
   const editableTitle = getProjectionEditableTitle(node);
 
   return (
-    <tr className="border-b last:border-0 hover:bg-muted/40">
-      <td className="min-w-56 px-3 py-2 align-middle">
+    <tr className="border-b border-[var(--tana-divider)] last:border-0 hover:bg-[var(--tana-hover)]">
+      <td className="min-w-56 px-2 py-1.5 align-middle">
         <div className="flex items-center gap-1.5">
           <button
             aria-label={`打开 ${displayTitle || '未命名节点'}`}
-            className="shrink-0 text-muted-foreground"
+            className="grid size-6 shrink-0 place-items-center rounded text-[var(--tana-node-bullet)] hover:bg-[var(--tana-accent-soft)] hover:text-[var(--tana-accent)]"
+            title="打开节点"
             type="button"
             onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
           >
-            <ArrowUpRightIcon className="size-3.5" />
+            <TanaNodeBullet compact semanticType={node.semanticType} />
           </button>
           <ProjectionTitleInput
             displayTitle={displayTitle}
@@ -456,7 +457,7 @@ function TableRow({
         </div>
       </td>
       {fieldIds.map((fieldId) => (
-        <td key={fieldId} className="min-w-32 px-3 py-2 align-middle text-xs">
+        <td key={fieldId} className="min-w-32 px-2 py-1.5 align-middle text-xs">
           <FieldCell fieldId={fieldId} index={index} nodeId={node.id} />
         </td>
       ))}
@@ -500,14 +501,13 @@ export function TanaTableView({
   const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
 
   return (
-    <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto">
         <table className="min-w-full border-collapse">
-          <thead className="bg-muted/30 text-left text-muted-foreground text-xs">
+          <thead className="border-b border-[var(--tana-divider)] text-left text-[var(--tana-text-tertiary)] text-xs">
             <tr>
-              <th className="px-3 py-2 font-medium">节点</th>
+              <th className="px-2 py-1.5 font-medium">Title</th>
               {visibleFields.map((fieldId) => (
-                <th key={fieldId} className="px-3 py-2 font-medium">
+                <th key={fieldId} className="px-2 py-1.5 font-medium">
                   {fieldName(fieldId)}
                 </th>
               ))}
@@ -517,7 +517,7 @@ export function TanaTableView({
             {results.length === 0 ? (
               <tr>
                 <td
-                  className="px-3 py-8 text-center text-muted-foreground text-xs"
+                  className="px-2 py-8 text-center text-[var(--tana-text-tertiary)] text-xs"
                   colSpan={visibleFields.length + 1}
                 >
                   没有匹配的节点
@@ -527,9 +527,9 @@ export function TanaTableView({
               groups.map((group) => (
                 <React.Fragment key={group.label || '__all__'}>
                   {activeGroupFieldId && (
-                    <tr className="border-y bg-muted/20 text-muted-foreground text-xs">
+                    <tr className="border-y border-[var(--tana-divider)] text-[var(--tana-text-tertiary)] text-xs">
                       <th
-                        className="px-3 py-1.5 text-left font-medium"
+                        className="px-2 py-1.5 text-left font-medium"
                         colSpan={visibleFields.length + 1}
                       >
                         {group.label} · {group.nodes.length}
@@ -549,7 +549,6 @@ export function TanaTableView({
             )}
           </tbody>
         </table>
-      </div>
     </div>
   );
 }
@@ -595,7 +594,7 @@ export function TanaTableToolbarControls({
         <DropdownMenuTrigger asChild>
           <button
             aria-label="选择表格字段列"
-            className="inline-flex h-8 items-center gap-1.5 rounded border bg-white px-2 text-xs hover:bg-muted"
+            className="inline-flex h-7 items-center gap-1.5 rounded px-2 text-[var(--tana-text-secondary)] text-xs hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
             type="button"
           >
             <Columns3Icon className="size-3.5" />
@@ -653,7 +652,7 @@ export function TanaTableToolbarControls({
           }
         }}
       >
-        <SelectTrigger aria-label="排序表格结果" className="h-8 w-32 bg-white text-xs shadow-none">
+        <SelectTrigger aria-label="排序表格结果" className="h-7 w-30 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
           <ArrowDownAZIcon className="size-3.5" />
           <SelectValue placeholder="排序" />
         </SelectTrigger>
@@ -678,7 +677,7 @@ export function TanaTableToolbarControls({
           })
         }
       >
-        <SelectTrigger aria-label="按字段分组" className="h-8 w-32 bg-white text-xs shadow-none">
+        <SelectTrigger aria-label="按字段分组" className="h-7 w-30 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
           <GroupIcon className="size-3.5" />
           <SelectValue />
         </SelectTrigger>

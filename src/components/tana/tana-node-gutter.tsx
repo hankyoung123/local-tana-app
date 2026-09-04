@@ -1,0 +1,209 @@
+'use client';
+
+import * as React from 'react';
+import {
+  CalendarIcon,
+  ChevronRightIcon,
+  CircleDashedIcon,
+  CircleDotIcon,
+  CircleIcon,
+  CornerDownRightIcon,
+  HashIcon,
+  ListTreeIcon,
+  ListIcon,
+  LinkIcon,
+  MailIcon,
+  PanelsTopLeftIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
+  SquareCheckBigIcon,
+  TextCursorInputIcon,
+} from 'lucide-react';
+
+import type { FieldType, TanaNodeSemanticType } from '@/lib/tana';
+import { cn } from '@/lib/utils';
+
+const semanticLabels: Record<TanaNodeSemanticType, string> = {
+  content: '节点',
+  'field-definition': '字段定义',
+  field: '字段',
+  option: '选项',
+  reference: '引用',
+  search: '搜索',
+  'supertag-definition': '超级标签',
+  value: '字段值',
+  view: '视图',
+};
+
+/**
+ * Shared semantic marker for canonical rows and derived projections. It has no
+ * state and does not own navigation; its containing button supplies that.
+ */
+export function TanaNodeBullet({
+  compact = false,
+  fieldType,
+  hasChildren = false,
+  semanticType,
+}: {
+  compact?: boolean;
+  fieldType?: FieldType;
+  hasChildren?: boolean;
+  semanticType: TanaNodeSemanticType;
+}) {
+  const size = compact ? 'size-3' : 'size-3.5';
+  const iconClassName = cn(size, 'shrink-0');
+
+  if (
+    fieldType &&
+    (semanticType === 'field' ||
+      semanticType === 'field-definition' ||
+      semanticType === 'value')
+  ) {
+    switch (fieldType) {
+      case 'checkbox':
+        return <SquareCheckBigIcon aria-hidden="true" className={iconClassName} />;
+      case 'date':
+        return <CalendarIcon aria-hidden="true" className={iconClassName} />;
+      case 'number':
+        return <HashIcon aria-hidden="true" className={iconClassName} />;
+      case 'options':
+      case 'from-supertag':
+        return <ListIcon aria-hidden="true" className={iconClassName} />;
+      case 'email':
+        return <MailIcon aria-hidden="true" className={iconClassName} />;
+      case 'url':
+        return <LinkIcon aria-hidden="true" className={iconClassName} />;
+      case 'plain':
+        return <TextCursorInputIcon aria-hidden="true" className={iconClassName} />;
+    }
+  }
+
+  switch (semanticType) {
+    case 'content':
+      return hasChildren ? (
+        <CircleDotIcon aria-hidden="true" className={iconClassName} />
+      ) : (
+        <CircleIcon aria-hidden="true" className={cn(iconClassName, 'fill-current')} />
+      );
+    case 'reference':
+      return <CircleDashedIcon aria-hidden="true" className={iconClassName} />;
+    case 'search':
+      return <SearchIcon aria-hidden="true" className={iconClassName} />;
+    case 'supertag-definition':
+      return (
+        <span aria-hidden="true" className="relative grid size-4 place-items-center">
+          <CircleIcon className="absolute size-4" />
+          <HashIcon className="relative size-2.5" />
+        </span>
+      );
+    case 'view':
+      return <PanelsTopLeftIcon aria-hidden="true" className={iconClassName} />;
+    case 'field-definition':
+      return <SlidersHorizontalIcon aria-hidden="true" className={iconClassName} />;
+    case 'field':
+      return <ListTreeIcon aria-hidden="true" className={iconClassName} />;
+    case 'value':
+      return <CornerDownRightIcon aria-hidden="true" className={iconClassName} />;
+    case 'option':
+      return <CircleIcon aria-hidden="true" className={cn(iconClassName, 'fill-current')} />;
+  }
+}
+
+/**
+ * Presentation-only shell around existing Plate controls. The caller keeps
+ * ownership of Toggle, Zoom, and DnD callbacks and refs.
+ */
+export function TanaNodeGutter({
+  className,
+  dragHandle,
+  dragHandleRef,
+  fieldType,
+  hasChildren,
+  isDraggable,
+  nodeLabel,
+  onCollapse,
+  onZoom,
+  open,
+  semanticType,
+  style,
+}: {
+  className?: string;
+  dragHandle?: React.ReactNode;
+  dragHandleRef?: React.Ref<HTMLButtonElement>;
+  hasChildren: boolean;
+  isDraggable: boolean;
+  fieldType?: FieldType;
+  nodeLabel: string;
+  onCollapse: () => void;
+  onZoom: () => void;
+  open: boolean;
+  semanticType: TanaNodeSemanticType;
+  style?: React.CSSProperties;
+}) {
+  const label = nodeLabel || '未命名节点';
+
+  return (
+    <div
+      className={cn(
+        'tana-nodeGutter absolute flex h-6 w-14 items-center',
+        className
+      )}
+      contentEditable={false}
+      style={style}
+    >
+      {hasChildren && (
+        <button
+          aria-label={open ? `折叠 ${label}` : `展开 ${label}`}
+          className="absolute left-0 grid size-6 place-items-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
+          data-plate-prevent-deselect
+          title={open ? '折叠节点' : '展开节点'}
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onCollapse();
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <ChevronRightIcon
+            aria-hidden="true"
+            className={cn('size-3.5 transition-transform duration-100', open && 'rotate-90')}
+          />
+        </button>
+      )}
+
+      <button
+        aria-label={`聚焦 ${semanticLabels[semanticType]}：${label}`}
+        className="absolute right-0 grid size-6 place-items-center rounded text-[var(--tana-node-bullet)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-accent)] focus-visible:bg-[var(--tana-hover)] focus-visible:text-[var(--tana-accent)]"
+        data-plate-prevent-deselect
+        title="聚焦节点"
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onZoom();
+        }}
+        onMouseDown={(event) => event.preventDefault()}
+      >
+        <TanaNodeBullet
+          fieldType={fieldType}
+          hasChildren={hasChildren}
+          semanticType={semanticType}
+        />
+      </button>
+
+      {isDraggable && (
+        <button
+          aria-label="拖动节点"
+          className="absolute right-5 grid size-6 place-items-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
+          data-plate-prevent-deselect
+          ref={dragHandleRef}
+          title="拖动节点"
+          type="button"
+        >
+          {dragHandle}
+        </button>
+      )}
+    </div>
+  );
+}

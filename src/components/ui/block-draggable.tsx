@@ -11,7 +11,7 @@ import {
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
-import { CircleIcon, ChevronRight, GripVertical } from 'lucide-react';
+import { GripVertical } from 'lucide-react';
 import {
   ElementApi,
   type NodeEntry,
@@ -29,10 +29,9 @@ import {
   useElement,
   usePluginOption,
 } from 'platejs/react';
-import { useSelected } from 'platejs/react';
 
-import { Button } from '@/components/ui/button';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaNodeGutter } from '@/components/tana/tana-node-gutter';
 import { getNodeRenderer } from '@/components/tana/node-renderer-registry';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
@@ -370,6 +369,27 @@ function Draggable({
     !!nodeId &&
     derivedTitle !== undefined &&
     derivedTitle !== index.nodesById.get(nodeId)?.text;
+  const semanticField = nodeId
+    ? semanticType === 'field'
+      ? index.fieldNodesById.get(nodeId)
+      : semanticType === 'value'
+        ? Array.from(index.fieldNodesById.values()).find((field) =>
+            field.valueNodeIds.includes(nodeId)
+          )
+        : undefined
+    : undefined;
+  const gutterLabel =
+    derivedTitle ||
+    (semanticField
+      ? index.nodesById.get(semanticField.fieldId)?.text
+      : index.nodesById.get(nodeId ?? '')?.text) ||
+    '';
+  const gutterFieldId =
+    semanticField?.fieldId ??
+    (semanticType === 'field-definition' ? nodeId : undefined);
+  const gutterFieldType = gutterFieldId
+    ? index.nodesById.get(gutterFieldId)?.fieldDefinition?.type
+    : undefined;
 
   const { isAboutToDrag, isDragging, nodeRef, previewRef, handleRef } =
     useDraggable({
@@ -417,7 +437,7 @@ function Draggable({
   return (
     <div
       className={cn(
-        'tana-node relative',
+        'tana-node group/tanaNode relative',
         `tana-node--${semanticType}`,
         isDragging && 'opacity-50',
         isFocusedNode && 'tana-focusedNode',
@@ -431,50 +451,28 @@ function Draggable({
       }}
     >
       <Gutter>
-          <div
-            className={cn(
-              'slate-blockToolbarWrapper',
-              'flex h-[1.5em]',
-            )}
-          >
-            <div
-              className={cn(
-                'slate-blockToolbar relative w-4.5',
-                'pointer-events-auto mr-1 flex items-center',
-              )}
-            >
-              <TanaCollapseButton
-                hasChildren={hasChildren}
-                nodeId={element.id}
-                open={typeof element.id === 'string' && openIds.has(element.id)}
-                style={{ top: `${dragButtonTop + 3}px` }}
-                tanaPath={tanaPath}
+        {nodeId && (
+          <TanaNodeGutter
+            dragHandle={
+              <DragHandle
+                isDragging={isDragging}
+                previewRef={previewRef}
+                resetPreview={resetPreview}
+                setPreviewTop={setPreviewTop}
               />
-              <TanaZoomButton
-                editor={editor}
-                nodeId={element.id}
-                style={{ top: `${dragButtonTop + 3}px` }}
-              />
-              {isDraggable && (
-                <Button
-                  aria-label="拖动节点"
-                  ref={handleRef}
-                  variant="ghost"
-                  className="left-4 absolute h-6 w-4 p-0"
-                  style={{ top: `${dragButtonTop + 3}px` }}
-                  data-plate-prevent-deselect
-                  title="拖动节点"
-                >
-                  <DragHandle
-                    isDragging={isDragging}
-                    previewRef={previewRef}
-                    resetPreview={resetPreview}
-                    setPreviewTop={setPreviewTop}
-                  />
-                </Button>
-              )}
-            </div>
-          </div>
+            }
+            dragHandleRef={handleRef}
+            fieldType={gutterFieldType}
+            hasChildren={hasChildren}
+            isDraggable={isDraggable}
+            nodeLabel={gutterLabel}
+            open={openIds.has(nodeId)}
+            semanticType={semanticType}
+            style={{ top: `${dragButtonTop + 3}px` }}
+            onCollapse={() => toggleTanaNodeCollapse(editor, nodeId, tanaPath)}
+            onZoom={() => editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)}
+          />
+        )}
       </Gutter>
 
       <div
@@ -509,7 +507,7 @@ function Draggable({
         {showsDerivedTitle && (
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-white pr-1 font-medium text-[13px] text-[#39433d]"
+            className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-[var(--tana-canvas)] pr-1 font-medium text-[13px] text-[var(--tana-text-secondary)]"
             contentEditable={false}
             style={{ left: `${indent * 24}px`, right: '1rem' }}
           >
@@ -532,81 +530,6 @@ function Draggable({
         <DropLine />
       </div>
     </div>
-  );
-}
-
-function TanaZoomButton({
-  editor,
-  nodeId,
-  style,
-}: {
-  editor: PlateEditor;
-  nodeId: unknown;
-  style: React.CSSProperties;
-}) {
-  if (typeof nodeId !== 'string') return null;
-
-  return (
-    <Button
-      size="icon"
-      variant="ghost"
-      aria-label="聚焦节点"
-      className="-left-5 absolute size-6 cursor-pointer select-none p-px text-[#8b938d] hover:bg-accent hover:text-[#1f6f52] [&_svg]:size-3"
-      contentEditable={false}
-      data-plate-prevent-deselect
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
-      }}
-      onMouseDown={(event) => event.preventDefault()}
-      style={style}
-    >
-      <CircleIcon />
-    </Button>
-  );
-}
-
-function TanaCollapseButton({
-  hasChildren,
-  nodeId,
-  open,
-  style,
-  tanaPath,
-}: {
-  hasChildren: boolean;
-  nodeId: unknown;
-  open: boolean;
-  style: React.CSSProperties;
-  tanaPath: Path;
-}) {
-  const editor = useEditorRef();
-
-  if (!hasChildren || typeof nodeId !== 'string') return null;
-
-  return (
-    <Button
-      size="icon"
-      variant="ghost"
-      aria-label={open ? '折叠节点' : '展开节点'}
-      className="-left-0 absolute size-6 cursor-pointer select-none p-px text-muted-foreground hover:bg-accent [&_svg]:size-3.5"
-      contentEditable={false}
-      style={style}
-      data-plate-prevent-deselect
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        toggleTanaNodeCollapse(editor, nodeId, tanaPath);
-      }}
-      onMouseDown={(event) => event.preventDefault()}
-    >
-      <ChevronRight
-        className={cn(
-          'transition-transform duration-75',
-          open && 'rotate-90'
-        )}
-      />
-    </Button>
   );
 }
 
@@ -673,25 +596,17 @@ function Gutter({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
-  const editor = useEditorRef();
-  const element = useElement();
   const isSelectionAreaVisible = usePluginOption(
     BlockSelectionPlugin,
     'isSelectionAreaVisible'
   );
-  const selected = useSelected();
-
   return (
     <div
       {...props}
       className={cn(
         'slate-gutterLeft',
-        '-translate-x-full absolute top-0 z-50 flex h-full cursor-text hover:opacity-100 sm:opacity-0',
-        getPluginByType(editor, element.type)?.node.isContainer
-          ? 'group-hover/container:opacity-100'
-          : 'group-hover:opacity-100',
+        '-translate-x-full absolute top-0 z-50 flex h-full cursor-text',
         isSelectionAreaVisible && 'hidden',
-        !selected && 'opacity-0',
         className
       )}
       contentEditable={false}

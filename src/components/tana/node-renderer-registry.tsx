@@ -2,11 +2,8 @@
 
 import {
   EyeOffIcon,
-  HashIcon,
-  ListFilterIcon,
   PinIcon,
   PlusIcon,
-  SlidersHorizontalIcon,
   XIcon,
 } from 'lucide-react';
 import type { TElement } from 'platejs';
@@ -57,42 +54,6 @@ export type TanaNodeRenderer = {
   Block?: React.ComponentType<TanaNodeBlockRendererProps>;
   Workspace: React.ComponentType<TanaNodeWorkspaceRendererProps>;
 };
-
-function NodeSemanticHint({ icon, label }: { icon?: React.ReactNode; label: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute top-1 right-1 z-10 flex items-center gap-1 rounded-full bg-[#f1f4f2] px-1.5 py-0.5 text-[#87918b] text-[9px] opacity-0 transition-opacity group-hover:opacity-100 [&_svg]:size-2.5"
-      contentEditable={false}
-    >
-      {icon}
-      {label}
-    </span>
-  );
-}
-
-function FieldDefinitionHint({ element }: TanaNodeBlockRendererProps) {
-  const definition = (
-    element as TElement & {
-      tanaFieldDefinition?: { type?: string };
-    }
-  ).tanaFieldDefinition;
-
-  return (
-    <NodeSemanticHint
-      icon={<SlidersHorizontalIcon />}
-      label={definition?.type ? `字段 · ${definition.type}` : '字段定义'}
-    />
-  );
-}
-
-function SupertagHint() {
-  return <NodeSemanticHint icon={<HashIcon />} label="超级标签" />;
-}
-
-function ViewHint() {
-  return <NodeSemanticHint icon={<ListFilterIcon />} label="视图" />;
-}
 
 /**
  * A block Reference is a read-through projection: its own Plate Node carries
@@ -170,7 +131,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       style={{ left: labelLeft, right: 0 }}
     >
       <button
-        className="tana-fieldLabel pointer-events-auto w-28 shrink-0 truncate text-left text-[13px] text-[#527664] hover:text-[#1f6f52]"
+        className="tana-fieldLabel pointer-events-auto w-28 shrink-0 truncate text-left text-[13px] text-[var(--tana-text-secondary)] hover:text-[var(--tana-link)]"
         data-plate-prevent-deselect
         title="打开字段定义"
         type="button"
@@ -185,12 +146,12 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
           {pinned && <PinIcon aria-label="已置顶" className="size-3 shrink-0" />}
           <span className="truncate">{field?.text || '未命名字段'}</span>
           {field?.fieldDefinition?.required && (
-            <span aria-label="必填字段" className="shrink-0 text-[#ad5c42]">*</span>
+            <span aria-label="必填字段" className="shrink-0 text-destructive">*</span>
           )}
         </span>
       </button>
 
-      <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-white/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
+      <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-[var(--tana-canvas)]/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
         {canAddValue && (
           <FieldAction
             label="添加字段值"
@@ -222,7 +183,7 @@ function FieldAction({
   return (
     <button
       aria-label={label}
-      className="grid size-6 place-items-center rounded text-[#89918b] hover:bg-[#edf3ef] hover:text-[#275d48] [&_svg]:size-3.5"
+      className="grid size-6 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-link)] [&_svg]:size-3.5"
       data-plate-prevent-deselect
       title={label}
       type="button"
@@ -285,7 +246,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
 
     return (
       <ValueControl>
-        <label className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] text-[#59615c] hover:bg-[#f5f7f5]">
+        <label className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]">
           <Checkbox
             aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
             checked={value ?? false}
@@ -312,7 +273,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       <ValueControl>
         <input
           aria-label="日期字段值"
-          className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[#39433d] outline-none hover:bg-[#f5f7f5] focus:bg-white focus:ring-1 focus:ring-[#9eb7aa]"
+          className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[var(--tana-text-secondary)] outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
           data-plate-prevent-deselect
           type="date"
           value={value}
@@ -347,7 +308,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       >
         <SelectTrigger
           aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
-          className="h-7 max-w-56 border-0 bg-transparent px-1.5 text-[13px] shadow-none hover:bg-[#f5f7f5] focus:ring-1"
+          className="h-7 max-w-56 border-0 bg-transparent px-1.5 text-[13px] shadow-none hover:bg-[var(--tana-hover)] focus:ring-1"
           data-plate-prevent-deselect
         >
           <SelectValue placeholder="未设置" />
@@ -375,7 +336,7 @@ function ValueClearButton({ onClear }: { onClear: () => void }) {
   return (
     <button
       aria-label="清空字段值"
-      className="grid size-6 shrink-0 place-items-center rounded text-[#929a95] hover:bg-[#edf3ef] hover:text-[#275d48]"
+      className="grid size-6 shrink-0 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-link)]"
       data-plate-prevent-deselect
       title="清空字段值"
       type="button"
@@ -408,7 +369,7 @@ function UnsetValuePlaceholder() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute top-0 z-10 flex h-8 items-center text-[#9aa19d] text-[13px]"
+      className="pointer-events-none absolute top-0 z-10 flex h-8 items-center text-[var(--tana-text-tertiary)] text-[13px]"
       contentEditable={false}
       style={{ left: 'var(--tana-field-value-offset)' }}
     >
@@ -423,20 +384,16 @@ function UnsetValuePlaceholder() {
  */
 export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer> = {
   content: { Workspace: OutlineRenderer },
-  'field-definition': {
-    Block: FieldDefinitionHint,
-    Workspace: OutlineRenderer
-  },
+  'field-definition': { Workspace: OutlineRenderer },
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
   option: { Workspace: OutlineRenderer },
   reference: { Block: ReferenceRenderer, Workspace: OutlineRenderer },
   search: { Workspace: ViewRenderer },
   'supertag-definition': {
-    Block: SupertagHint,
     Workspace: SupertagInstancesRenderer
   },
   value: { Block: ValueRenderer, Workspace: OutlineRenderer },
-  view: { Block: ViewHint, Workspace: ViewRenderer }
+  view: { Workspace: ViewRenderer }
 };
 
 export function getNodeRenderer(semanticType: TanaNodeSemanticType): TanaNodeRenderer {

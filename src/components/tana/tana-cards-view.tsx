@@ -41,7 +41,7 @@ export function TanaCardsView({
         {results.map((node) => (
           <article
             key={node.id}
-            className="cursor-pointer overflow-hidden rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md"
+            className="cursor-pointer overflow-hidden rounded-lg border bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)]"
             onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
           >
             <NodeProjection
@@ -80,7 +80,7 @@ export function TanaCardsToolbarControls({
       <DropdownMenuTrigger asChild>
         <button
           aria-label="选择卡片显示字段"
-          className="inline-flex h-8 items-center gap-1.5 rounded border bg-white px-2 text-xs hover:bg-muted"
+          className="inline-flex h-7 items-center gap-1.5 rounded px-2 text-[var(--tana-text-secondary)] text-xs hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
           type="button"
         >
           <Columns3Icon className="size-3.5" />

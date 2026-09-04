@@ -188,7 +188,7 @@ export function TanaCalendarView({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {days.map((day) => (
-            <section key={day} className="overflow-hidden rounded-lg border bg-white">
+            <section key={day} className="overflow-hidden rounded-lg border bg-[var(--tana-canvas)]">
               <h2 className="border-b bg-muted/30 px-3 py-2 font-medium text-sm">
                 {formatTanaDay(day)}
               </h2>
@@ -244,7 +244,7 @@ export function TanaCalendarToolbarControls({
         })
       }
     >
-      <SelectTrigger aria-label="选择日历日期字段" className="h-8 w-40 bg-white text-xs shadow-none">
+      <SelectTrigger aria-label="选择日历日期字段" className="h-7 w-40 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

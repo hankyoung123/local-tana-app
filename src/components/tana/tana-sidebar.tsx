@@ -29,7 +29,7 @@ type TanaSidebarProps = {
   onOpenSearch: () => void;
 };
 
-/** Quiet text navigation. Global search deliberately lives in the main shell. */
+/** Quiet text navigation. Search opens the shared Command popup. */
 export function TanaSidebar({
   activeNodeId,
   collapsed,
@@ -38,7 +38,6 @@ export function TanaSidebar({
   onOpenSearch,
 }: TanaSidebarProps) {
   const editor = useEditorRef();
-  const [dayInput, setDayInput] = React.useState('');
   const supertags = Array.from(index.nodesById.values()).filter(
     (node) =>
       isTanaNodeActive(index, node.id) &&
@@ -48,10 +47,10 @@ export function TanaSidebar({
 
   if (collapsed) {
     return (
-      <aside className="flex h-full w-10 shrink-0 justify-center border-r border-[#e6ebe8] bg-[#fafbfa] pt-3">
+      <aside className="flex h-full w-10 shrink-0 justify-center border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)] pt-3">
         <button
           aria-label="展开导航"
-          className="grid size-7 place-items-center rounded-md text-[#7b827d] hover:bg-[#edf2ef] hover:text-[#202421]"
+          className="grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
           type="button"
           onClick={() => onCollapsedChange(false)}
         >
@@ -62,17 +61,17 @@ export function TanaSidebar({
   }
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-[#e6ebe8] bg-[#fafbfa]">
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
       <div className="flex h-12 items-center justify-between px-4">
-        <span className="flex items-center gap-2 font-medium text-[13px]">
-          <span className="grid size-5 place-items-center rounded-md bg-[#35654f] font-semibold text-white text-[10px]">
+        <span className="flex items-center gap-2 font-medium text-[13px] text-[var(--tana-text)]">
+          <span className="grid size-5 place-items-center rounded-md bg-[var(--tana-accent)] font-semibold text-white text-[10px]">
             T
           </span>
           Local Tana
         </span>
         <button
           aria-label="收起导航"
-          className="grid size-7 place-items-center rounded-md text-[#7b827d] hover:bg-[#edf2ef] hover:text-[#202421]"
+          className="grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
           type="button"
           onClick={() => onCollapsedChange(true)}
         >
@@ -81,7 +80,41 @@ export function TanaSidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-5">
-        <SidebarSection title="工作区">
+        <nav aria-label="主导航" className="space-y-0.5">
+          <SidebarButton
+            onClick={() => editor.getTransforms(TanaTimePlugin).time.today()}
+          >
+            <CalendarDaysIcon className="size-3.5 text-[var(--tana-accent)]" />
+            Today
+          </SidebarButton>
+          <SidebarButton onClick={onOpenSearch}>
+            <SearchIcon className="size-3.5 shrink-0 text-[var(--tana-accent)]" />
+            Search
+            <span className="ml-auto text-[var(--tana-text-tertiary)] text-[10px]">⌘ P</span>
+          </SidebarButton>
+        </nav>
+
+        <SidebarSection title="Supertags">
+          {supertags.length === 0 ? (
+            <p className="px-2 py-1 text-[var(--tana-text-tertiary)] text-xs">暂无超级标签</p>
+          ) : (
+            supertags.map((node) => (
+              <SidebarButton
+                key={node.id}
+                active={activeNodeId === node.id}
+                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
+              >
+                <HashIcon className="size-3.5 shrink-0 text-[var(--tana-accent)]" />
+                <span className="truncate">#{node.text || '未命名超级标签'}</span>
+                <span className="ml-auto text-[var(--tana-text-tertiary)] text-[10px] tabular-nums">
+                  {getActiveSupertagInstances(index, node.id).length}
+                </span>
+              </SidebarButton>
+            ))
+          )}
+        </SidebarSection>
+
+        <SidebarSection title="Workspace">
           <SidebarButton
             active={activeNodeId === homeNodeId}
             onClick={() =>
@@ -90,80 +123,8 @@ export function TanaSidebar({
                 : editor.getTransforms(TanaZoomPlugin).zoom.root()
             }
           >
-            <HomeIcon className="size-3.5 text-[#6f7d75]" />
-            主页
-          </SidebarButton>
-        </SidebarSection>
-
-        <SidebarSection title="每日笔记">
-          <div className="space-y-1 px-1">
-            <div className="flex items-center gap-1">
-              <SidebarButton
-                aria-label="前一天"
-                className="w-7 justify-center px-0"
-                onClick={() => editor.getTransforms(TanaTimePlugin).time.previousDay()}
-              >
-                <ChevronLeftIcon className="size-3.5 text-[#6f7d75]" />
-              </SidebarButton>
-              <SidebarButton
-                className="flex-1"
-                onClick={() => editor.getTransforms(TanaTimePlugin).time.today()}
-              >
-                <CalendarDaysIcon className="size-3.5 text-[#4f725f]" />
-                今天
-              </SidebarButton>
-              <SidebarButton
-                aria-label="后一天"
-                className="w-7 justify-center px-0"
-                onClick={() => editor.getTransforms(TanaTimePlugin).time.nextDay()}
-              >
-                <ChevronRightIcon className="size-3.5 text-[#6f7d75]" />
-              </SidebarButton>
-            </div>
-            <input
-              aria-label="前往指定日期"
-              className="h-7 w-full rounded border border-[#e1e7e3] bg-white px-2 text-xs text-[#39433d] outline-none focus:border-[#83a894] focus:ring-1 focus:ring-[#c3d7c8]"
-              type="date"
-              value={dayInput}
-              onChange={(event) => setDayInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || !dayInput) return;
-
-                event.preventDefault();
-                editor.getTransforms(TanaTimePlugin).time.goToDay(dayInput);
-              }}
-              onBlur={() => {
-                if (dayInput) editor.getTransforms(TanaTimePlugin).time.goToDay(dayInput);
-              }}
-            />
-          </div>
-        </SidebarSection>
-
-        <SidebarSection title="超级标签">
-          {supertags.length === 0 ? (
-            <p className="px-2 py-1 text-[#8b938d] text-xs">暂无超级标签</p>
-          ) : (
-            supertags.map((node) => (
-              <SidebarButton
-                key={node.id}
-                active={activeNodeId === node.id}
-                onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
-              >
-                <HashIcon className="size-3.5 shrink-0 text-[#4f725f]" />
-                <span className="truncate">#{node.text || '未命名超级标签'}</span>
-                <span className="ml-auto text-[#8b938d] text-[10px] tabular-nums">
-                  {getActiveSupertagInstances(index, node.id).length}
-                </span>
-              </SidebarButton>
-            ))
-          )}
-        </SidebarSection>
-
-        <SidebarSection title="搜索">
-          <SidebarButton onClick={onOpenSearch}>
-            <SearchIcon className="size-3.5 shrink-0 text-[#4f725f]" />
-            搜索节点
-            <span className="ml-auto text-[#8b938d] text-[10px]">⌘ P</span>
+            <HomeIcon className="size-3.5 text-[var(--tana-text-secondary)]" />
+            Home
           </SidebarButton>
         </SidebarSection>
       </div>
@@ -179,8 +140,8 @@ function SidebarSection({
   title: string;
 }) {
   return (
-    <section className="mb-5">
-      <h2 className="px-2 py-1.5 font-medium text-[#8b938d] text-[10px] uppercase tracking-[0.1em]">
+    <section className="mt-5">
+      <h2 className="px-2 py-1.5 font-medium text-[var(--tana-text-tertiary)] text-[11px]">
         {title}
       </h2>
       <div className="space-y-0.5">{children}</div>
@@ -197,8 +158,8 @@ function SidebarButton({
   return (
     <button
       className={cn(
-        'flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-[#edf2ef]',
-        active && 'bg-[#e7efe9] font-medium text-[#2c604b]',
+        'flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]',
+        active && 'bg-[var(--tana-selected)] font-medium text-[var(--tana-accent)]',
         className
       )}
       type="button"

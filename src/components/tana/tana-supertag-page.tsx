@@ -54,28 +54,27 @@ export function TanaSupertagPage({ index, node }: { index: TanaIndex; node: Tana
   const children = getTanaSupertagPageChildren(index, node);
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <header className="shrink-0 border-b px-6 py-5 sm:px-10">
-        <p className="mb-1 text-muted-foreground text-xs">超级标签节点</p>
-        <h1 className="flex items-center gap-1.5 font-semibold text-2xl">
-          <HashIcon aria-hidden="true" className="size-5 text-[#4f725f]" />
+    <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
+      <header className="shrink-0 px-6 pt-8 sm:px-10">
+        <h1 className="flex min-h-7 items-center gap-2 font-medium text-[19px] tracking-[-0.015em]">
+          <HashIcon aria-hidden="true" className="size-4 text-[var(--tana-accent)]" />
           {node.text || '未命名超级标签'}
         </h1>
-        <div aria-label="超级标签内容" className="mt-4 flex gap-1 overflow-x-auto border-b text-sm" role="tablist">
+        <div aria-label="超级标签内容" className="mt-3 flex gap-1 overflow-x-auto border-b border-[var(--tana-divider)] text-sm" role="tablist">
           <button
             aria-selected="true"
-            className="shrink-0 border-[#4f725f] border-b-2 px-2 pb-2 font-medium text-[#2c604b]"
+            className="shrink-0 border-[var(--tana-accent)] border-b-2 px-2 pb-2 font-medium text-[var(--tana-accent)]"
             role="tab"
             type="button"
           >
             全部实例
-            <span className="ml-1.5 text-muted-foreground text-xs">{instances.length}</span>
+            <span className="ml-1.5 text-[var(--tana-text-tertiary)] text-xs">{instances.length}</span>
           </button>
           {children.map((child) => (
             <button
               key={child.id}
               aria-selected="false"
-              className="shrink-0 px-2 pb-2 text-muted-foreground hover:text-foreground"
+              className="shrink-0 px-2 pb-2 text-[var(--tana-text-tertiary)] hover:text-[var(--tana-text)]"
               role="tab"
               type="button"
               onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(child.id)}
@@ -85,9 +84,9 @@ export function TanaSupertagPage({ index, node }: { index: TanaIndex; node: Tana
           ))}
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10">
         {instances.length === 0 ? (
-          <p className="text-muted-foreground text-sm">暂无超级标签实例。</p>
+          <p className="text-[var(--tana-text-tertiary)] text-sm">暂无超级标签实例。</p>
         ) : (
           <TanaTableView index={index} results={instances} view={node} />
         )}

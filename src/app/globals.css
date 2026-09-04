@@ -26,6 +26,21 @@
   --ring: oklch(0.55 0.09 158);
   --highlight: oklch(0.88 0.16 92);
   --brand: oklch(0.44 0.1 158);
+
+  /* Tana presentation hierarchy. Document semantics never depend on these. */
+  --tana-canvas: #ffffff;
+  --tana-sidebar: #fafbfa;
+  --tana-text: #202421;
+  --tana-text-secondary: #5f6862;
+  --tana-text-tertiary: #8b938d;
+  --tana-hover: #f1f5f2;
+  --tana-selected: #e7f0e9;
+  --tana-divider: #e6ebe8;
+  --tana-accent: #2d6a4f;
+  --tana-accent-soft: #eaf2ed;
+  --tana-link: #327356;
+  --tana-node-bullet: #66776d;
+  --tana-reference: #779083;
 }
 
 .dark {
@@ -49,6 +64,19 @@
   --ring: oklch(0.62 0.1 158);
   --highlight: oklch(0.78 0.15 92);
   --brand: oklch(0.7 0.12 158);
+  --tana-canvas: #191d1a;
+  --tana-sidebar: #1d221f;
+  --tana-text: #edf1ed;
+  --tana-text-secondary: #b8c0ba;
+  --tana-text-tertiary: #89938c;
+  --tana-hover: #272e2a;
+  --tana-selected: #263b2e;
+  --tana-divider: #303832;
+  --tana-accent: #8dc8a1;
+  --tana-accent-soft: #263b2e;
+  --tana-link: #9fd3af;
+  --tana-node-bullet: #b2c2b8;
+  --tana-reference: #a9c7b4;
 }
 
 @theme inline {
@@ -95,7 +123,7 @@
 /* The focused Plate Node is the page title; no duplicated heading is rendered. */
 .tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] {
   margin-top: 0;
-  color: #202421;
+  color: var(--tana-text);
   font-size: 1.625rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -103,7 +131,7 @@
 }
 
 .tana-nodeFields [data-radix-select-trigger] svg {
-  color: #9aa19d;
+  color: var(--tana-text-tertiary);
 }
 
 /*
@@ -148,5 +176,5 @@
 
 .tana-node--field:hover .tana-fieldLabel,
 .tana-node--field:has(+ .tana-node--value:hover) .tana-fieldLabel {
-  color: #1f6f52;
+  color: var(--tana-link);
 }

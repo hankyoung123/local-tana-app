@@ -4,8 +4,9 @@ import * as React from 'react';
 
 import {
   CornerDownLeftIcon,
-  PanelRightIcon,
+  EllipsisIcon,
   SearchIcon,
+  Settings2Icon,
 } from 'lucide-react';
 import {
   useEditorRef,
@@ -23,6 +24,14 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   getTanaAncestorPaths,
   getTanaNodePath,
@@ -52,15 +61,15 @@ function SearchResult({
 }) {
   return (
     <CommandItem
-      className="group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[#eef3f0]"
+      className="group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[var(--tana-hover)]"
       value={`${node.text} ${node.id}`}
       onSelect={() => onNavigate(node.id)}
     >
-      <span className="grid size-5 shrink-0 place-items-center rounded bg-[#e6eee9] text-[#4f725f] text-[10px]">
+      <span className="grid size-5 shrink-0 place-items-center rounded bg-[var(--tana-accent-soft)] text-[var(--tana-accent)] text-[10px]">
         {node.semanticType === 'supertag-definition' ? '#' : '•'}
       </span>
       <span className="min-w-0 flex-1 truncate">{node.text || '未命名节点'}</span>
-      <span className="opacity-0 text-[#8f9792] group-hover:opacity-100">
+      <span className="opacity-0 text-[var(--tana-text-tertiary)] group-hover:opacity-100">
         <CornerDownLeftIcon className="size-3" />
       </span>
     </CommandItem>
@@ -170,7 +179,7 @@ function TanaWorkspaceContent({
   return (
     <div
       ref={hotkeyRef}
-      className="flex h-dvh min-w-0 bg-[#f6f8f6] text-[#202421]"
+      className="flex h-dvh min-w-0 bg-[var(--tana-sidebar)] text-[var(--tana-text)]"
     >
       <TanaOutlinerOpenState />
       <TanaSidebar
@@ -182,13 +191,13 @@ function TanaWorkspaceContent({
       />
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="relative flex h-12 shrink-0 items-center border-b border-[#e6ebe8] bg-white/95 px-5">
+        <div className="relative flex h-10 shrink-0 items-center border-b border-[var(--tana-divider)] bg-[color:var(--tana-canvas)]/95 px-5">
           <nav
             aria-label="路径导航"
-            className="flex min-w-0 flex-1 items-center gap-1 text-[#7b827d] text-xs"
+            className="flex min-w-0 flex-1 items-center gap-1 text-[var(--tana-text-tertiary)] text-xs"
           >
             <button
-              className="truncate hover:text-[#202421] disabled:text-[#202421]"
+              className="truncate hover:text-[var(--tana-text)] disabled:text-[var(--tana-text)]"
               disabled={!focusedNodeId}
               type="button"
               onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
@@ -200,16 +209,16 @@ function TanaWorkspaceContent({
 
               return (
                 <React.Fragment key={node.id}>
-                  <span aria-hidden="true" className="text-[#b0b6b2]">
+                  <span aria-hidden="true" className="text-[var(--tana-text-tertiary)]/60">
                     /
                   </span>
                   {isCurrent ? (
-                    <span className="truncate font-medium text-[#343a36]">
+                    <span className="truncate font-medium text-[var(--tana-text)]">
                       {node.text || '未命名节点'}
                     </span>
                   ) : (
                     <button
-                      className="truncate hover:text-[#202421]"
+                      className="truncate hover:text-[var(--tana-text)]"
                       type="button"
                       onClick={() =>
                         editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
@@ -223,42 +232,47 @@ function TanaWorkspaceContent({
             })}
           </nav>
 
-          <div className="ml-4 flex shrink-0 items-center gap-3 text-xs">
+          <div className="ml-4 flex shrink-0 items-center gap-2 text-xs">
             {persistenceStatus === 'saving' && (
-              <span className="text-[#7b827d]">正在保存…</span>
+              <span
+                aria-label="正在保存"
+                className="size-1.5 animate-pulse rounded-full bg-[var(--tana-text-tertiary)]"
+                title="正在保存"
+              />
             )}
             {persistenceStatus === 'error' && (
               <span className="font-medium text-destructive">保存失败</span>
             )}
-            {persistenceStatus === 'browser-preview' && (
-              <span className="text-[#8b938d]">浏览器预览</span>
-            )}
-            <button
-              className="flex h-7 items-center gap-1.5 rounded-md px-2 text-[#527664] hover:bg-[#f1f5f2] hover:text-[#1f6f52]"
-              type="button"
-              onClick={openSearch}
-            >
-              <SearchIcon className="size-3.5" />
-              搜索
-              <kbd className="ml-1 text-[#a1a8a3] text-[10px]">⌘P</kbd>
-            </button>
-            <button
-              aria-pressed={fieldPanelOpen}
-              className={`flex h-7 items-center gap-1.5 rounded-md px-2 hover:bg-[#f1f5f2] ${
-                fieldPanelOpen
-                  ? 'bg-[#eaf1ed] font-medium text-[#1f6f52]'
-                  : 'text-[#527664] hover:text-[#1f6f52]'
-              }`}
-              type="button"
-              onClick={() => setFieldPanelOpen((open) => !open)}
-            >
-              <PanelRightIcon className="size-3.5" />
-              检查器
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  aria-label="更多页面操作"
+                  className="grid size-7 place-items-center rounded text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+                  type="button"
+                >
+                  <EllipsisIcon className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-36">
+                <DropdownMenuLabel className="text-[11px] text-[var(--tana-text-tertiary)]">
+                  当前页面
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setFieldPanelOpen(true)}>
+                  <Settings2Icon />
+                  配置…
+                </DropdownMenuItem>
+                {fieldPanelOpen && (
+                  <DropdownMenuItem onSelect={() => setFieldPanelOpen(false)}>
+                    关闭配置
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           {searchOpen && (
-            <div className="absolute top-12 right-4 z-50 w-[22rem] overflow-hidden rounded-xl border border-[#dfe6e1] bg-white p-2 shadow-[0_18px_50px_rgb(28_48_38/0.16)]">
+            <div className="absolute top-11 right-4 z-50 w-[22rem] overflow-hidden rounded-xl border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2 shadow-[0_18px_50px_rgb(28_48_38/0.16)]">
               <Command
                 shouldFilter={false}
                 onKeyDown={(event) => {
@@ -270,7 +284,7 @@ function TanaWorkspaceContent({
                   }
                 }}
               >
-                <div className="mb-1 flex items-center gap-2 px-2 text-[#87908a] text-[10px] uppercase tracking-[0.1em]">
+                <div className="mb-1 flex items-center gap-2 px-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
                   <SearchIcon className="size-3" />
                   全局搜索
                 </div>
@@ -297,12 +311,12 @@ function TanaWorkspaceContent({
                       </CommandGroup>
                     </>
                   ) : (
-                    <p className="px-2.5 py-5 text-center text-[#8b938d] text-xs">
+                    <p className="px-2.5 py-5 text-center text-[var(--tana-text-tertiary)] text-xs">
                       输入关键词搜索所有节点
                     </p>
                   )}
                 </CommandList>
-                <div className="mt-1 flex items-center justify-between border-t border-[#eef1ef] px-2 pt-2 text-[#9aa19d] text-[10px]">
+                <div className="mt-1 flex items-center justify-between border-t border-[var(--tana-divider)] px-2 pt-2 text-[var(--tana-text-tertiary)] text-[10px]">
                   <span>↑↓ 选择 · Enter 打开</span>
                   <span>Esc 关闭</span>
                 </div>
