@@ -842,6 +842,85 @@ describe('Field occurrence Nodes', () => {
     assert.equal(index.fieldNodesByParent.get('task')![0]!.valueNodeIds[0], valueNodeId);
   });
 
+  test('rejects list to single when one occurrence has multiple valid Value Nodes', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Tags' }],
+        id: 'tags',
+        tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'tags'));
+    assert.equal(
+      transforms.setValue('task', 'tags', { type: 'plain', value: 'One' }),
+      true
+    );
+    const secondValueNodeId = transforms.addValue('task', 'tags', {
+      type: 'plain',
+      value: 'Two',
+    });
+    assert.ok(secondValueNodeId);
+    const before = structuredClone(editor.children);
+
+    assert.equal(transforms.updateDefinition('tags', { type: 'plain' }), false);
+
+    const index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.nodesById.get('tags')?.fieldDefinition, {
+      cardinality: 'list',
+      type: 'plain',
+    });
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.values, [
+      { type: 'plain', value: 'One' },
+      { type: 'plain', value: 'Two' },
+    ]);
+    assert.equal(
+      index.fieldNodesByParent.get('task')![0]!.valueNodeIds.includes(secondValueNodeId),
+      true
+    );
+    assert.deepEqual(editor.children, before);
+  });
+
+  test('rejects list to single when one real Value Node is empty', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Tags' }],
+        id: 'tags',
+        tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'tags'));
+    const emptyValueNodeId = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!
+      .valueNodeIds[0];
+    const secondValueNodeId = transforms.addValue('task', 'tags', {
+      type: 'plain',
+      value: 'Foo',
+    });
+    assert.ok(secondValueNodeId);
+
+    assert.equal(transforms.updateDefinition('tags', { type: 'plain' }), false);
+
+    const index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.nodesById.get('tags')?.fieldDefinition, {
+      cardinality: 'list',
+      type: 'plain',
+    });
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.valueNodeIds, [
+      emptyValueNodeId,
+      secondValueNodeId,
+    ]);
+    assert.deepEqual(index.fieldNodesByParent.get('task')![0]!.values, [
+      { type: 'plain', value: 'Foo' },
+    ]);
+  });
+
   test('rejects list to single when any occurrence has multiple valid Value Nodes', () => {
     const editor = createEditor([
       { children: [{ text: 'Task A' }], id: 'task-a', type: KEYS.p },

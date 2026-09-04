@@ -563,7 +563,7 @@ function updateDefinition(editor: PlateEditor, fieldId: NodeId, definition: Fiel
     currentCardinality === 'list' &&
     nextCardinality === 'single' &&
     Array.from(buildTanaIndex(editor.children).fieldNodesById.values()).some(
-      (field) => field.fieldId === fieldId && field.values.length > 1
+      (field) => field.fieldId === fieldId && field.valueNodeIds.length > 1
     )
   ) {
     return false;
