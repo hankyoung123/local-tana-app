@@ -20,17 +20,48 @@ describe('Tana Supertag page', () => {
         children: [{ text: 'Status' }],
         id: 'status',
         indent: 1,
-        tanaFieldDefinition: { type: 'plain' },
+        tanaFieldDefinition: { type: 'options' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Todo' }], id: 'todo', indent: 2, type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'owner-occurrence',
+        indent: 1,
+        tanaFieldId: 'owner',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Alice' }],
+        id: 'owner-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
         type: KEYS.p,
       },
       { children: [{ text: 'Notes' }], id: 'notes', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Search' }],
+        id: 'search',
+        indent: 1,
+        tanaSearchDefinition: {
+          query: { children: [], type: 'and' },
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'View' }],
+        id: 'view',
+        indent: 1,
+        tanaViewDefinition: { type: 'outline' },
+        type: KEYS.p,
+      },
       { children: [{ text: 'Nested note' }], id: 'nested', indent: 2, type: KEYS.p },
     ];
     const index = buildTanaIndex(value);
 
     assert.deepEqual(
       getTanaSupertagPageChildren(index, index.nodesById.get('project')!).map(({ id }) => id),
-      ['status', 'notes']
+      ['notes', 'search', 'view']
     );
   });
 });

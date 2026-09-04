@@ -8,7 +8,7 @@ import {
   GroupIcon,
   RotateCcwIcon,
 } from 'lucide-react';
-import { useEditorRef } from 'platejs/react';
+import { useEditorRef, type PlateEditor } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
@@ -72,6 +72,20 @@ function getField(index: TanaIndex, nodeId: NodeId, fieldId: NodeId) {
   return (index.fieldNodesByParent.get(nodeId) ?? []).find(
     (candidate) => candidate.fieldId === fieldId
   );
+}
+
+/** Commits a real Table edit, materializing an absent optional Field on demand. */
+export function setTanaTableFieldValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  value: FieldValue
+): boolean {
+  const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+
+  if (!fieldTransforms.materialize(nodeId, fieldId)) return false;
+
+  return fieldTransforms.setValue(nodeId, fieldId, value);
 }
 
 function getFieldValueLabel(
@@ -196,26 +210,30 @@ function FieldCell({
   const definition = index.nodesById.get(fieldId)?.fieldDefinition;
   const fieldLabel = index.nodesById.get(fieldId)?.text || '字段';
 
-  if (!field || !definition) return <span className="text-muted-foreground">—</span>;
+  if (!definition) return <span className="text-muted-foreground">—</span>;
 
   const setValue = (value: FieldValue) =>
-    editor.getTransforms(TanaFieldPlugin).field.setValue(nodeId, fieldId, value);
+    setTanaTableFieldValue(editor, nodeId, fieldId, value);
   const clearValue = () =>
-    editor.getTransforms(TanaFieldPlugin).field.clearValue(nodeId, fieldId);
+    field
+      ? editor.getTransforms(TanaFieldPlugin).field.clearValue(nodeId, fieldId)
+      : false;
 
-  if (definition.cardinality === 'list') {
+  if (definition.cardinality === 'list' && field) {
     const label = getFieldValueLabel(index, field);
 
     return (
       <div className="flex min-w-28 items-center gap-1.5">
         <span className="min-w-0 flex-1 truncate text-xs">{label || '未设置'}</span>
-        {field.values.length > 0 && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+        {(field?.values.length ?? 0) > 0 && (
+          <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />
+        )}
       </div>
     );
   }
 
   if (definition.type === 'checkbox') {
-    const value = field.value?.type === 'checkbox' ? field.value.value : false;
+    const value = field?.value?.type === 'checkbox' ? field.value.value : false;
 
     return (
       <div className="flex items-center gap-1">
@@ -226,13 +244,13 @@ function FieldCell({
             if (typeof checked === 'boolean') setValue({ type: 'checkbox', value: checked });
           }}
         />
-        {field.value && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+        {field?.value && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
       </div>
     );
   }
 
   if (definition.type === 'options' || definition.type === 'from-supertag') {
-    const value = field.value?.type === definition.type ? field.value.value : undefined;
+    const value = field?.value?.type === definition.type ? field.value.value : undefined;
     const candidates = getFieldValueCandidates(index, fieldId);
 
     return (
@@ -263,7 +281,7 @@ function FieldCell({
   }
 
   const committedValue =
-    field.value?.type === definition.type ? String(field.value.value) : '';
+    field?.value?.type === definition.type ? String(field.value.value) : '';
 
   return (
     <ScalarFieldCell

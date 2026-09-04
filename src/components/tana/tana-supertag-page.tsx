@@ -22,7 +22,16 @@ export function getTanaSupertagPageChildren(
   return (index.childrenByParent.get(supertag.id) ?? []).flatMap((nodeId) => {
     const node = index.nodesById.get(nodeId);
 
-    return node && isTanaNodeActive(index, node.id) ? [node] : [];
+    if (!node || !isTanaNodeActive(index, node.id)) return [];
+
+    const isContentChild = node.semanticTypes.some((semantic) =>
+      ['content', 'reference', 'search', 'view'].includes(semantic)
+    );
+    const isStructuralChild = node.semanticTypes.some((semantic) =>
+      ['field', 'field-definition', 'value', 'option'].includes(semantic)
+    );
+
+    return isContentChild && !isStructuralChild ? [node] : [];
   });
 }
 
