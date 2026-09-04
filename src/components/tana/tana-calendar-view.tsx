@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
 import {
@@ -114,13 +115,15 @@ export function formatTanaCalendarMonth(month: string): string {
 export function TanaCalendarView({
   index,
   results,
+  view,
 }: {
   index: TanaIndex;
   results: readonly TanaNode[];
+  view: TanaNode;
 }) {
   const editor = useEditorRef();
   const dateFieldIds = getTanaDateFieldIds(index, results);
-  const [dateFieldId, setDateFieldId] = React.useState<NodeId>();
+  const dateFieldId = view.viewDefinition?.calendarDateFieldId;
   const activeDateFieldId =
     dateFieldId && dateFieldIds.includes(dateFieldId) ? dateFieldId : undefined;
   const entries = getTanaCalendarEntries(index, results, activeDateFieldId);
@@ -140,7 +143,11 @@ export function TanaCalendarView({
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={activeDateFieldId ?? ALL_DATES}
-          onValueChange={(value) => setDateFieldId(value === ALL_DATES ? undefined : value)}
+          onValueChange={(value) =>
+            editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+              calendarDateFieldId: value === ALL_DATES ? undefined : value,
+            })
+          }
         >
           <SelectTrigger aria-label="选择日历日期字段" className="h-8 w-44 bg-white text-xs shadow-none">
             <SelectValue />

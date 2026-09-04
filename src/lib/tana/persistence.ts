@@ -223,14 +223,44 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   if (semantic.tanaViewDefinition !== undefined) {
-    const definition = semantic.tanaViewDefinition as { type?: unknown };
+    const definition = semantic.tanaViewDefinition as Record<string, unknown>;
+    const visibleFieldIds = definition?.visibleFieldIds;
+    const sort = definition?.sort;
 
     if (
       !definition ||
       (definition.type !== 'outline' &&
         definition.type !== 'table' &&
         definition.type !== 'calendar' &&
-        definition.type !== 'cards')
+        definition.type !== 'cards') ||
+      !Object.keys(definition).every((key) =>
+        [
+          'calendarDateFieldId',
+          'groupFieldId',
+          'sort',
+          'type',
+          'visibleFieldIds',
+        ].includes(key)
+      ) ||
+      (visibleFieldIds !== undefined &&
+        (!Array.isArray(visibleFieldIds) ||
+          !visibleFieldIds.every(
+            (fieldId) => typeof fieldId === 'string' && fieldId.length > 0
+          ) ||
+          new Set(visibleFieldIds).size !== visibleFieldIds.length)) ||
+      (definition.groupFieldId !== undefined &&
+        (typeof definition.groupFieldId !== 'string' || definition.groupFieldId.length === 0)) ||
+      (definition.calendarDateFieldId !== undefined &&
+        (typeof definition.calendarDateFieldId !== 'string' ||
+          definition.calendarDateFieldId.length === 0)) ||
+      (sort !== undefined &&
+        (!sort ||
+          typeof sort !== 'object' ||
+          !Object.keys(sort).every((key) => key === 'direction' || key === 'fieldId') ||
+          (sort as { direction?: unknown }).direction !== 'asc' &&
+            (sort as { direction?: unknown }).direction !== 'desc' ||
+          typeof (sort as { fieldId?: unknown }).fieldId !== 'string' ||
+          (sort as { fieldId: string }).fieldId.length === 0))
     ) {
       return false;
     }

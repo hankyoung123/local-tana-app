@@ -196,6 +196,35 @@ describe('Plate document persistence', () => {
     );
   });
 
+  test('keeps View presentation settings in the persisted Plate Document', () => {
+    const document = withWorkspace([
+      {
+        children: [{ text: 'Tasks' }],
+        id: 'tasks-view',
+        tanaViewDefinition: {
+          calendarDateFieldId: 'due-date',
+          groupFieldId: 'status',
+          sort: { direction: 'asc', fieldId: '$title' },
+          type: 'table',
+          visibleFieldIds: ['status', 'owner'],
+        },
+        type: 'p',
+      },
+    ]);
+
+    const reloaded = JSON.parse(JSON.stringify(document)) as Value;
+
+    assert.equal(isValidTanaDocument(document), true);
+    assert.equal(isValidTanaDocument(reloaded), true);
+    assert.deepEqual(reloaded.at(-1)?.tanaViewDefinition, {
+      calendarDateFieldId: 'due-date',
+      groupFieldId: 'status',
+      sort: { direction: 'asc', fieldId: '$title' },
+      type: 'table',
+      visibleFieldIds: ['status', 'owner'],
+    });
+  });
+
   test('accepts explicit system Nodes and rejects invalid membership metadata', () => {
     assert.equal(
       isValidTanaDocument([

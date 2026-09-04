@@ -112,6 +112,45 @@ describe('Tana view mutations', () => {
     });
   });
 
+  test('keeps View presentation settings on the View Node across type changes and reloads', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Tasks' }],
+        id: 'view',
+        tanaSearchDefinition: { query: { children: [], type: 'and' } },
+        tanaViewDefinition: { type: 'table' },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.equal(
+      view(editor).update('view', {
+        groupFieldId: 'status',
+        sort: { direction: 'desc', fieldId: '$title' },
+        visibleFieldIds: ['status', 'owner'],
+      }),
+      true
+    );
+    assert.equal(
+      view(editor).update('view', { calendarDateFieldId: 'due-date' }),
+      true
+    );
+    assert.equal(view(editor).setType('view', 'cards'), true);
+
+    const reloaded = createEditor(JSON.parse(JSON.stringify(editor.children)) as Value);
+
+    assert.deepEqual(reloaded.children[0].tanaViewDefinition, {
+      calendarDateFieldId: 'due-date',
+      groupFieldId: 'status',
+      sort: { direction: 'desc', fieldId: '$title' },
+      type: 'cards',
+      visibleFieldIds: ['status', 'owner'],
+    });
+    assert.deepEqual(reloaded.children[0].tanaSearchDefinition, {
+      query: { children: [], type: 'and' },
+    });
+  });
+
   test('composes a View with a Supertag Definition without changing either Node semantic', () => {
     const editor = createEditor(value);
     const supertagDefinition = structuredClone(

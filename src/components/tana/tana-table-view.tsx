@@ -11,6 +11,7 @@ import {
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -38,17 +39,15 @@ import {
   type TanaFieldNode,
   type TanaIndex,
   type TanaNode,
+  type TanaViewDefinition,
 } from '@/lib/tana';
 
 import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
 
 const NO_GROUP = '__no-group__';
-const TITLE_SORT = '__title__';
+const TITLE_SORT = '$title';
 
-type TanaTableSort = {
-  direction: 'asc' | 'desc';
-  fieldId: NodeId | typeof TITLE_SORT;
-};
+type TanaTableSort = NonNullable<TanaViewDefinition['sort']>;
 
 type ScalarDefinition = Exclude<
   FieldDefinition,
@@ -404,20 +403,31 @@ function TableRow({
 export function TanaTableView({
   index,
   results,
+  view,
 }: {
   index: TanaIndex;
   results: readonly TanaNode[];
+  view: TanaNode;
 }) {
+  const editor = useEditorRef();
   const fieldIds = getTanaTableFieldIds(index, results);
-  const [hiddenFieldIds, setHiddenFieldIds] = React.useState<readonly NodeId[]>([]);
-  const [sort, setSort] = React.useState<TanaTableSort>();
-  const [groupFieldId, setGroupFieldId] = React.useState<NodeId>();
-
-  const visibleFields = fieldIds.filter((fieldId) => !hiddenFieldIds.includes(fieldId));
+  const viewSettings = view.viewDefinition;
+  const configuredVisibleFieldIds = viewSettings?.visibleFieldIds;
+  const configuredSort = viewSettings?.sort;
+  const configuredGroupFieldId = viewSettings?.groupFieldId;
+  const visibleFields = configuredVisibleFieldIds
+    ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
+    : fieldIds;
   const activeSort =
-    sort && sort.fieldId !== TITLE_SORT && !fieldIds.includes(sort.fieldId) ? undefined : sort;
+    configuredSort &&
+    configuredSort.fieldId !== TITLE_SORT &&
+    !fieldIds.includes(configuredSort.fieldId)
+      ? undefined
+      : configuredSort;
   const activeGroupFieldId =
-    groupFieldId && fieldIds.includes(groupFieldId) ? groupFieldId : undefined;
+    configuredGroupFieldId && fieldIds.includes(configuredGroupFieldId)
+      ? configuredGroupFieldId
+      : undefined;
   const sortedResults = sortTanaTableNodes(index, results, activeSort);
   const groups = groupTanaTableNodes(index, sortedResults, activeGroupFieldId);
   const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
@@ -445,14 +455,24 @@ export function TanaTableView({
               fieldIds.map((fieldId) => (
                 <DropdownMenuCheckboxItem
                   key={fieldId}
-                  checked={!hiddenFieldIds.includes(fieldId)}
-                  onCheckedChange={(checked) =>
-                    setHiddenFieldIds((current) =>
-                      checked
-                        ? current.filter((currentFieldId) => currentFieldId !== fieldId)
-                        : Array.from(new Set([...current, fieldId]))
-                    )
-                  }
+                  checked={visibleFields.includes(fieldId)}
+                  onCheckedChange={(checked) => {
+                    const nextVisibleFieldIds = new Set(
+                      configuredVisibleFieldIds ?? fieldIds
+                    );
+
+                    if (checked) {
+                      nextVisibleFieldIds.add(fieldId);
+                    } else {
+                      nextVisibleFieldIds.delete(fieldId);
+                    }
+
+                    editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+                      visibleFieldIds: fieldIds.filter((candidateId) =>
+                        nextVisibleFieldIds.has(candidateId)
+                      ),
+                    });
+                  }}
                 >
                   {fieldName(fieldId)}
                 </DropdownMenuCheckboxItem>
@@ -462,16 +482,21 @@ export function TanaTableView({
         </DropdownMenu>
 
         <Select
-          value={sort ? `${sort.fieldId}:${sort.direction}` : undefined}
+          value={activeSort ? `${activeSort.fieldId}:${activeSort.direction}` : undefined}
           onValueChange={(value) => {
             if (value === '__none__') {
-              setSort(undefined);
+              editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: undefined });
               return;
             }
             const [fieldId, direction] = value.split(':');
 
             if ((direction === 'asc' || direction === 'desc') && fieldId) {
-              setSort({ direction, fieldId: fieldId as NodeId | typeof TITLE_SORT });
+              editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+                sort: {
+                  direction,
+                  fieldId: fieldId === TITLE_SORT ? TITLE_SORT : (fieldId as NodeId),
+                },
+              });
             }
           }}
         >
@@ -494,7 +519,11 @@ export function TanaTableView({
 
         <Select
           value={activeGroupFieldId ?? NO_GROUP}
-          onValueChange={(value) => setGroupFieldId(value === NO_GROUP ? undefined : value)}
+          onValueChange={(value) =>
+            editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+              groupFieldId: value === NO_GROUP ? undefined : value,
+            })
+          }
         >
           <SelectTrigger aria-label="按字段分组" className="h-8 w-36 bg-white text-xs shadow-none">
             <GroupIcon className="size-3.5" />

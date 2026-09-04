@@ -76,11 +76,11 @@ export function TanaView({
             </div>
           </div>
         ) : view.viewDefinition?.type === "table" ? (
-          <TanaTableView index={index} results={results} />
+          <TanaTableView index={index} results={results} view={view} />
         ) : view.viewDefinition?.type === "calendar" ? (
-          <TanaCalendarView index={index} results={results} />
+          <TanaCalendarView index={index} results={results} view={view} />
         ) : view.viewDefinition?.type === "cards" ? (
-          <TanaCardsView index={index} results={results} />
+          <TanaCardsView index={index} results={results} view={view} />
         ) : (
           <div className="mx-auto max-w-3xl divide-y rounded-lg border">
             {results.map((node) => (

@@ -109,7 +109,7 @@ export function describeTanaQueryClause(
     case "parent-is":
       return `父节点是 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId}`;
     case "child-of":
-      return `子节点包含 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId}`;
+      return `是 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId} 的直接子节点`;
     case "descendant-of":
       return `属于 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId} 的后代`;
     case "references":
@@ -210,9 +210,7 @@ export function matchesTanaQueryPredicate(
     case "parent-is":
       return index.parentNodeIds.get(node.id) === predicate.nodeId;
     case "child-of":
-      return (
-        index.childrenByParent.get(node.id)?.includes(predicate.nodeId) ?? false
-      );
+      return index.parentNodeIds.get(node.id) === predicate.nodeId;
     case "descendant-of":
       return isDescendantOf(index, node.id, predicate.nodeId);
     case "references":

@@ -428,7 +428,7 @@ function QueryPredicateForm({
           <SelectItem value="field-exists">字段已设置</SelectItem>
           <SelectItem value="text-contains">文本包含</SelectItem>
           <SelectItem value="parent-is">父节点是</SelectItem>
-          <SelectItem value="child-of">子节点包含</SelectItem>
+          <SelectItem value="child-of">是节点的直接子节点</SelectItem>
           <SelectItem value="descendant-of">属于节点后代</SelectItem>
           <SelectItem value="references">引用节点</SelectItem>
           <SelectItem value="referenced-by">被节点引用</SelectItem>

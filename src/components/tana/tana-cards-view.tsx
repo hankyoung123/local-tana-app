@@ -1,9 +1,9 @@
 'use client';
 
-import * as React from 'react';
 import { Columns3Icon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
+import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   DropdownMenu,
@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana';
+import type { TanaIndex, TanaNode } from '@/lib/tana';
 
 import { NodeProjection } from './node-projection';
 import { getTanaTableFieldIds } from './tana-table-view';
@@ -22,14 +22,18 @@ import { getTanaTableFieldIds } from './tana-table-view';
 export function TanaCardsView({
   index,
   results,
+  view,
 }: {
   index: TanaIndex;
   results: readonly TanaNode[];
+  view: TanaNode;
 }) {
   const editor = useEditorRef();
   const fieldIds = getTanaTableFieldIds(index, results);
-  const [hiddenFieldIds, setHiddenFieldIds] = React.useState<readonly NodeId[]>([]);
-  const visibleFieldIds = fieldIds.filter((fieldId) => !hiddenFieldIds.includes(fieldId));
+  const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
+  const visibleFieldIds = configuredVisibleFieldIds
+    ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
+    : fieldIds;
 
   return (
     <div className="space-y-3">
@@ -51,14 +55,24 @@ export function TanaCardsView({
             {fieldIds.map((fieldId) => (
               <DropdownMenuCheckboxItem
                 key={fieldId}
-                checked={!hiddenFieldIds.includes(fieldId)}
-                onCheckedChange={(checked) =>
-                  setHiddenFieldIds((current) =>
-                    checked
-                      ? current.filter((currentFieldId) => currentFieldId !== fieldId)
-                      : Array.from(new Set([...current, fieldId]))
-                  )
-                }
+                checked={visibleFieldIds.includes(fieldId)}
+                onCheckedChange={(checked) => {
+                  const nextVisibleFieldIds = new Set(
+                    configuredVisibleFieldIds ?? fieldIds
+                  );
+
+                  if (checked) {
+                    nextVisibleFieldIds.add(fieldId);
+                  } else {
+                    nextVisibleFieldIds.delete(fieldId);
+                  }
+
+                  editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+                    visibleFieldIds: fieldIds.filter((candidateId) =>
+                      nextVisibleFieldIds.has(candidateId)
+                    ),
+                  });
+                }}
               >
                 {index.nodesById.get(fieldId)?.text || '未命名字段'}
               </DropdownMenuCheckboxItem>

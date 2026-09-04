@@ -527,6 +527,7 @@ function FieldDefinitionEditor({
 }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
+  const [cardinalityNotice, setCardinalityNotice] = React.useState<string>();
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const supertags = Array.from(index.nodesById.values()).filter((node) =>
     node.semanticTypes.includes('supertag-definition')
@@ -554,7 +555,13 @@ function FieldDefinitionEditor({
       delete next.cardinality;
     }
 
-    fieldTransforms.updateDefinition(fieldId, next);
+    const updated = fieldTransforms.updateDefinition(fieldId, next);
+
+    setCardinalityNotice(
+      updated || cardinality !== 'single'
+        ? undefined
+        : '该字段仍有节点使用多个值，不能改为单个值。'
+    );
   };
 
   const setRequired = (required: boolean) => {
@@ -632,6 +639,11 @@ function FieldDefinitionEditor({
             <SelectItem value="list">多个值</SelectItem>
           </SelectContent>
         </Select>
+        {cardinalityNotice && (
+          <p className="mt-1.5 text-amber-700 text-xs" role="status">
+            {cardinalityNotice}
+          </p>
+        )}
       </div>
 
       <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-[#4b544e]">

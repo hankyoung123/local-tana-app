@@ -556,6 +556,19 @@ function updateDefinition(editor: PlateEditor, fieldId: NodeId, definition: Fiel
 
   if (!entry?.[0].tanaFieldDefinition) return false;
 
+  const currentCardinality = entry[0].tanaFieldDefinition.cardinality ?? 'single';
+  const nextCardinality = definition.cardinality ?? 'single';
+
+  if (
+    currentCardinality === 'list' &&
+    nextCardinality === 'single' &&
+    Array.from(buildTanaIndex(editor.children).fieldNodesById.values()).some(
+      (field) => field.fieldId === fieldId && field.values.length > 1
+    )
+  ) {
+    return false;
+  }
+
   editor.tf.setNodes({ tanaFieldDefinition: definition }, { at: entry[1] });
 
   return true;

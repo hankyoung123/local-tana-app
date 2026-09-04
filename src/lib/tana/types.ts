@@ -89,7 +89,14 @@ export type TanaSearchDefinition = {
 
 /** View presentation never owns Search results or canonical Node data. */
 export type TanaViewDefinition = {
+  calendarDateFieldId?: NodeId;
+  groupFieldId?: NodeId;
+  sort?: {
+    direction: 'asc' | 'desc';
+    fieldId: NodeId | '$title';
+  };
   type: 'calendar' | 'cards' | 'outline' | 'table';
+  visibleFieldIds?: readonly NodeId[];
 };
 
 /**

@@ -281,8 +281,8 @@ describe("runTanaQuery", () => {
       ["child"],
     );
     assert.deepEqual(
-      run([{ kind: "child-of", nodeId: "child" }]).map(({ id }) => id),
-      ["parent"],
+      run([{ kind: "child-of", nodeId: "parent" }]).map(({ id }) => id),
+      ["child"],
     );
     assert.deepEqual(
       run([{ kind: "descendant-of", nodeId: "parent" }]).map(({ id }) => id),

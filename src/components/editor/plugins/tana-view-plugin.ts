@@ -8,6 +8,13 @@ import type { NodeId, TanaBlockElement, TanaViewDefinition } from '@/lib/tana/ty
 
 export const TANA_VIEW_PLUGIN_KEY = 'tanaView' as const;
 
+type TanaViewPresentationPatch = Partial<
+  Pick<
+    TanaViewDefinition,
+    'calendarDateFieldId' | 'groupFieldId' | 'sort' | 'visibleFieldIds'
+  >
+>;
+
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
 
@@ -54,6 +61,28 @@ function remove(editor: PlateEditor, nodeId: NodeId) {
   return true;
 }
 
+function writeDefinition(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  patch: Partial<TanaViewDefinition>
+) {
+  const entry = getTanaNodeEntry(editor, nodeId);
+
+  if (!entry?.[0].tanaViewDefinition) {
+    return false;
+  }
+
+  const nextDefinition = { ...entry[0].tanaViewDefinition, ...patch };
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) Reflect.deleteProperty(nextDefinition, key);
+  }
+
+  editor.tf.setNodes({ tanaViewDefinition: nextDefinition }, { at: entry[1] });
+
+  return true;
+}
+
 function setType(
   editor: PlateEditor,
   nodeId: NodeId,
@@ -65,9 +94,15 @@ function setType(
     return false;
   }
 
-  editor.tf.setNodes({ tanaViewDefinition: { type } }, { at: entry[1] });
+  return writeDefinition(editor, nodeId, { type });
+}
 
-  return true;
+function update(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  patch: TanaViewPresentationPatch
+) {
+  return writeDefinition(editor, nodeId, patch);
 }
 
 /** Owns only the presentation metadata of a View Node. */
@@ -79,5 +114,7 @@ export const TanaViewPlugin = createPlatePlugin({
     remove: (nodeId: NodeId) => remove(editor, nodeId),
     setType: (nodeId: NodeId, type: TanaViewDefinition['type']) =>
       setType(editor, nodeId, type),
+    update: (nodeId: NodeId, patch: TanaViewPresentationPatch) =>
+      update(editor, nodeId, patch),
   },
 }));
