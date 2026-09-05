@@ -20,8 +20,8 @@ type ReferenceGroup = {
   relations: readonly ReferenceRelation[];
 };
 
-function getReferenceBreadcrumb(index: TanaIndex, nodeId: NodeId): string {
-  const labels: string[] = ['工作区'];
+export function getReferenceBreadcrumb(index: TanaIndex, nodeId: NodeId): string {
+  const labels: string[] = [];
   const visited = new Set<NodeId>();
   let parentId = index.parentNodeIds.get(nodeId);
 
@@ -36,7 +36,7 @@ function getReferenceBreadcrumb(index: TanaIndex, nodeId: NodeId): string {
     parentId = index.parentNodeIds.get(parentId);
   }
 
-  return labels.join(' / ');
+  return ['工作区', ...labels].join(' / ');
 }
 
 /** Relation grouping is derived from TanaIndex and preserves document order. */

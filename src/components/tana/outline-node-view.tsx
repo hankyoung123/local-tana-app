@@ -6,10 +6,11 @@ import { useEditorRef, useEditorSelector } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Editor, EditorContainer } from '@/components/ui/editor';
-import { isTanaFieldHostNode, type NodeId } from '@/lib/tana';
+import { type NodeId } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
 import { TanaReferencesSection } from './tana-references-section';
+import { TanaZoomPresentationProvider } from './tana-zoom-presentation';
 /** Renders the Plate editor and focuses a Zoom target only after it has mounted. */
 export function OutlineNodeView({
   focusedNodeId,
@@ -19,17 +20,13 @@ export function OutlineNodeView({
 }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
-  const bodyChildIndent = useEditorSelector(
+  const baseIndent = useEditorSelector(
     (currentEditor) => {
       if (!focusedNodeId) return null;
 
       const entry = currentEditor.api.node({ at: [], id: focusedNodeId });
 
-      if (!entry || !isTanaFieldHostNode(currentEditor.children, entry[1])) {
-        return null;
-      }
-
-      return typeof entry[0].indent === 'number' ? entry[0].indent + 1 : 1;
+      return entry && typeof entry[0].indent === 'number' ? entry[0].indent : 0;
     },
     [focusedNodeId]
   );
@@ -37,56 +34,30 @@ export function OutlineNodeView({
   React.useEffect(() => {
     if (!focusedNodeId) return;
 
+    // A focused page exposes its last empty direct child through Plate itself.
+    // The transform only creates that canonical child; focus, IME, history, and
+    // all subsequent editing stay inside the mounted Plate editor.
+    editor.getTransforms(TanaZoomPlugin).zoom.ensureBodyChild();
     editor.getApi(TanaZoomPlugin).zoom.focus(focusedNodeId);
   }, [editor, focusedNodeId]);
 
-  const materializeBodyInput = (input: HTMLInputElement) => {
-    const text = input.value;
-
-    if (!text) return;
-
-    if (editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild()) {
-      editor.tf.insertText(text);
-      input.value = '';
-    }
-  };
-
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
-      <EditorContainer className="min-h-0 flex-1" variant="default">
-        <Editor
-          className="px-8 pt-10 pb-2 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
-          placeholder="新建节点…"
-          variant="none"
-        />
-        {bodyChildIndent !== null && (
-          <div className="px-8 pb-40 sm:px-[max(64px,calc(50%-374px))]">
-            <input
-              aria-label="新建正文节点"
-              className="block min-h-6 w-full rounded-sm bg-transparent text-left text-[var(--tana-text)] text-sm placeholder:text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent-soft)]"
-              placeholder="输入内容…"
-              type="text"
-              style={{ paddingInlineStart: `${bodyChildIndent * 24}px` }}
-              onInput={(event) => {
-                if ((event.nativeEvent as InputEvent).isComposing) return;
-
-                materializeBodyInput(event.currentTarget);
-              }}
-              onCompositionEnd={(event) => {
-                materializeBodyInput(event.currentTarget);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.preventDefault();
-              }}
-            />
-          </div>
-        )}
-        {focusedNodeId && (
-          <div className="px-8 pb-12 sm:px-[max(64px,calc(50%-374px))]">
-            <TanaReferencesSection index={index} nodeId={focusedNodeId} />
-          </div>
-        )}
-      </EditorContainer>
-    </section>
+    <TanaZoomPresentationProvider
+      baseIndent={baseIndent ?? 0}
+    >
+      <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
+        <EditorContainer className="min-h-0 flex-1" variant="default">
+          <Editor
+            className="px-8 pt-10 pb-40 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
+            variant="none"
+          />
+          {focusedNodeId && (
+            <div className="px-8 pb-12 sm:px-[max(64px,calc(50%-374px))]">
+              <TanaReferencesSection index={index} nodeId={focusedNodeId} />
+            </div>
+          )}
+        </EditorContainer>
+      </section>
+    </TanaZoomPresentationProvider>
   );
 }

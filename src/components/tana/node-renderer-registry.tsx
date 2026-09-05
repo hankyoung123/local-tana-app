@@ -35,8 +35,13 @@ import {
 
 import { OutlineNodeView } from './outline-node-view';
 import { NodeProjection } from './node-projection';
+import {
+  getTanaDisplayIndentPx,
+  TANA_FIELD_LABEL_PX,
+} from './tana-presentation';
 import { TanaView } from './tana-view';
 import { TanaSupertagPage } from './tana-supertag-page';
+import { useTanaZoomPresentation } from './tana-zoom-presentation';
 
 export type TanaNodeBlockRendererProps = {
   element: TElement;
@@ -62,13 +67,14 @@ export type TanaNodeRenderer = {
  */
 function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const targetNodeId = (element as TanaBlockElement).tanaReferenceTargetId;
+  const { baseIndent } = useTanaZoomPresentation();
   const indent = typeof element.indent === 'number' ? element.indent : 0;
 
   return (
     <div
       className="absolute inset-y-0 z-20"
       contentEditable={false}
-      style={{ left: `${indent * 24}px`, right: 0 }}
+      style={{ left: `${getTanaDisplayIndentPx(indent, baseIndent)}px`, right: 0 }}
     >
       <NodeProjection
         index={index}
@@ -108,12 +114,13 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const fieldNodeId = typeof element.id === 'string' ? element.id : undefined;
   const fieldNode = fieldNodeId ? index.fieldNodesById.get(fieldNodeId) : undefined;
   const fieldId = fieldNode?.fieldId;
+  const { baseIndent } = useTanaZoomPresentation();
 
   if (!fieldNode || typeof fieldId !== 'string') return null;
 
   const field = index.nodesById.get(fieldId);
   const indent = typeof element.indent === 'number' ? element.indent : 0;
-  const labelLeft = `${indent * 24}px`;
+  const labelLeft = `${getTanaDisplayIndentPx(indent, baseIndent)}px`;
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const pinned = (index.nodesById.get(fieldNode.parentNodeId)?.supertagIds ?? []).some(
@@ -126,15 +133,16 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
 
   return (
     <div
-      className="tana-fieldChrome absolute inset-y-0 z-20 flex items-center"
+      className="tana-fieldChrome absolute top-0 z-20 flex h-7 items-center"
       contentEditable={false}
       style={{ left: labelLeft, right: 0 }}
     >
       <button
-        className="tana-fieldLabel pointer-events-auto w-28 shrink-0 truncate text-left text-[13px] text-[var(--tana-text-secondary)] hover:text-[var(--tana-link)]"
+        className="tana-fieldLabel pointer-events-auto shrink-0 truncate pr-1 text-left text-[13px] text-[var(--tana-text-secondary)] hover:text-[var(--tana-link)]"
         data-plate-prevent-deselect
         title="打开字段定义"
         type="button"
+        style={{ width: `${TANA_FIELD_LABEL_PX}px` }}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -355,7 +363,7 @@ function ValueClearButton({ onClear }: { onClear: () => void }) {
 function ValueControl({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="tana-valueControl absolute top-0 right-4 z-10 flex h-8 items-center"
+      className="tana-valueControl absolute top-0 right-4 z-10 flex h-7 items-center"
       contentEditable={false}
       data-plate-prevent-deselect
       style={{ left: 'var(--tana-field-value-offset)' }}
@@ -369,7 +377,7 @@ function UnsetValuePlaceholder() {
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute top-0 z-10 flex h-8 items-center text-[var(--tana-text-tertiary)] text-[13px]"
+      className="pointer-events-none absolute top-0 z-10 flex h-7 items-center text-[var(--tana-text-tertiary)] text-[13px] opacity-80"
       contentEditable={false}
       style={{ left: 'var(--tana-field-value-offset)' }}
     >

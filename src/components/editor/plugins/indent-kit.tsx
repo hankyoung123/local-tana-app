@@ -3,6 +3,8 @@
 import { IndentPlugin } from '@platejs/indent/react';
 import { KEYS } from 'platejs';
 
+import { TANA_INDENT_PX } from '@/components/tana/tana-presentation';
+
 export const IndentKit = [
   IndentPlugin.configure({
     inject: {
@@ -14,7 +16,7 @@ export const IndentKit = [
       ],
     },
     options: {
-      offset: 24,
+      offset: TANA_INDENT_PX,
     },
   }),
 ];

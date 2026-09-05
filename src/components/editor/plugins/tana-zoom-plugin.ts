@@ -14,6 +14,7 @@ import {
   isTanaFieldNodePresentationHidden,
   isTanaNodeInteractable,
 } from '@/lib/tana/outliner';
+import { getNodeSemanticType } from '@/lib/tana/node-semantic';
 import type { NodeId } from '@/lib/tana/types';
 
 import { TanaSupertagPlugin } from './tana-supertag-plugin';
@@ -119,7 +120,7 @@ function getTanaZoomBodyInsertionPath(editor: PlateEditor, hostPath: number[]) {
  * It performs no projection or state tracking: the new Node immediately joins
  * the regular Plate editing flow.
  */
-function insertZoomBodyChild(editor: PlateEditor) {
+function insertZoomBodyChild(editor: PlateEditor, { select = true } = {}) {
   const focusedNodeId = getFocusedNodeId(editor);
 
   if (!focusedNodeId) return false;
@@ -143,7 +144,41 @@ function insertZoomBodyChild(editor: PlateEditor) {
   }
   editor.getApi(TogglePlugin).toggle.toggleIds([focusedNodeId], true);
 
-  return navigate(editor, childPath);
+  return select ? navigate(editor, childPath) : true;
+}
+
+function isEmptyZoomBodyChild(editor: PlateEditor, path: number[]) {
+  const entry = editor.api.node(path);
+
+  if (!entry || !ElementApi.isElement(entry[0])) return false;
+
+  return (
+    getNodeSemanticType(entry[0], {
+      document: editor.children,
+      path,
+    }) === 'content' &&
+    getTanaNodeDescendantPaths(editor.children, path).length === 0 &&
+    entry[0].children.length === 1 &&
+    'text' in entry[0].children[0] &&
+    entry[0].children[0].text === ''
+  );
+}
+
+/** Ensures the trailing body affordance is one ordinary, canonical Plate Node. */
+function ensureZoomBodyChild(editor: PlateEditor) {
+  const focusedNodeId = getFocusedNodeId(editor);
+
+  if (!focusedNodeId) return false;
+
+  const hostEntry = getTanaNodeEntry(editor, focusedNodeId);
+
+  if (!hostEntry || !isTanaFieldHostNode(editor.children, hostEntry[1])) return false;
+
+  const trailingChild = getTanaDirectChildPaths(editor.children, hostEntry[1]).at(-1);
+
+  if (trailingChild && isEmptyZoomBodyChild(editor, trailingChild)) return true;
+
+  return insertZoomBodyChild(editor, { select: false });
 }
 
 function focus(editor: PlateEditor, targetNodeId: NodeId) {
@@ -227,6 +262,7 @@ export const TanaZoomPlugin = createPlatePlugin<
   }))
   .extendEditorTransforms(({ editor }) => ({
     zoom: {
+      ensureBodyChild: () => ensureZoomBodyChild(editor),
       insertBodyChild: () => insertZoomBodyChild(editor),
       out: () => zoomOut(editor),
       root: () => zoomRoot(editor),

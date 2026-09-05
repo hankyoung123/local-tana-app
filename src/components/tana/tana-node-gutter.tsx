@@ -120,6 +120,7 @@ export function TanaNodeGutter({
   fieldType,
   hasChildren,
   isDraggable,
+  isFocusedNode = false,
   nodeLabel,
   onCollapse,
   onZoom,
@@ -132,6 +133,7 @@ export function TanaNodeGutter({
   dragHandleRef?: React.Ref<HTMLButtonElement>;
   hasChildren: boolean;
   isDraggable: boolean;
+  isFocusedNode?: boolean;
   fieldType?: FieldType;
   nodeLabel: string;
   onCollapse: () => void;
@@ -150,6 +152,7 @@ export function TanaNodeGutter({
         // bullet remains the closest affordance in both default and hover
         // states: `>  ⋮  ●  Node`.
         'tana-nodeGutter absolute grid h-6 w-[60px] grid-cols-3 items-center',
+        isFocusedNode && 'text-[var(--tana-text-tertiary)]',
         className
       )}
       contentEditable={false}
@@ -176,6 +179,19 @@ export function TanaNodeGutter({
         </button>
       )}
 
+      {isDraggable && (
+        <button
+          aria-label="拖动节点"
+          className="col-start-2 grid size-5 place-self-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
+          data-plate-prevent-deselect
+          ref={dragHandleRef}
+          title="拖动节点"
+          type="button"
+        >
+          {dragHandle}
+        </button>
+      )}
+
       <button
         aria-label={`聚焦 ${semanticLabels[semanticType]}：${label}`}
         className="col-start-3 grid size-5 place-self-center rounded text-[var(--tana-node-bullet)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-accent)] focus-visible:bg-[var(--tana-hover)] focus-visible:text-[var(--tana-accent)]"
@@ -190,24 +206,12 @@ export function TanaNodeGutter({
         onMouseDown={(event) => event.preventDefault()}
       >
         <TanaNodeBullet
+          compact={isFocusedNode}
           fieldType={fieldType}
           hasChildren={hasChildren}
           semanticType={semanticType}
         />
       </button>
-
-      {isDraggable && (
-        <button
-          aria-label="拖动节点"
-          className="col-start-2 grid size-5 place-self-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
-          data-plate-prevent-deselect
-          ref={dragHandleRef}
-          title="拖动节点"
-          type="button"
-        >
-          {dragHandle}
-        </button>
-      )}
     </div>
   );
 }

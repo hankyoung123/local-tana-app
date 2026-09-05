@@ -35,6 +35,15 @@ import { TanaNodeGutter } from '@/components/tana/tana-node-gutter';
 import { getNodeRenderer } from '@/components/tana/node-renderer-registry';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
+  getTanaDisplayIndent,
+  getTanaDisplayIndentPx,
+  TANA_FIELD_LABEL_PX,
+  TANA_FIELD_VALUE_GAP_PX,
+  TANA_GUTTER_PX,
+  TANA_INDENT_PX,
+} from '@/components/tana/tana-presentation';
+import { useTanaZoomPresentation } from '@/components/tana/tana-zoom-presentation';
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -148,6 +157,7 @@ function TanaDraggableNode(props: PlateElementProps) {
   return (
     <Draggable
       {...props}
+      focusedNodeId={focusedNodeId}
       hasChildren={nodeState.hasChildren}
       isFocusedNode={
         typeof props.element.id === 'string' && props.element.id === focusedNodeId
@@ -170,11 +180,49 @@ function HiddenTanaNode({ children }: Pick<PlateElementProps, 'children'>) {
   );
 }
 
+/** The last empty direct content child is the Zoom page's Body affordance. */
+function isEmptyTrailingZoomBodyNode(
+  editor: PlateEditor,
+  element: TElement,
+  path: Path,
+  focusedNodeId: string | null
+): boolean {
+  if (
+    !focusedNodeId ||
+    getNodeSemanticType(element, { document: editor.children, path }) !== 'content' ||
+    element.children.length !== 1 ||
+    !('text' in element.children[0]) ||
+    element.children[0].text !== '' ||
+    getTanaNodeDescendantPaths(editor.children, path).length > 0
+  ) {
+    return false;
+  }
+
+  const parentPath = getTanaParentPath(editor.children, path);
+  const parent = parentPath ? editor.api.node(parentPath)?.[0] : undefined;
+
+  return (
+    !!parentPath &&
+    ElementApi.isElement(parent) &&
+    parent.id === focusedNodeId &&
+    getTanaDirectChildPaths(editor.children, parentPath).at(-1)?.[0] === path[0]
+  );
+}
+
 /**
- * Structured Value Nodes retain their canonical text for the Field plugin,
- * while the adjacent control is their only editable and accessible surface.
+ * This is the one visual override of Plate's raw indent injection. It leaves
+ * the persisted indent untouched while rendering relative to the Zoom root.
+ * Structured Values additionally retain their canonical text only for the
+ * Field plugin, while their control remains the accessible editing surface.
  */
-function StructuredValueChildren({ children }: Pick<PlateElementProps, 'children'>) {
+function PresentationChildren({
+  children,
+  displayIndent,
+  structuredValue = false,
+}: Pick<PlateElementProps, 'children'> & {
+  displayIndent: number;
+  structuredValue?: boolean;
+}) {
   if (!React.isValidElement<{ attributes?: Record<string, unknown> }>(children)) {
     return <MemoizedChildren>{children}</MemoizedChildren>;
   }
@@ -184,8 +232,16 @@ function StructuredValueChildren({ children }: Pick<PlateElementProps, 'children
       {React.cloneElement(children, {
         attributes: {
           ...children.props.attributes,
-          'aria-hidden': true,
-          contentEditable: false,
+          style: {
+            ...(children.props.attributes?.style as React.CSSProperties | undefined),
+            marginLeft: `${displayIndent * TANA_INDENT_PX}px`,
+          },
+          ...(structuredValue
+            ? {
+                'aria-hidden': true,
+                contentEditable: false,
+              }
+            : {}),
         },
       })}
     </MemoizedChildren>
@@ -337,12 +393,14 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 };
 
 function Draggable({
+  focusedNodeId,
   hasChildren,
   isFocusedNode,
   openIds,
   tanaPath,
   ...props
 }: PlateElementProps & {
+  focusedNodeId: string | null;
   hasChildren: boolean;
   isFocusedNode: boolean;
   openIds: ReadonlySet<string>;
@@ -355,13 +413,26 @@ function Draggable({
   });
   const BlockRenderer = getNodeRenderer(semanticType).Block;
   const index = useTanaIndex();
+  const { baseIndent } = useTanaZoomPresentation();
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
   const isDraggable = canDragByNodeBehavior(element, {
     document: editor.children,
     path: tanaPath,
   });
   const indent = getNodeIndent(element);
-  const fieldValueOffset = `${Math.max(0, indent - 1) * 24 + 124}px`;
+  const displayIndent = getTanaDisplayIndent(indent, baseIndent);
+  const displayIndentPx = getTanaDisplayIndentPx(indent, baseIndent);
+  const isTrailingZoomBodyNode = isEmptyTrailingZoomBodyNode(
+    editor,
+    element,
+    tanaPath,
+    focusedNodeId
+  );
+  const fieldValueOffset = `${
+    Math.max(0, displayIndent - 1) * TANA_INDENT_PX +
+    TANA_FIELD_LABEL_PX +
+    TANA_FIELD_VALUE_GAP_PX
+  }px`;
   const nodeId = typeof element.id === 'string' ? element.id : undefined;
   const derivedTitle = nodeId ? resolveTanaNodeTitle(index, nodeId) : undefined;
   const showsDerivedTitle =
@@ -465,10 +536,16 @@ function Draggable({
             fieldType={gutterFieldType}
             hasChildren={hasChildren}
             isDraggable={isDraggable}
+            isFocusedNode={isFocusedNode}
             nodeLabel={gutterLabel}
             open={openIds.has(nodeId)}
             semanticType={semanticType}
-            style={{ top: `${dragButtonTop + 3}px` }}
+            style={{
+              left: `${displayIndentPx - TANA_GUTTER_PX}px`,
+              // Keep the fixed 20px gutter controls centered on the first
+              // text line. The focused page title has a larger line-height.
+              top: `${dragButtonTop + (isFocusedNode ? 10 : 4)}px`,
+            }}
             onCollapse={() => toggleTanaNodeCollapse(editor, nodeId, tanaPath)}
             onZoom={() => editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)}
           />
@@ -487,15 +564,17 @@ function Draggable({
         className={cn(
           'slate-blockWrapper relative flow-root',
           semanticType === 'field' && 'tana-fieldOccurrence',
-          semanticType === 'value' && 'tana-fieldValue'
+          semanticType === 'value' && 'tana-fieldValue',
+          isTrailingZoomBodyNode && 'tana-emptyZoomBodyNode'
         )}
         data-tana-semantic={semanticType}
         style={
-          semanticType === 'value'
-            ? ({
-                '--tana-field-value-offset': fieldValueOffset,
-              } as React.CSSProperties)
-            : undefined
+          {
+            '--tana-display-indent': `${displayIndentPx}px`,
+            ...(semanticType === 'value'
+              ? { '--tana-field-value-offset': fieldValueOffset }
+              : {}),
+          } as React.CSSProperties
         }
         onContextMenu={(event) =>
           editor
@@ -509,7 +588,7 @@ function Draggable({
             aria-hidden="true"
             className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-[var(--tana-canvas)] pr-1 font-medium text-[13px] text-[var(--tana-text-secondary)]"
             contentEditable={false}
-            style={{ left: `${indent * 24}px`, right: '1rem' }}
+            style={{ left: `${displayIndentPx}px`, right: '1rem' }}
           >
             <span className="truncate">{derivedTitle}</span>
           </span>
@@ -522,10 +601,14 @@ function Draggable({
             className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
             contentEditable={false}
           >
-            <StructuredValueChildren>{children}</StructuredValueChildren>
+            <PresentationChildren displayIndent={displayIndent} structuredValue>
+              {children}
+            </PresentationChildren>
           </div>
         ) : (
-          <MemoizedChildren>{children}</MemoizedChildren>
+          <PresentationChildren displayIndent={displayIndent}>
+            {children}
+          </PresentationChildren>
         )}
         <DropLine />
       </div>
@@ -605,7 +688,7 @@ function Gutter({
       {...props}
       className={cn(
         'slate-gutterLeft',
-        '-translate-x-full absolute top-0 z-50 flex h-full cursor-text',
+        'absolute top-0 left-0 z-50 flex h-full cursor-text',
         isSelectionAreaVisible && 'hidden',
         className
       )}
