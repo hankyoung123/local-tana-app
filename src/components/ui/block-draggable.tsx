@@ -31,7 +31,11 @@ import {
 } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { TanaNodeGutter } from '@/components/tana/tana-node-gutter';
+import {
+  TanaNodeChrome,
+  TanaNodeChromeContext,
+  type TanaNodeChromeProps,
+} from '@/components/tana/tana-node-gutter';
 import { getNodeRenderer } from '@/components/tana/node-renderer-registry';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
@@ -39,7 +43,6 @@ import {
   getTanaDisplayIndentPx,
   TANA_FIELD_LABEL_PX,
   TANA_FIELD_VALUE_GAP_PX,
-  TANA_GUTTER_PX,
   TANA_INDENT_PX,
 } from '@/components/tana/tana-presentation';
 import { useTanaZoomPresentation } from '@/components/tana/tana-zoom-presentation';
@@ -223,7 +226,12 @@ function PresentationChildren({
   displayIndent: number;
   structuredValue?: boolean;
 }) {
-  if (!React.isValidElement<{ attributes?: Record<string, unknown> }>(children)) {
+  if (
+    !React.isValidElement<{
+      attributes?: Record<string, unknown>;
+      children?: React.ReactNode;
+    }>(children)
+  ) {
     return <MemoizedChildren>{children}</MemoizedChildren>;
   }
 
@@ -238,11 +246,28 @@ function PresentationChildren({
           },
           ...(structuredValue
             ? {
-                'aria-hidden': true,
                 contentEditable: false,
               }
             : {}),
         },
+        children: (
+          <>
+            <TanaNodeChrome />
+            {structuredValue
+              ? React.Children.map(children.props.children, (child) =>
+                  React.isValidElement<{
+                    'aria-hidden'?: boolean;
+                    contentEditable?: boolean;
+                  }>(child)
+                    ? React.cloneElement(child, {
+                        'aria-hidden': true,
+                        contentEditable: false,
+                      })
+                    : child
+                )
+              : children.props.children}
+          </>
+        ),
       })}
     </MemoizedChildren>
   );
@@ -414,6 +439,10 @@ function Draggable({
   const BlockRenderer = getNodeRenderer(semanticType).Block;
   const index = useTanaIndex();
   const { baseIndent } = useTanaZoomPresentation();
+  const isSelectionAreaVisible = usePluginOption(
+    BlockSelectionPlugin,
+    'isSelectionAreaVisible'
+  );
   const blockSelectionApi = editor.getApi(BlockSelectionPlugin).blockSelection;
   const isDraggable = canDragByNodeBehavior(element, {
     document: editor.children,
@@ -479,8 +508,6 @@ function Draggable({
       },
     });
 
-  const [previewTop, setPreviewTop] = React.useState(0);
-
   const resetPreview = () => {
     if (previewRef.current) {
       previewRef.current.replaceChildren();
@@ -503,107 +530,101 @@ function Draggable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAboutToDrag]);
 
-  return (
-    <div
-      className={cn(
-        'tana-node group/tanaNode relative',
-        `tana-node--${semanticType}`,
-        isDragging && 'opacity-50',
-        isFocusedNode && 'tana-focusedNode',
-        getPluginByType(editor, element.type)?.node.isContainer
-          ? 'group/container'
-          : 'group'
-      )}
-    >
-      <Gutter>
-        {nodeId && (
-          <TanaNodeGutter
-            dragHandle={
-              <DragHandle
-                isDragging={isDragging}
-                previewRef={previewRef}
-                resetPreview={resetPreview}
-                setPreviewTop={setPreviewTop}
-              />
-            }
-            dragHandleRef={handleRef}
-            fieldType={gutterFieldType}
-            hasChildren={hasChildren}
-            isDraggable={isDraggable}
-            isFocusedNode={isFocusedNode}
-            nodeLabel={gutterLabel}
-            open={openIds.has(nodeId)}
-            semanticType={semanticType}
-            style={{
-              left: `${displayIndentPx - TANA_GUTTER_PX}px`,
-            }}
-            onCollapse={() => toggleTanaNodeCollapse(editor, nodeId, tanaPath)}
-            onZoom={() => editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)}
-          />
-        )}
-      </Gutter>
-
-      <div
-        ref={previewRef}
-        className={cn('-left-0 absolute hidden w-full')}
-        style={{ top: `${-previewTop}px` }}
-        contentEditable={false}
+  const chromeProps: TanaNodeChromeProps = {
+    dragHandle: (
+      <DragHandle
+        previewRef={previewRef}
+        resetPreview={resetPreview}
       />
+    ),
+    dragHandleRef: handleRef,
+    fieldType: gutterFieldType,
+    hasChildren,
+    isDraggable,
+    isFocusedNode,
+    isSelectionAreaVisible,
+    nodeLabel: gutterLabel,
+    onCollapse: () =>
+      nodeId && toggleTanaNodeCollapse(editor, nodeId, tanaPath),
+    onZoom: () => nodeId && editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId),
+    open: openIds.has(nodeId ?? ''),
+    semanticType,
+  };
 
+  return (
+    <TanaNodeChromeContext.Provider value={chromeProps}>
       <div
-        ref={nodeRef}
         className={cn(
-          'slate-blockWrapper relative flow-root',
-          semanticType === 'field' && 'tana-fieldOccurrence',
-          semanticType === 'value' && 'tana-fieldValue',
-          isTrailingZoomBodyNode && 'tana-emptyZoomBodyNode'
+          'tana-node group/tanaNode relative',
+          `tana-node--${semanticType}`,
+          isDragging && 'opacity-50',
+          isFocusedNode && 'tana-focusedNode',
+          getPluginByType(editor, element.type)?.node.isContainer
+            ? 'group/container'
+            : 'group'
         )}
-        data-tana-semantic={semanticType}
-        style={
-          {
-            '--tana-display-indent': `${displayIndentPx}px`,
-            ...(semanticType === 'value'
-              ? { '--tana-field-value-offset': fieldValueOffset }
-              : {}),
-          } as React.CSSProperties
-        }
-        onContextMenu={(event) =>
-          editor
-            .getApi(BlockSelectionPlugin)
-            .blockSelection.addOnContextMenu({ element, event })
-        }
       >
-        {BlockRenderer && <BlockRenderer element={element} index={index} />}
-        {showsDerivedTitle && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-[var(--tana-canvas)] pr-1 font-medium text-[13px] text-[var(--tana-text-secondary)]"
-            contentEditable={false}
-            style={{ left: `${displayIndentPx}px`, right: '1rem' }}
-          >
-            <span className="truncate">{derivedTitle}</span>
-          </span>
-        )}
-        {semanticType === 'value' &&
-        element.tanaFieldValueType !== 'plain' &&
-        element.tanaFieldValueType !== 'number' ? (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
-            contentEditable={false}
-          >
-            <PresentationChildren displayIndent={displayIndent} structuredValue>
+        <div
+          ref={previewRef}
+          className={cn('-left-0 absolute hidden w-full')}
+          contentEditable={false}
+        />
+
+        <div
+          ref={nodeRef}
+          className={cn(
+            'slate-blockWrapper relative flow-root',
+            semanticType === 'field' && 'tana-fieldOccurrence',
+            semanticType === 'value' && 'tana-fieldValue',
+            isTrailingZoomBodyNode && 'tana-emptyZoomBodyNode'
+          )}
+          data-tana-semantic={semanticType}
+          style={
+            {
+              '--tana-display-indent': `${displayIndentPx}px`,
+              ...(semanticType === 'value'
+                ? { '--tana-field-value-offset': fieldValueOffset }
+                : {}),
+            } as React.CSSProperties
+          }
+          onContextMenu={(event) =>
+            editor
+              .getApi(BlockSelectionPlugin)
+              .blockSelection.addOnContextMenu({ element, event })
+          }
+        >
+          {BlockRenderer && <BlockRenderer element={element} index={index} />}
+          {showsDerivedTitle && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute top-0 z-10 flex h-8 items-center bg-[var(--tana-canvas)] pr-1 font-medium text-[13px] text-[var(--tana-text-secondary)]"
+              contentEditable={false}
+              style={{ left: `${displayIndentPx}px`, right: '1rem' }}
+            >
+              <span className="truncate">{derivedTitle}</span>
+            </span>
+          )}
+          {semanticType === 'value' &&
+          element.tanaFieldValueType !== 'plain' &&
+          element.tanaFieldValueType !== 'number' ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
+              contentEditable={false}
+            >
+              <PresentationChildren displayIndent={displayIndent} structuredValue>
+                {children}
+              </PresentationChildren>
+            </div>
+          ) : (
+            <PresentationChildren displayIndent={displayIndent}>
               {children}
             </PresentationChildren>
-          </div>
-        ) : (
-          <PresentationChildren displayIndent={displayIndent}>
-            {children}
-          </PresentationChildren>
-        )}
-        <DropLine />
+          )}
+          <DropLine />
+        </div>
       </div>
-    </div>
+    </TanaNodeChromeContext.Provider>
   );
 }
 
@@ -665,41 +686,12 @@ export function toggleTanaNodeCollapse(
   editor.getApi(TogglePlugin).toggle.toggleIds([nodeId]);
 }
 
-function Gutter({
-  children,
-  className,
-  ...props
-}: React.ComponentProps<'div'>) {
-  const isSelectionAreaVisible = usePluginOption(
-    BlockSelectionPlugin,
-    'isSelectionAreaVisible'
-  );
-  return (
-    <div
-      {...props}
-      className={cn(
-        'slate-gutterLeft',
-        'absolute top-0 left-0 z-50 flex h-full cursor-text',
-        isSelectionAreaVisible && 'hidden',
-        className
-      )}
-      contentEditable={false}
-    >
-      {children}
-    </div>
-  );
-}
-
 const DragHandle = React.memo(function DragHandle({
-  isDragging,
   previewRef,
   resetPreview,
-  setPreviewTop,
 }: {
-  isDragging: boolean;
   previewRef: React.RefObject<HTMLDivElement | null>;
   resetPreview: () => void;
-  setPreviewTop: (top: number) => void;
 }) {
   const editor = useEditorRef();
   const element = useElement();
@@ -762,52 +754,6 @@ const DragHandle = React.memo(function DragHandle({
             editor
               .getApi(BlockSelectionPlugin)
               .blockSelection.set(blocks.map((block) => block.id as string));
-          }}
-          onMouseEnter={() => {
-            if (isDragging) return;
-
-            const openIds =
-              editor.getOptions(TogglePlugin).openIds ?? EMPTY_OPEN_IDS;
-            const focusedNodeId =
-              editor.getOption(TanaZoomPlugin, 'focusedNodeId') ?? null;
-            const onlyInteractable = ([, path]: [TElement, Path]) =>
-              isTanaNodeInteractable(
-                editor.children,
-                path,
-                openIds,
-                focusedNodeId
-              );
-
-            const blockSelection = editor
-              .getApi(BlockSelectionPlugin)
-              .blockSelection.getNodes({ sort: true });
-
-            let selectedBlocks =
-              blockSelection.length > 0
-                ? blockSelection.filter(onlyInteractable)
-                : editor.api.blocks({ mode: 'highest' }).filter(onlyInteractable);
-
-            // If current block is not in selection, use it as the starting point
-            if (!selectedBlocks.some(([node]) => node.id === element.id)) {
-              selectedBlocks = [[element, editor.api.findPath(element)!]];
-            }
-
-            const processedBlocks = expandFieldSubtreesForDrag(
-              editor,
-              selectedBlocks
-            );
-
-            const ids = processedBlocks.map((block) => block[0].id as string);
-
-            if (ids.length > 1 && ids.includes(element.id as string)) {
-              const previewTop = calculatePreviewTop(editor, {
-                blocks: processedBlocks.map((block) => block[0]),
-                element,
-              });
-              setPreviewTop(previewTop);
-            } else {
-              setPreviewTop(0);
-            }
           }}
           onMouseUp={() => {
             resetPreview();
@@ -943,52 +889,4 @@ const createDragPreviewElements = (
   editor.setOption(DndPlugin, 'draggingId', ids);
 
   return elements;
-};
-
-const calculatePreviewTop = (
-  editor: PlateEditor,
-  {
-    blocks,
-    element,
-  }: {
-    blocks: TElement[];
-    element: TElement;
-  }
-): number => {
-  const child = editor.api.toDOMNode(element)!;
-  const editable = editor.api.toDOMNode(editor)!;
-  const firstSelectedChild = blocks[0];
-
-  const firstDomNode = editor.api.toDOMNode(firstSelectedChild)!;
-  // Get editor's top padding
-  const editorPaddingTop = Number(
-    window.getComputedStyle(editable).paddingTop.replace('px', '')
-  );
-
-  // Calculate distance from first selected node to editor top
-  const firstNodeToEditorDistance =
-    firstDomNode.getBoundingClientRect().top -
-    editable.getBoundingClientRect().top -
-    editorPaddingTop;
-
-  // Get margin top of first selected node
-  const firstMarginTopString = window.getComputedStyle(firstDomNode).marginTop;
-  const marginTop = Number(firstMarginTopString.replace('px', ''));
-
-  // Calculate distance from current node to editor top
-  const currentToEditorDistance =
-    child.getBoundingClientRect().top -
-    editable.getBoundingClientRect().top -
-    editorPaddingTop;
-
-  const currentMarginTopString = window.getComputedStyle(child).marginTop;
-  const currentMarginTop = Number(currentMarginTopString.replace('px', ''));
-
-  const previewElementsTopDistance =
-    currentToEditorDistance -
-    firstNodeToEditorDistance +
-    marginTop -
-    currentMarginTop;
-
-  return previewElementsTopDistance;
 };

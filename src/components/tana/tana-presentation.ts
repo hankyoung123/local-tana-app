@@ -3,7 +3,6 @@
  * These values never participate in document hierarchy or Plate transforms.
  */
 export const TANA_INDENT_PX = 24;
-export const TANA_GUTTER_PX = 60;
 export const TANA_FIELD_LABEL_PX = 100;
 export const TANA_FIELD_VALUE_GAP_PX = 8;
 

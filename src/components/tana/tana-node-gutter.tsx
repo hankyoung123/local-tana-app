@@ -35,6 +35,32 @@ const semanticLabels: Record<TanaNodeSemanticType, string> = {
   view: '视图',
 };
 
+export type TanaNodeChromeProps = {
+  dragHandle?: React.ReactNode;
+  dragHandleRef?: React.Ref<HTMLButtonElement>;
+  fieldType?: FieldType;
+  hasChildren: boolean;
+  isDraggable: boolean;
+  isFocusedNode?: boolean;
+  isSelectionAreaVisible?: boolean;
+  nodeLabel: string;
+  onCollapse: () => void;
+  onZoom: () => void;
+  open: boolean;
+  semanticType: TanaNodeSemanticType;
+};
+
+/** Presentation-only props passed from the DnD wrapper into the Plate element. */
+export const TanaNodeChromeContext = React.createContext<TanaNodeChromeProps | null>(
+  null
+);
+
+export function TanaNodeChrome() {
+  const props = React.useContext(TanaNodeChromeContext);
+
+  return props ? <TanaNodeGutter {...props} /> : null;
+}
+
 /**
  * Shared semantic marker for canonical rows and derived projections. It has no
  * state and does not own navigation; its containing button supplies that.
@@ -115,48 +141,38 @@ export function TanaNodeBullet({
  */
 export function TanaNodeGutter({
   className,
-  dragHandle,
-  dragHandleRef,
-  fieldType,
-  hasChildren,
-  isDraggable,
-  isFocusedNode = false,
-  nodeLabel,
-  onCollapse,
-  onZoom,
-  open,
-  semanticType,
-  style,
-}: {
+  ...props
+}: TanaNodeChromeProps & {
   className?: string;
-  dragHandle?: React.ReactNode;
-  dragHandleRef?: React.Ref<HTMLButtonElement>;
-  hasChildren: boolean;
-  isDraggable: boolean;
-  isFocusedNode?: boolean;
-  fieldType?: FieldType;
-  nodeLabel: string;
-  onCollapse: () => void;
-  onZoom: () => void;
-  open: boolean;
-  semanticType: TanaNodeSemanticType;
-  style?: React.CSSProperties;
 }) {
+  const {
+    dragHandle,
+    dragHandleRef,
+    fieldType,
+    hasChildren,
+    isDraggable,
+    isFocusedNode = false,
+    isSelectionAreaVisible = false,
+    nodeLabel,
+    onCollapse,
+    onZoom,
+    open,
+    semanticType,
+  } = props;
   const label = nodeLabel || '未命名节点';
 
   return (
-    <div
+    <span
       className={cn(
         // Three fixed hit targets keep collapse, drag, and Zoom independent.
-        // The gutter sits immediately before the Node text, so the persistent
-        // bullet remains the closest affordance in both default and hover
-        // states: `>  ⋮  ●  Node`.
-        'tana-nodeGutter absolute top-0 grid h-[var(--tana-first-line-height)] w-[60px] grid-cols-3 items-center',
+        // The prefix is an in-flow sibling of Slate's text children. Its
+        // negative inline margin preserves the existing text coordinate.
+        'tana-nodeGutter grid h-[1lh] w-[60px] shrink-0 grid-cols-3 items-center',
+        isSelectionAreaVisible && 'hidden',
         isFocusedNode && 'text-[var(--tana-text-tertiary)]',
         className
       )}
       contentEditable={false}
-      style={style}
     >
       {hasChildren && (
         <button
@@ -212,6 +228,6 @@ export function TanaNodeGutter({
           semanticType={semanticType}
         />
       </button>
-    </div>
+    </span>
   );
 }

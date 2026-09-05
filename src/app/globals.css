@@ -120,24 +120,19 @@
   }
 }
 
-/*
- * One presentation metric owns gutter alignment. The Node element has no
- * vertical margin; any spacing between Nodes lives on the outer .tana-node
- * wrapper, so the gutter always begins at the first text line.
- */
-.tana-node {
-  --tana-first-line-height: 2rem;
-}
-
+/* Node spacing belongs to the outer wrapper; the element owns its own line box. */
 .tana-node > .slate-blockWrapper > [data-slate-node='element'] {
+  display: flex;
+  align-items: flex-start;
   margin-top: 0 !important;
 }
 
-/* The focused Plate Node is the page title; no duplicated heading is rendered. */
-.tana-focusedNode {
-  --tana-first-line-height: 2.69375rem;
+/* Keep the text at its existing display-indent while the prefix stays in flow. */
+.tana-nodeGutter {
+  margin-inline-start: -60px;
 }
 
+/* The focused Plate Node is the page title; no duplicated heading is rendered. */
 .tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] {
   color: var(--tana-text);
   font-size: 1.625rem;
@@ -188,7 +183,8 @@
   pointer-events: none;
 }
 
-.tana-node--field .slate-gutterLeft {
+.tana-node--field .tana-nodeGutter,
+.tana-node--field .tana-fieldChrome {
   pointer-events: auto;
 }
 
@@ -208,8 +204,16 @@
 }
 
 .tana-fieldValue:has(.tana-valueControl) > [data-slate-node='element'] {
+  pointer-events: none;
+}
+
+.tana-fieldValue:has(.tana-valueControl) > [data-slate-node='element'] > :not(.tana-nodeGutter) {
   opacity: 0;
   pointer-events: none;
+}
+
+.tana-fieldValue:has(.tana-valueControl) > [data-slate-node='element'] > .tana-nodeGutter {
+  pointer-events: auto;
 }
 
 .tana-node--field:hover .tana-fieldActions,
