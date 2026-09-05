@@ -167,7 +167,7 @@ export function TanaNodeGutter({
         // Three fixed hit targets keep collapse, drag, and Zoom independent.
         // The prefix is an in-flow sibling of Slate's text children. Its
         // negative inline margin preserves the existing text coordinate.
-        'tana-nodeGutter grid h-[1lh] w-[60px] shrink-0 grid-cols-3 items-center',
+        'tana-nodeGutter',
         isSelectionAreaVisible && 'hidden',
         isFocusedNode && 'text-[var(--tana-text-tertiary)]',
         className

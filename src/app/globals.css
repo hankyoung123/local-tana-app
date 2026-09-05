@@ -122,14 +122,18 @@
 
 /* Node spacing belongs to the outer wrapper; the element owns its own line box. */
 .tana-node > .slate-blockWrapper > [data-slate-node='element'] {
-  display: flex;
-  align-items: flex-start;
   margin-top: 0 !important;
 }
 
 /* Keep the text at its existing display-indent while the prefix stays in flow. */
 .tana-nodeGutter {
+  display: inline-grid;
+  width: 60px;
+  height: 1lh;
   margin-inline-start: -60px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  vertical-align: top;
 }
 
 /* The focused Plate Node is the page title; no duplicated heading is rendered. */

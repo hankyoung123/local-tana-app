@@ -608,7 +608,6 @@ function Draggable({
           element.tanaFieldValueType !== 'plain' &&
           element.tanaFieldValueType !== 'number' ? (
             <div
-              aria-hidden="true"
               className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
               contentEditable={false}
             >
