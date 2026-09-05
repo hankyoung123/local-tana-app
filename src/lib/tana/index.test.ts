@@ -309,3 +309,22 @@ test('search includes Field labels and values, Supertags, and reference target s
     assert.ok(ids.includes('reference'), query);
   }
 });
+
+test('search excludes broken, trashed-target and chained References without falling back to occurrence text', () => {
+  const document: Value = [
+    { id: 'target', type: 'p', children: [{ text: 'Canonical title' }] },
+    { id: 'live', type: 'p', tanaReferenceTargetId: 'target', children: [{ text: 'Occurrence fallback' }] },
+    { id: 'broken', type: 'p', tanaReferenceTargetId: 'missing', children: [{ text: 'Canonical fallback' }] },
+    { id: 'chain', type: 'p', tanaReferenceTargetId: 'live', children: [{ text: 'Canonical fallback' }] },
+    { id: 'archived-reference', type: 'p', tanaReferenceTargetId: 'archived', children: [{ text: 'Canonical fallback' }] },
+    { id: 'trash', type: 'p', tanaSystemNode: 'trash', children: [{ text: 'Trash' }] },
+    { id: 'archived', type: 'p', indent: 1, children: [{ text: 'Canonical archived' }] },
+  ];
+  const before = structuredClone(document);
+  const index = buildTanaIndex(document);
+  assert.deepEqual(searchTanaNodes(index, 'canonical').map(({ id }) => id), ['target', 'live']);
+  assert.deepEqual(searchTanaNodes(index, 'fallback'), []);
+  assert.deepEqual(searchTanaNodes(index, 'archived'), []);
+  assert.equal(searchTanaNodes(index, 'canonical')[1], index.nodesById.get('live'));
+  assert.deepEqual(document, before);
+});

@@ -36,6 +36,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   getTanaAncestorPaths,
+  getTanaProjectionTarget,
+  resolveTanaNodeTitle,
+  type TanaIndex,
   getTanaNodePath,
   isTanaNodeElement,
   searchTanaNodes,
@@ -54,23 +57,29 @@ export type PersistenceStatus =
   | 'saved'
   | 'saving';
 
-function SearchResult({
+export function SearchResult({
+  index,
   node,
   onNavigate,
 }: {
+  index: TanaIndex;
   node: TanaNode;
   onNavigate: (nodeId: string) => void;
 }) {
+  const target = getTanaProjectionTarget(index, node.id);
+  if (!target) return null;
+  const title = resolveTanaNodeTitle(index, target.id);
+
   return (
     <CommandItem
       className="group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs hover:bg-[var(--tana-hover)]"
-      value={`${node.text} ${node.id}`}
+      value={node.id}
       onSelect={() => onNavigate(node.id)}
     >
       <span className="grid size-5 shrink-0 place-items-center rounded bg-[var(--tana-accent-soft)] text-[var(--tana-accent)] text-[10px]">
-        {node.semanticType === 'supertag-definition' ? '#' : '•'}
+        {target.semanticType === 'supertag-definition' ? '#' : '•'}
       </span>
-      <span className="min-w-0 flex-1 truncate">{node.text || '未命名节点'}</span>
+      <span className="min-w-0 flex-1 truncate">{title || '未命名节点'}</span>
       <span className="opacity-0 text-[var(--tana-text-tertiary)] group-hover:opacity-100">
         <CornerDownLeftIcon className="size-3" />
       </span>
@@ -329,6 +338,7 @@ function TanaWorkspaceContent({
                         {searchResults.map((node) => (
                           <SearchResult
                             key={node.id}
+                            index={index}
                             node={node}
                             onNavigate={navigateToSearchResult}
                           />

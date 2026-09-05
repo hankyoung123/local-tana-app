@@ -57,3 +57,30 @@ test('stale, broken and chained Reference results never navigate to an occurrenc
     assert.equal(getTanaProjectionTarget(buildTanaIndex(editor.children), id), undefined);
   }
 });
+
+test('live Reference result renders the canonical resolved title and semantic with occurrence identity', async () => {
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { Command, CommandList } = await import('@/components/ui/command');
+  const { SearchResult } = await import('./tana-workspace');
+  const { searchTanaNodes } = await import('@/lib/tana/index');
+  const index = buildTanaIndex([
+    { id: 'template', type: 'p', tanaSupertagDefinition: { titleExpression: 'Resolved ${name}' }, children: [{ text: 'Template' }] },
+    { id: 'canonical', type: 'p', tanaSupertagDefinition: {}, tanaSupertagIds: ['template'], children: [{ text: 'Target' }] },
+    { id: 'occurrence', type: 'p', tanaReferenceTargetId: 'canonical', children: [{ text: 'Stale occurrence title' }] },
+  ]);
+  const result = searchTanaNodes(index, 'Resolved Target').find(({ id }) => id === 'occurrence');
+  assert.ok(result);
+  const item = SearchResult({ index, node: result, onNavigate: (id) => {
+    assert.equal(id, 'occurrence');
+  } });
+  assert.ok(item);
+  assert.equal(item.props.value, 'occurrence');
+  item.props.onSelect();
+  const markup = renderToStaticMarkup(createElement(Command, { shouldFilter: false },
+    createElement(CommandList, null, item)));
+  assert.match(markup, /Resolved Target/);
+  assert.match(markup, />#<\/span>/);
+  assert.doesNotMatch(markup, /Stale occurrence title/);
+  assert.equal(result.id, 'occurrence');
+});

@@ -641,10 +641,8 @@ export function searchTanaNodes(
   const contains: TanaNode[] = [];
 
   for (const node of index.nodesById.values()) {
-    if (!isTanaNodeActive(index, node.id)) continue;
-
-    const target = node.referenceTargetId ? index.nodesById.get(node.referenceTargetId) : undefined;
-    const owner = target ?? node;
+    const owner = getTanaProjectionTarget(index, node.id);
+    if (!owner) continue;
     const text = resolveTanaNodeTitle(index, owner.id).toLocaleLowerCase();
     const semanticText = [
       ...owner.supertagIds.map((id) => index.nodesById.get(id)?.text ?? ''),
