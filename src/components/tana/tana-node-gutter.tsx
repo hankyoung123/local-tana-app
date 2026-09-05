@@ -151,7 +151,7 @@ export function TanaNodeGutter({
         // The gutter sits immediately before the Node text, so the persistent
         // bullet remains the closest affordance in both default and hover
         // states: `>  ⋮  ●  Node`.
-        'tana-nodeGutter absolute grid h-6 w-[60px] grid-cols-3 items-center',
+        'tana-nodeGutter absolute top-0 grid h-[var(--tana-first-line-height)] w-[60px] grid-cols-3 items-center',
         isFocusedNode && 'text-[var(--tana-text-tertiary)]',
         className
       )}

@@ -503,8 +503,6 @@ function Draggable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAboutToDrag]);
 
-  const [dragButtonTop, setDragButtonTop] = React.useState(0);
-
   return (
     <div
       className={cn(
@@ -516,10 +514,6 @@ function Draggable({
           ? 'group/container'
           : 'group'
       )}
-      onMouseEnter={() => {
-        if (isDragging) return;
-        setDragButtonTop(calcDragButtonTop(editor, element));
-      }}
     >
       <Gutter>
         {nodeId && (
@@ -542,9 +536,6 @@ function Draggable({
             semanticType={semanticType}
             style={{
               left: `${displayIndentPx - TANA_GUTTER_PX}px`,
-              // Keep the fixed 20px gutter controls centered on the first
-              // text line. The focused page title has a larger line-height.
-              top: `${dragButtonTop + (isFocusedNode ? 10 : 4)}px`,
             }}
             onCollapse={() => toggleTanaNodeCollapse(editor, nodeId, tanaPath)}
             onZoom={() => editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)}
@@ -1000,13 +991,4 @@ const calculatePreviewTop = (
     currentMarginTop;
 
   return previewElementsTopDistance;
-};
-
-const calcDragButtonTop = (editor: PlateEditor, element: TElement): number => {
-  const child = editor.api.toDOMNode(element)!;
-
-  const currentMarginTopString = window.getComputedStyle(child).marginTop;
-  const currentMarginTop = Number(currentMarginTopString.replace('px', ''));
-
-  return currentMarginTop;
 };

@@ -120,9 +120,25 @@
   }
 }
 
+/*
+ * One presentation metric owns gutter alignment. The Node element has no
+ * vertical margin; any spacing between Nodes lives on the outer .tana-node
+ * wrapper, so the gutter always begins at the first text line.
+ */
+.tana-node {
+  --tana-first-line-height: 2rem;
+}
+
+.tana-node > .slate-blockWrapper > [data-slate-node='element'] {
+  margin-top: 0 !important;
+}
+
 /* The focused Plate Node is the page title; no duplicated heading is rendered. */
+.tana-focusedNode {
+  --tana-first-line-height: 2.69375rem;
+}
+
 .tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] {
-  margin-top: 0;
   color: var(--tana-text);
   font-size: 1.625rem;
   font-weight: 600;
