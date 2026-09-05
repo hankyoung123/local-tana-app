@@ -277,6 +277,18 @@ const InlineComboboxInput = ({
           value={value}
           autoSelect
           {...inputProps}
+          onKeyDownCapture={(event) => {
+            // IME owns these keys until text is committed. Keep them out of
+            // Plate cancellation and Ariakit candidate activation, preserving
+            // the browser's native composition default action. A selected
+            // input range also belongs to the browser's Backspace behavior.
+            const input = event.currentTarget;
+            const deletesSelection = event.key === 'Backspace' &&
+              input.selectionStart !== input.selectionEnd;
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || deletesSelection) {
+              event.stopPropagation();
+            }
+          }}
           {...props}
         />
       </span>

@@ -4,7 +4,6 @@ import { Columns3Icon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
-import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -28,7 +27,6 @@ export function TanaCardsView({
   results: readonly TanaNode[];
   view: TanaNode;
 }) {
-  const editor = useEditorRef();
   const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
   const fieldIds = getTanaTableAvailableFieldIds(index, results, configuredVisibleFieldIds);
   const visibleFieldIds = configuredVisibleFieldIds
@@ -36,13 +34,12 @@ export function TanaCardsView({
     : fieldIds;
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="min-w-0 max-w-full space-y-3">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {results.map((node) => (
           <article
             key={node.id}
-            className="tana-projectionCard cursor-pointer overflow-hidden rounded-md border border-[var(--tana-divider)] bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)]"
-            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
+            className="tana-projectionCard min-w-0 overflow-hidden rounded-md border border-[var(--tana-divider)] bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)] focus-within:ring-2 focus-within:ring-[var(--tana-accent)]"
           >
             <NodeProjection
               fieldIds={visibleFieldIds}

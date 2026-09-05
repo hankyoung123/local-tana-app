@@ -42,7 +42,7 @@ export function TanaViewToolbar({
   const type = view.viewDefinition?.type ?? 'outline';
 
   return (
-    <header className="shrink-0 px-6 pt-8 sm:px-10">
+    <header className="min-w-0 max-w-full shrink-0 px-6 pt-8 sm:px-10">
       <div className="min-w-0">
         <h1 className="flex min-h-7 items-center gap-2 truncate font-medium text-[19px] tracking-[-0.015em]">
           <span className="text-[var(--tana-node-bullet)]">
@@ -52,7 +52,7 @@ export function TanaViewToolbar({
         </h1>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-1 border-b border-[var(--tana-divider)] pb-2">
+      <div className="mt-3 flex min-w-0 max-w-full flex-wrap items-center gap-1 border-b border-[var(--tana-divider)] pb-2">
         <Select
           value={type}
           onValueChange={(nextType) =>
@@ -73,7 +73,7 @@ export function TanaViewToolbar({
             ))}
           </SelectContent>
         </Select>
-        {controls && <div className="ml-1 flex flex-wrap items-center gap-1">{controls}</div>}
+        {controls && <div className="ml-1 flex min-w-0 max-w-full flex-wrap items-center gap-1">{controls}</div>}
       </div>
     </header>
   );

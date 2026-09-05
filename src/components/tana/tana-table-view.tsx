@@ -501,7 +501,7 @@ export function TanaTableView({
   const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
 
   return (
-    <div className="overflow-x-auto">
+    <div className="min-w-0 max-w-full overflow-x-auto">
         <table className="tana-projectionTable min-w-full border-collapse">
           <thead className="border-b border-[var(--tana-divider)] text-left text-[var(--tana-text-tertiary)] text-xs">
             <tr>

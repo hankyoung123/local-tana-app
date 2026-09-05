@@ -61,7 +61,7 @@ export function TanaSidebar({
   }
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
+    <aside className="flex h-full w-40 shrink-0 lg:w-48 xl:w-56 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
       <div className="flex h-12 items-center justify-between px-4">
         <span className="flex items-center gap-2 font-medium text-[13px] text-[var(--tana-text)]">
           <span className="grid size-5 place-items-center rounded-md bg-[var(--tana-accent)] font-semibold text-white text-[10px]">

@@ -12,6 +12,7 @@ import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
   canNavigate as canNavigateNode,
   isTanaNodeElement,
+  isTanaNodeActive,
 } from '@/lib/tana';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
@@ -38,31 +39,36 @@ export function SupertagElement(
   props: PlateElementProps<SupertagElementType>
 ) {
   const { element, editor } = props;
-  const displayName = getNodeDisplayNameFromIndex(useTanaIndex(), element.key);
+  const index = useTanaIndex();
+  const displayName = getNodeDisplayNameFromIndex(index, element.key);
+  const target = index.nodesById.get(element.key);
+  const navigable = !!target && isTanaNodeActive(index, target.id) &&
+    target.semanticTypes.includes('supertag-definition') && canNavigateNode(element);
 
   const navigateToDefinition = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
-      if (!canNavigateNode(element)) return;
+      if (!navigable) return;
 
       event.preventDefault();
       event.stopPropagation();
       editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
     },
-    [editor, element]
+    [editor, element, navigable]
   );
 
   return (
     <PlateElement
       {...props}
-      className="inline-flex cursor-pointer items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 focus-visible:ring-2 dark:bg-emerald-950 dark:text-emerald-200"
+      className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 focus-visible:ring-2 dark:bg-emerald-950 dark:text-emerald-200"
       attributes={{
         ...props.attributes,
         contentEditable: false,
-        onClick: navigateToDefinition,
-        onKeyDown: navigateToDefinition,
-        role: 'link',
-        tabIndex: 0,
+        'aria-label': navigable ? `打开超级标签 ${displayName}` : undefined,
+        onClick: navigable ? navigateToDefinition : undefined,
+        onKeyDown: navigable ? navigateToDefinition : undefined,
+        role: navigable ? 'link' : undefined,
+        tabIndex: navigable ? 0 : undefined,
       }}
     >
       #{displayName}

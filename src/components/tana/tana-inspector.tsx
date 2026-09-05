@@ -64,14 +64,18 @@ const fieldTypes: readonly FieldType[] = [
  * The Inspector owns semantic configuration, Field source navigation, and
  * body visibility. Node creation and Field Values stay in the Plate outline.
  */
-export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null }) {
+export function TanaInspector({ activeNodeId, onClose }: {
+  activeNodeId: NodeId | null;
+  onClose: () => void;
+}) {
   const editor = useEditorRef();
   const index = useTanaIndex();
   const node = activeNodeId ? index.nodesById.get(activeNodeId) : undefined;
 
   if (!node) {
     return (
-      <aside className="h-full w-80 shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
+      <aside aria-label="检查器" className="relative h-full w-80 max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
+        <button className="absolute top-2 right-3 rounded px-2 py-1 text-xs focus-visible:ring-2" aria-label="关闭检查器" onClick={onClose}>关闭</button>
         <h2 className="font-medium text-sm">检查器</h2>
         <p className="mt-3 text-[var(--tana-text-tertiary)] text-xs">选择一个节点以查看详细信息。</p>
       </aside>
@@ -108,7 +112,8 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
     });
 
   return (
-    <aside className="h-full w-80 shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
+    <aside aria-label="检查器" className="relative h-full w-80 max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
+      <div className="flex justify-end px-3 pt-2"><button className="rounded px-2 py-1 text-xs focus-visible:ring-2" aria-label="关闭检查器" onClick={onClose}>关闭</button></div>
       <div className="px-5 pt-5 pb-4">
         <p className="mb-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.12em]">
           配置

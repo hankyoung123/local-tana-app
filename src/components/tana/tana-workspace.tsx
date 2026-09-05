@@ -360,12 +360,24 @@ function TanaWorkspaceContent({
           </Dialog>
         </div>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 min-w-0 flex-1">
           <TanaNodeViewHost
             focusedNodeId={focusedNodeId}
             selectedNodeId={selectedNodeId}
           />
-          {fieldPanelOpen && <TanaInspector activeNodeId={activeNodeId} />}
+          {fieldPanelOpen && (
+            <div
+              className="absolute inset-y-0 right-0 z-30 max-w-full shadow-xl xl:relative xl:shrink-0 xl:shadow-none"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape' && !event.defaultPrevented) {
+                  event.stopPropagation();
+                  setFieldPanelOpen(false);
+                }
+              }}
+            >
+              <TanaInspector activeNodeId={activeNodeId} onClose={() => setFieldPanelOpen(false)} />
+            </div>
+          )}
         </div>
       </main>
     </div>

@@ -8,7 +8,7 @@ import { buildTanaIndex } from '@/lib/tana';
 import { getTanaSupertagPageChildren } from './tana-supertag-page';
 
 describe('Tana Supertag page', () => {
-  test('derives child tabs from direct canonical children in document order', () => {
+  test('derives child navigation items from direct canonical children in document order', () => {
     const value: Value = [
       {
         children: [{ text: 'Project' }],

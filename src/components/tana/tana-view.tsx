@@ -23,7 +23,7 @@ export function TanaView({
   const viewType = view.viewDefinition?.type ?? "outline";
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
+    <section className="flex min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-[var(--tana-canvas)]">
       <TanaViewToolbar
         controls={
           viewType === "table" ? (
@@ -38,7 +38,7 @@ export function TanaView({
         view={view}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-10">
+      <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 sm:px-10">
         {results.length === 0 && viewType !== "table" ? (
           <p className="py-8 text-[var(--tana-text-tertiary)] text-sm">暂无匹配节点</p>
         ) : viewType === "table" ? (
