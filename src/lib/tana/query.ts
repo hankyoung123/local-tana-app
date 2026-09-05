@@ -1,9 +1,9 @@
+import { isTanaQueryAst, isTanaQueryPredicateAst, parseTanaQuery } from './query-ast';
 import type {
   FieldDefinition,
   FieldId,
   TanaIndex,
   TanaNode,
-  TanaQueryClause,
   TanaQueryExpression,
   TanaQueryPredicate,
 } from "./types";
@@ -43,6 +43,7 @@ export function isTanaQueryPredicateValid(
   index: TanaIndex,
   predicate: TanaQueryPredicate,
 ): boolean {
+  if (!isTanaQueryPredicateAst(predicate)) return false;
   switch (predicate.kind) {
     case "has-supertag":
       return (
@@ -57,7 +58,6 @@ export function isTanaQueryPredicateValid(
       return isFieldValueValid(index, predicate.fieldId, predicate.value);
     case "text-contains":
       return predicate.text.trim().length > 0;
-    case "parent-is":
     case "child-of":
     case "descendant-of":
     case "references":
@@ -66,18 +66,11 @@ export function isTanaQueryPredicateValid(
   }
 }
 
-/** Backward-named leaf helper kept for the existing basic predicate editor. */
-export function isTanaQueryClauseValid(
-  index: TanaIndex,
-  clause: TanaQueryClause,
-): boolean {
-  return isTanaQueryPredicateValid(index, clause);
-}
-
 export function isTanaQueryExpressionValid(
   index: TanaIndex,
   expression: TanaQueryExpression,
 ): boolean {
+  if (!isTanaQueryAst(expression)) return false;
   switch (expression.type) {
     case "predicate":
       return isTanaQueryPredicateValid(index, expression.predicate);
@@ -106,8 +99,6 @@ export function describeTanaQueryClause(
       return `包含 #${index.nodesById.get(clause.supertagId)?.text ?? clause.supertagId}`;
     case "text-contains":
       return `文本包含“${clause.text}”`;
-    case "parent-is":
-      return `父节点是 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId}`;
     case "child-of":
       return `是 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId} 的直接子节点`;
     case "descendant-of":
@@ -207,8 +198,6 @@ export function matchesTanaQueryPredicate(
       return node.text
         .toLocaleLowerCase()
         .includes(predicate.text.trim().toLocaleLowerCase());
-    case "parent-is":
-      return index.parentNodeIds.get(node.id) === predicate.nodeId;
     case "child-of":
       return index.parentNodeIds.get(node.id) === predicate.nodeId;
     case "descendant-of":
@@ -255,6 +244,7 @@ export function runTanaQuery(
   index: TanaIndex,
   expression: TanaQueryExpression,
 ): TanaNode[] {
+  parseTanaQuery(expression);
   return Array.from(index.nodesById.values()).filter(
     (node) =>
       isTanaNodeActive(index, node.id) &&

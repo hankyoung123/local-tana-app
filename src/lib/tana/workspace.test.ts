@@ -1,3 +1,4 @@
+import { TogglePlugin } from '@platejs/toggle/react';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
@@ -22,7 +23,7 @@ globalThis.requestAnimationFrame ??= () => 0;
 function createEditor(value: Value) {
   let nextId = 0;
 
-  return createPlateEditor({
+  const editor = createPlateEditor({
     nodeId: {
       filter: isTanaNodeElement,
       idCreator: () => `node-${++nextId}`,
@@ -31,6 +32,8 @@ function createEditor(value: Value) {
     plugins: EditorKit,
     value,
   });
+  editor.getApi(TogglePlugin).toggle.toggleIds(value.map((node) => String(node.id)), true);
+  return editor;
 }
 
 function minimalWorkspace(): Value {

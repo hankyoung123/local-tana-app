@@ -1,5 +1,6 @@
 'use client';
 
+import { canMutateTanaNode } from '@/components/editor/mutation-policy';
 import * as React from 'react';
 
 import {
@@ -144,6 +145,8 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
             {canAddChild && (
               <ContextMenuItem
                 onClick={() => {
+                  const entry = editor.api.node({ at: [], id: selectedNodeId });
+                  if (!entry || !canMutateTanaNode(editor, entry[1], canUseSlashCommand)) return;
                   if (!editor.getTransforms(TanaZoomPlugin).zoom.to(selectedNodeId)) {
                     return;
                   }

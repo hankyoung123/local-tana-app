@@ -8,7 +8,7 @@ import {
   createAndQuery,
   describeTanaQueryClause,
   describeTanaQueryExpression,
-  isTanaQueryClauseValid,
+  isTanaQueryPredicateValid,
   runTanaQuery,
 } from "./query";
 
@@ -277,10 +277,6 @@ describe("runTanaQuery", () => {
 
   test("evaluates graph predicates from hierarchy and derived References", () => {
     assert.deepEqual(
-      run([{ kind: "parent-is", nodeId: "parent" }]).map(({ id }) => id),
-      ["child"],
-    );
-    assert.deepEqual(
       run([{ kind: "child-of", nodeId: "parent" }]).map(({ id }) => id),
       ["child"],
     );
@@ -339,35 +335,35 @@ describe("runTanaQuery", () => {
 
   test("validates new clauses against existing Tana definitions", () => {
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         kind: "has-supertag",
         supertagId: "project-tag",
       }),
       true,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         kind: "has-supertag",
         supertagId: "alpha",
       }),
       false,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         fieldId: "estimate",
         kind: "field-exists",
       }),
       true,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         fieldId: "alpha",
         kind: "field-defined",
       }),
       false,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         fieldId: "status",
         kind: "field-equals",
         value: { type: "options", value: "done" },
@@ -375,7 +371,7 @@ describe("runTanaQuery", () => {
       true,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, {
+      isTanaQueryPredicateValid(index, {
         fieldId: "status",
         kind: "field-equals",
         value: { type: "options", value: "alpha" },
@@ -383,7 +379,7 @@ describe("runTanaQuery", () => {
       false,
     );
     assert.equal(
-      isTanaQueryClauseValid(index, { kind: "text-contains", text: "  " }),
+      isTanaQueryPredicateValid(index, { kind: "text-contains", text: "  " }),
       false,
     );
   });

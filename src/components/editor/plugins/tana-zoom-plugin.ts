@@ -129,6 +129,9 @@ function insertZoomBodyChild(editor: PlateEditor, { select = true } = {}) {
 
   if (!hostEntry || !isTanaFieldHostNode(editor.children, hostEntry[1])) return false;
 
+  if (!isTanaNodeInteractable(editor.children, hostEntry[1],
+    editor.getOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS, focusedNodeId)) return false;
+
   const [host, hostPath] = hostEntry;
   const childPath = getTanaZoomBodyInsertionPath(editor, hostPath);
   const indent = typeof host.indent === 'number' ? host.indent + 1 : 1;

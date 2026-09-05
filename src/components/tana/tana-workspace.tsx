@@ -15,6 +15,7 @@ import {
   usePluginOption,
 } from 'platejs/react';
 
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   Command,
@@ -271,8 +272,13 @@ function TanaWorkspaceContent({
             </DropdownMenu>
           </div>
 
-          {searchOpen && (
-            <div className="absolute top-11 right-4 z-50 w-[22rem] overflow-hidden rounded-xl border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2 shadow-[0_18px_50px_rgb(28_48_38/0.16)]">
+          <Dialog open={searchOpen} onOpenChange={(open) => { setSearchOpen(open); if (!open) setSearch(''); }}>
+            <DialogContent onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              editor.tf.focus();
+            }}>
+              <DialogTitle>全局搜索</DialogTitle>
+              <DialogDescription>搜索标题、字段、标签和引用。</DialogDescription>
               <Command
                 shouldFilter={false}
                 onKeyDown={(event) => {
@@ -321,8 +327,8 @@ function TanaWorkspaceContent({
                   <span>Esc 关闭</span>
                 </div>
               </Command>
-            </div>
-          )}
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex min-h-0 flex-1">

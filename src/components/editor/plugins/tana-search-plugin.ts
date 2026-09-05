@@ -6,7 +6,7 @@ import { isTanaNodeElement } from "@/lib/tana/constants";
 import { buildTanaIndex } from "@/lib/tana/index";
 import {
   createAndQuery,
-  isTanaQueryClauseValid,
+  isTanaQueryPredicateValid,
   isTanaQueryExpressionValid,
 } from "@/lib/tana/query";
 import type {
@@ -87,7 +87,7 @@ function addClause(
 
   if (!entry || !definition) return false;
   if (definition.query.type !== "and") return false;
-  if (!isTanaQueryClauseValid(buildTanaIndex(editor.children), clause))
+  if (!isTanaQueryPredicateValid(buildTanaIndex(editor.children), clause))
     return false;
 
   editor.tf.setNodes(

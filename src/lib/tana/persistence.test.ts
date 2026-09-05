@@ -342,3 +342,20 @@ describe('Plate document persistence', () => {
     assert.deepEqual(value(writes.at(-1)!), value('Second'));
   });
 });
+
+test('rejects malformed Query AST and illegal flat indent at the persistence boundary', () => {
+  for (const query of [
+    { type: 'not' },
+    { type: 'and', children: 'invalid' },
+    { type: 'predicate', predicate: { kind: 'text-contains', text: ' ' } },
+    { type: 'predicate', predicate: { kind: 'child-of', nodeId: '' } },
+  ]) {
+    const document = minimalWorkspace();
+    document[1] = { ...document[1], tanaSearchDefinition: { query } };
+    assert.equal(isValidTanaDocument(document), false);
+  }
+  const document = minimalWorkspace();
+  document[1].indent = -1;
+  assert.equal(isValidTanaDocument(document), false);
+  assert.equal(isPlateDocument([{ text: 'top-level text' }]), false);
+});

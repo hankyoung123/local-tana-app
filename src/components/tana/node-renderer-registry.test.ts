@@ -45,3 +45,21 @@ describe('Node renderer registry', () => {
     );
   });
 });
+
+test('Reference expansion derives canonical subtree order and prunes hidden Fields', async () => {
+  const { buildTanaIndex } = await import('@/lib/tana/index');
+  const { getReferenceSubtreeRows } = await import('./node-renderer-registry');
+  const document = [
+    { id: 'target', type: 'p', children: [{ text: 'Target' }], tanaPresentation: { hiddenFieldNodeIds: ['field'] } },
+    { id: 'child', type: 'p', indent: 1, children: [{ text: 'Child' }] },
+    { id: 'grandchild', type: 'p', indent: 2, children: [{ text: 'Grandchild' }] },
+    { id: 'field', type: 'p', indent: 1, tanaFieldId: 'definition', children: [{ text: '' }] },
+    { id: 'value', type: 'p', indent: 2, tanaFieldValueType: 'plain' as const, children: [{ text: 'Hidden' }] },
+    { id: 'ref', type: 'p', indent: 1, tanaReferenceTargetId: 'target', children: [{ text: '' }] },
+  ];
+  const before = structuredClone(document);
+  assert.deepEqual(getReferenceSubtreeRows(buildTanaIndex(document), 'target'), [
+    { id: 'child', depth: 1 }, { id: 'grandchild', depth: 2 }, { id: 'ref', depth: 1 },
+  ]);
+  assert.deepEqual(document, before);
+});

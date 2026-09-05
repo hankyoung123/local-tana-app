@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
+import { TogglePlugin } from '@platejs/toggle/react';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
@@ -13,11 +14,13 @@ import { createAndQuery, runTanaQuery } from '@/lib/tana/query';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 
 function createEditor(value: Value) {
-  return createPlateEditor({
+  const editor = createPlateEditor({
     nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
     plugins: EditorKit,
     value,
   });
+  editor.getApi(TogglePlugin).toggle.toggleIds(value.map((node) => String(node.id)), true);
+  return editor;
 }
 
 function workspaceWithLifecycleSubtree(): Value {
@@ -208,4 +211,31 @@ describe('Tana Node lifecycle', () => {
     assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('project-node'), 'trash');
     assert.equal(buildTanaIndex(editor.children).fieldNodesById.get('project-status')?.parentNodeId, 'project-node');
   });
+});
+
+test('stale collapsed targets cannot duplicate, indent, outdent, trash, turn into, or add children', async () => {
+  const { setBlockType } = await import('../transforms');
+  const { TanaZoomPlugin } = await import('./tana-zoom-plugin');
+  const editor = createEditor(workspaceWithLifecycleSubtree());
+  const selection = editor.getApi(BlockSelectionPlugin).blockSelection;
+  selection.set(['project-node']);
+  editor.getApi(TogglePlugin).toggle.toggleIds(['home'], false);
+  const before = structuredClone(editor.children);
+  editor.getTransforms(BlockSelectionPlugin).blockSelection.duplicate();
+  editor.getTransforms(BlockSelectionPlugin).blockSelection.setIndent(1);
+  editor.getTransforms(BlockSelectionPlugin).blockSelection.setIndent(-1);
+  assert.equal(lifecycle(editor).trash('project-node'), false);
+  assert.equal(setBlockType(editor, KEYS.h1, { at: getTanaNodePath(editor.children, 'project-node') }), false);
+  editor.getTransforms(BlockSelectionPlugin).blockSelection.removeNodes();
+  editor.setOption(TanaZoomPlugin, 'focusedNodeId', 'project-node');
+  assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild(), false);
+  assert.deepEqual(editor.children, before);
+});
+
+test('deleting a reference occurrence preserves its canonical target and children', () => {
+  const editor = createEditor(workspaceWithLifecycleSubtree());
+  const canonical = structuredClone(editor.children.filter((node) => ['project-node', 'project-status', 'project-status-value'].includes(String(node.id))));
+  assert.equal(lifecycle(editor).trash('project-reference'), true);
+  assert.equal(lifecycle(editor).deletePermanently('project-reference'), true);
+  assert.deepEqual(editor.children.filter((node) => canonical.some((item) => item.id === node.id)), canonical);
 });

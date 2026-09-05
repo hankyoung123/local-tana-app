@@ -42,8 +42,8 @@ type GraphQueryPredicate = Extract<TanaQueryPredicate, { nodeId: NodeId }>;
 
 const graphPredicateKinds: readonly Extract<
   QueryPredicateKind,
-  "child-of" | "descendant-of" | "parent-is" | "references" | "referenced-by"
->[] = ["parent-is", "child-of", "descendant-of", "references", "referenced-by"];
+  "child-of" | "descendant-of" | "references" | "referenced-by"
+>[] = ["child-of", "descendant-of", "references", "referenced-by"];
 
 const viewTypeLabels: Record<TanaViewDefinition["type"], string> = {
   calendar: "日历",
@@ -509,7 +509,6 @@ function QueryPredicateForm({
           <SelectItem value="field-defined">字段已定义</SelectItem>
           <SelectItem value="field-exists">字段已设置</SelectItem>
           <SelectItem value="text-contains">文本包含</SelectItem>
-          <SelectItem value="parent-is">父节点是</SelectItem>
           <SelectItem value="child-of">是节点的直接子节点</SelectItem>
           <SelectItem value="descendant-of">属于节点后代</SelectItem>
           <SelectItem value="references">引用节点</SelectItem>
@@ -681,7 +680,6 @@ function getDraftPredicate({
     }
     case "text-contains":
       return text.trim() ? { kind, text: text.trim() } : undefined;
-    case "parent-is":
     case "child-of":
     case "descendant-of":
     case "references":

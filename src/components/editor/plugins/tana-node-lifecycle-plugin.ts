@@ -1,3 +1,5 @@
+import { canMutateTanaNode } from '../mutation-policy';
+import { canTrash } from '@/lib/tana/node-behavior';
 import { ElementApi } from 'platejs';
 import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -129,6 +131,8 @@ function trash(
   removeNodes: PlateEditor['tf']['removeNodes'],
   nodeId: NodeId
 ): boolean {
+  const entry = getTanaNodeEntry(editor, nodeId);
+  if (!entry || !canMutateTanaNode(editor, entry[1], canTrash)) return false;
   return moveSubtreeToSystem(editor, removeNodes, nodeId, 'trash', false);
 }
 
@@ -221,7 +225,7 @@ function removeSelectedOrdinaryNodes(
 
     return true;
   });
-  let changed = false;
+  if (roots.some(([, path]) => !canMutateTanaNode(editor, path, canTrash))) return true;
 
   roots.forEach(([node]) => {
     if (node.tanaSystemNode !== undefined || typeof node.id !== 'string') return;
@@ -231,13 +235,14 @@ function removeSelectedOrdinaryNodes(
 
     if (!entry || !trashNode) return;
 
-    changed =
-      (isWithinSubtree(editor, entry[1], trashNode[1])
-        ? deletePermanently(editor, removeNodes, node.id)
-        : trash(editor, removeNodes, node.id)) || changed;
+    if (isWithinSubtree(editor, entry[1], trashNode[1])) {
+      deletePermanently(editor, removeNodes, node.id);
+    } else {
+      trash(editor, removeNodes, node.id);
+    }
   });
 
-  return changed;
+  return selected.length > 0;
 }
 
 /**

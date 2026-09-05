@@ -1,3 +1,5 @@
+import { canMutateTanaNode } from '../mutation-policy';
+import { canIndent, canOutdent } from '@/lib/tana/node-behavior';
 import { ElementApi, nanoid } from 'platejs';
 import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -407,6 +409,9 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       return removeNodes(options);
     },
     tab(options) {
+      const policy = options?.reverse ? canOutdent : canIndent;
+      if (editor.api.blocks().some(([, path]) => !canMutateTanaNode(editor, path, policy))) return true;
+
       if (options?.reverse === true && selectionHasProtectedOutdentNode(editor)) {
         return true;
       }

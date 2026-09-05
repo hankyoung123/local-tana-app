@@ -47,6 +47,9 @@ export function getTanaParentPath(
 
   const nodeIndent = getIndent(node);
 
+  // Flat roots cannot have a parent; avoid scanning every preceding root.
+  if (nodeIndent === 0) return;
+
   for (let index = path[0] - 1; index >= 0; index -= 1) {
     const candidate = document[index];
 

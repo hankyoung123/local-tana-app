@@ -1,3 +1,4 @@
+import { isTanaQueryAst, isTanaQueryPredicateAst } from '@/lib/tana/query-ast';
 import { ElementApi, KEYS } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -263,6 +264,7 @@ function isTanaQueryPredicateValid(
     'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
   >
 ): boolean {
+  if (!isTanaQueryPredicateAst(predicate)) return false;
   switch (predicate.kind) {
     case 'field-defined':
     case 'field-exists':
@@ -277,7 +279,6 @@ function isTanaQueryPredicateValid(
       return context.supertagDefinitionIds.has(predicate.supertagId);
     case 'text-contains':
       return true;
-    case 'parent-is':
     case 'child-of':
     case 'descendant-of':
     case 'references':
@@ -293,7 +294,7 @@ function isTanaQueryExpressionValid(
     'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
   >
 ): boolean {
-  if (!expression || typeof expression !== 'object') return false;
+  if (!isTanaQueryAst(expression)) return false;
 
   switch (expression.type) {
     case 'predicate':
@@ -317,7 +318,7 @@ function pruneTanaQueryExpression(
     'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
   >
 ): TanaQueryExpression | undefined {
-  if (!expression || typeof expression !== 'object') return;
+  if (!isTanaQueryAst(expression)) return;
 
   switch (expression.type) {
     case 'predicate':

@@ -68,7 +68,6 @@ export type TanaQueryClause =
   | { kind: 'text-contains'; text: string };
 
 export type TanaGraphQueryClause =
-  | { kind: 'parent-is'; nodeId: NodeId }
   | { kind: 'child-of'; nodeId: NodeId }
   | { kind: 'descendant-of'; nodeId: NodeId }
   | { kind: 'references'; nodeId: NodeId }

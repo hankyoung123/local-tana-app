@@ -7,7 +7,8 @@ import {
   XIcon,
 } from 'lucide-react';
 import type { TElement } from 'platejs';
-import { useEditorRef } from 'platejs/react';
+import { TogglePlugin } from '@platejs/toggle/react';
+import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
@@ -30,6 +31,7 @@ import type {
 } from '@/lib/tana';
 import {
   getFieldValueCandidates,
+  isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
 } from '@/lib/tana';
 
@@ -60,6 +62,23 @@ export type TanaNodeRenderer = {
   Workspace: React.ComponentType<TanaNodeWorkspaceRendererProps>;
 };
 
+/** Read-only rows from canonical hierarchy; never traverse Reference edges. */
+export function getReferenceSubtreeRows(index: TanaIndex, targetNodeId: NodeId) {
+  const rows: Array<{ id: NodeId; depth: number }> = [];
+  const stack = (index.childrenByParent.get(targetNodeId) ?? []).slice().reverse()
+    .map((id) => ({ id, depth: 1 }));
+  while (stack.length) {
+    const row = stack.pop()!;
+    const node = index.nodesById.get(row.id);
+    if (!node || isTanaFieldNodePresentationHidden(index.document, node.path)) continue;
+    rows.push(row);
+    for (const id of (index.childrenByParent.get(row.id) ?? []).slice().reverse()) {
+      stack.push({ id, depth: row.depth + 1 });
+    }
+  }
+  return rows;
+}
+
 /**
  * A block Reference is a read-through projection: its own Plate Node carries
  * only a target NodeId, while title and tags are always derived from — and
@@ -67,20 +86,26 @@ export type TanaNodeRenderer = {
  */
 function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const targetNodeId = (element as TanaBlockElement).tanaReferenceTargetId;
+  const editor = useEditorRef();
+  const openIds = usePluginOption(TogglePlugin, 'openIds');
+  const open = typeof element.id === 'string' && openIds?.has(element.id);
   const { baseIndent } = useTanaZoomPresentation();
   const indent = typeof element.indent === 'number' ? element.indent : 0;
-
+  const children = targetNodeId ? index.childrenByParent.get(targetNodeId) ?? [] : [];
+  const rows = open && targetNodeId ? getReferenceSubtreeRows(index, targetNodeId) : [];
   return (
-    <div
-      className="absolute inset-y-0 z-20"
-      contentEditable={false}
-      style={{ left: `${getTanaDisplayIndentPx(indent, baseIndent)}px`, right: 0 }}
-    >
-      <NodeProjection
-        index={index}
-        targetNodeId={targetNodeId}
-        variant="block-reference"
-      />
+    <div className="relative z-20 bg-[var(--tana-canvas)]" contentEditable={false}
+      style={{ marginLeft: `${getTanaDisplayIndentPx(indent, baseIndent)}px` }}>
+      <div className="flex items-center">
+        {children.length > 0 && <button aria-label="展开引用子节点" aria-expanded={!!open}
+          onClick={() => editor.getApi(TogglePlugin).toggle.toggleIds([String(element.id)], !open)}>
+          {open ? '▾' : '▸'}
+        </button>}
+        <div className="min-w-0 flex-1"><NodeProjection index={index} targetNodeId={targetNodeId} variant="block-reference" /></div>
+      </div>
+      {rows.map(({ id, depth }) => <div key={id} style={{ marginLeft: depth * 20 }}>
+        <NodeProjection index={index} targetNodeId={id} variant="block-reference" />
+      </div>)}
     </div>
   );
 }

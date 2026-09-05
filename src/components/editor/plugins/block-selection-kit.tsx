@@ -15,6 +15,7 @@ import {
   canSelect,
   isTanaNodeInteractable,
 } from '@/lib/tana';
+import { canMutateTanaNode } from '../mutation-policy';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 const EMPTY_OPEN_IDS = new Set<string>();
@@ -58,8 +59,8 @@ export const BlockSelectionKit = [
           .blockSelection.getNodes({ sort: true });
 
         if (
-          selected.some(([node, path]) =>
-            !canDuplicate(node, { document: editor.children, path })
+          selected.some(([, path]) =>
+            !canMutateTanaNode(editor, path, canDuplicate)
           )
         ) {
           return;
@@ -74,8 +75,8 @@ export const BlockSelectionKit = [
         const canChangeIndent = indent < 0 ? canOutdent : canIndent;
 
         if (
-          selected.some(([node, path]) =>
-            !canChangeIndent(node, { document: editor.children, path })
+          selected.some(([, path]) =>
+            !canMutateTanaNode(editor, path, canChangeIndent)
           )
         ) {
           return;

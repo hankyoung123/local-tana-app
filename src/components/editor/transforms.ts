@@ -2,6 +2,7 @@
 
 import type { PlateEditor } from 'platejs/react';
 
+import { canMutateTanaNode } from './mutation-policy';
 import { canTurnInto } from '@/lib/tana/node-behavior';
 import { triggerFloatingLink } from '@platejs/link/react';
 import {
@@ -134,8 +135,8 @@ export const setBlockType = (
 
   if (
     entries.length === 0 ||
-    entries.some(([node, path]) =>
-      !canTurnInto(node, { document: editor.children, path })
+    entries.some(([, path]) =>
+      !canMutateTanaNode(editor, path, canTurnInto)
     )
   ) {
     return false;

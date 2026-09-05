@@ -292,3 +292,20 @@ describe('buildTanaIndex', () => {
     );
   });
 });
+
+test('search includes Field labels and values, Supertags, and reference target semantics', () => {
+  const document = [
+    { id: 'tag', type: 'p', tanaSupertagDefinition: {}, children: [{ text: 'Research' }] },
+    { id: 'field', type: 'p', tanaFieldDefinition: { type: 'plain' as const }, children: [{ text: 'Location' }] },
+    { id: 'owner', type: 'p', tanaSupertagIds: ['tag'], children: [{ text: 'Project' }] },
+    { id: 'occurrence', type: 'p', indent: 1, tanaFieldId: 'field', children: [{ text: '' }] },
+    { id: 'value', type: 'p', indent: 2, tanaFieldValueType: 'plain' as const, children: [{ text: 'Shanghai' }] },
+    { id: 'reference', type: 'p', tanaReferenceTargetId: 'owner', children: [{ text: '' }] },
+  ];
+  const index = buildTanaIndex(document);
+  for (const query of ['research', 'location', 'shanghai', 'project']) {
+    const ids = searchTanaNodes(index, query).map((node) => node.id);
+    assert.ok(ids.includes('owner'), query);
+    assert.ok(ids.includes('reference'), query);
+  }
+});

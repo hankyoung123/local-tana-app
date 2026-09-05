@@ -608,9 +608,9 @@ function Draggable({
               <span className="truncate">{derivedTitle}</span>
             </span>
           )}
-          {semanticType === 'value' &&
+          {semanticType === 'reference' || (semanticType === 'value' &&
           element.tanaFieldValueType !== 'plain' &&
-          element.tanaFieldValueType !== 'number' ? (
+          element.tanaFieldValueType !== 'number') ? (
             <div
               className="pointer-events-none absolute inset-0 overflow-hidden text-transparent"
               contentEditable={false}

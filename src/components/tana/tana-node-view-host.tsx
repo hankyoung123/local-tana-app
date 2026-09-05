@@ -4,6 +4,7 @@ import type { NodeId } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
 import { getNodeRenderer } from './node-renderer-registry';
+import { TanaTrashView } from './tana-trash-view';
 import { TanaDailyNotesView } from './tana-daily-notes-view';
 
 export function TanaNodeViewHost({
@@ -17,6 +18,8 @@ export function TanaNodeViewHost({
   const focusedNode = focusedNodeId
     ? index.nodesById.get(focusedNodeId)
     : undefined;
+
+  if (focusedNode?.systemNode === 'trash') return <TanaTrashView index={index} node={focusedNode} />;
 
   if (focusedNode?.systemNode === 'daily-notes') {
     return <TanaDailyNotesView index={index} node={focusedNode} />;

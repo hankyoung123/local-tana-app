@@ -8,6 +8,8 @@ import {
   TANA_SUPERTAG_KEY,
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
+import { isTanaFieldHostNode } from './fields';
+import { isTanaQueryAst } from './query-ast';
 import { isTanaDay } from './time';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
@@ -34,6 +36,9 @@ type DocumentRow = {
 
 type TableInfoRow = {
   name: string;
+  type: string;
+  notnull: number;
+  pk: number;
 };
 
 export type SaveLifecycleStatus = 'error' | 'saved' | 'saving';
@@ -141,8 +146,7 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   // Field-as-Node is a schema break. Parent value maps and the previous
-  // options array are never valid in the current schema and are reset rather
-  // than migrated.
+  // options array are never valid in the current schema and are rejected without migration.
   if (semantic.tanaFieldValues !== undefined) return false;
 
   if (
@@ -214,9 +218,7 @@ function hasValidSemanticData(element: TElement): boolean {
 
     if (
       !definition ||
-      !definition.query ||
-      typeof definition.query !== 'object' ||
-      !('type' in definition.query)
+      !isTanaQueryAst(definition.query)
     ) {
       return false;
     }
@@ -342,7 +344,7 @@ function isFieldType(value: unknown): value is string {
 }
 
 export function isPlateDocument(value: unknown): value is Value {
-  return Array.isArray(value) && value.length > 0 && value.every(isDescendant);
+  return Array.isArray(value) && value.length > 0 && value.every((node) => isDescendant(node) && isElement(node));
 }
 
 /** Validates the Tana invariants layered on top of a valid Plate value. */
@@ -395,7 +397,8 @@ export function isValidTanaDocument(value: unknown): value is Value {
     if (isTanaNode) {
       if (
         typeof descendant.id !== 'string' ||
-        descendant.id.length === 0 ||
+        descendant.id.trim().length === 0 ||
+        (descendant.indent !== undefined && (!Number.isInteger(descendant.indent) || Number(descendant.indent) < 0)) ||
         nodeIds.has(descendant.id) ||
         !hasValidSemanticData(descendant)
       ) {
@@ -462,13 +465,9 @@ export function isValidTanaDocument(value: unknown): value is Value {
     if (node.tanaFieldId) {
       const definition = fieldDefinitions.get(node.tanaFieldId);
       const parentPath = getTanaParentPath(value, path);
-      const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
 
       if (
-        !parent ||
-        parent.tanaFieldDefinition !== undefined ||
-        parent.tanaFieldId !== undefined ||
-        parent.tanaFieldValueType !== undefined
+        !parentPath || !isTanaFieldHostNode(value, parentPath)
       ) {
         return false;
       }
@@ -538,40 +537,36 @@ async function getDatabase() {
         'PRAGMA table_info(plate_documents)'
       );
 
-      if (!columns.some(({ name }) => name === 'schema_version')) {
-        await database.execute(
-          'ALTER TABLE plate_documents ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1'
+      const expectedColumns = {
+        id: 'TEXT',
+        schema_version: 'INTEGER',
+        value: 'TEXT',
+        updated_at: 'TEXT',
+      };
+      const validSchema = columns.length === 4 &&
+        Object.entries(expectedColumns).every(([name, type]) =>
+          columns.some((column) =>
+            column.name === name && column.type === type &&
+            column.notnull === 1 && column.pk === (name === 'id' ? 1 : 0)
+          )
         );
+
+      if (!validSchema) {
+        throw new Error('Unsupported database schema');
       }
 
       return database;
     }
-  );
+  ).catch((error: unknown) => {
+    databasePromise = undefined;
+    throw error;
+  });
 
   return databasePromise;
 }
 
 export function usesSQLitePersistence() {
   return isTauri();
-}
-
-function hasObsoleteFieldMetadata(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-
-  if (Array.isArray(value)) return value.some(hasObsoleteFieldMetadata);
-
-  const record = value as Record<string, unknown>;
-  const fieldDefinition = record.tanaFieldDefinition;
-  const hasLegacyOptions =
-    !!fieldDefinition &&
-    typeof fieldDefinition === 'object' &&
-    Object.hasOwn(fieldDefinition as object, 'options');
-
-  return (
-    Object.hasOwn(record, 'tanaFieldValues') ||
-    hasLegacyOptions ||
-    Object.values(record).some(hasObsoleteFieldMetadata)
-  );
 }
 
 export async function loadPlateDocument(fallback: Value): Promise<Value> {
@@ -589,15 +584,8 @@ export async function loadPlateDocument(fallback: Value): Promise<Value> {
     return structuredClone(fallback);
   }
 
-  if (rows[0].schema_version < CURRENT_SCHEMA_VERSION) {
-    await savePlateDocument(fallback);
-
-    return structuredClone(fallback);
-  }
-  if (rows[0].schema_version > CURRENT_SCHEMA_VERSION) {
-    throw new Error(
-      `Document schema ${rows[0].schema_version} is newer than supported schema ${CURRENT_SCHEMA_VERSION}`
-    );
+  if (rows[0].schema_version !== CURRENT_SCHEMA_VERSION) {
+    throw new Error(`Unsupported document schema ${rows[0].schema_version}; expected ${CURRENT_SCHEMA_VERSION}`);
   }
 
   const parsed: unknown = JSON.parse(rows[0].value);
@@ -607,16 +595,22 @@ export async function loadPlateDocument(fallback: Value): Promise<Value> {
   }
 
   if (!isValidTanaDocument(parsed)) {
-    if (hasObsoleteFieldMetadata(parsed)) {
-      await savePlateDocument(fallback);
-
-      return structuredClone(fallback);
-    }
-
     throw new Error('The persisted Plate document violates Tana invariants');
   }
 
   return parsed;
+}
+
+/** Destructive recovery, called only after explicit user confirmation. */
+export async function resetPlateDocument(value: Value): Promise<void> {
+  if (!isValidTanaDocument(value)) throw new Error('Invalid reset document');
+  if (!usesSQLitePersistence()) return;
+  const { default: Database } = await import('@tauri-apps/plugin-sql');
+  const database = await Database.load(DATABASE_URL);
+  // Explicit destructive reset; never called by loading or saving.
+  await database.execute('DROP TABLE IF EXISTS plate_documents');
+  databasePromise = undefined;
+  await savePlateDocument(value);
 }
 
 export async function savePlateDocument(value: Value): Promise<void> {

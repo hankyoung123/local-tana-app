@@ -9,3 +9,5 @@ export * from './tana/query';
 export * from './tana/title';
 export * from './tana/types';
 export * from './tana/view-source';
+
+export * from './tana/query-ast';

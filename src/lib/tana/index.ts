@@ -1,3 +1,4 @@
+import { resolveTanaNodeTitle } from './title';
 import type { Descendant, Path, TElement, Value } from 'platejs';
 
 import { ElementApi, KEYS, TextApi } from 'platejs';
@@ -628,13 +629,23 @@ export function searchTanaNodes(
   for (const node of index.nodesById.values()) {
     if (!isTanaNodeActive(index, node.id)) continue;
 
-    const text = node.text.toLocaleLowerCase();
+    const target = node.referenceTargetId ? index.nodesById.get(node.referenceTargetId) : undefined;
+    const owner = target ?? node;
+    const text = resolveTanaNodeTitle(index, owner.id).toLocaleLowerCase();
+    const semanticText = [
+      ...owner.supertagIds.map((id) => index.nodesById.get(id)?.text ?? ''),
+      ...(index.fieldNodesByParent.get(owner.id) ?? []).flatMap((field) => [
+        index.nodesById.get(field.fieldId)?.text ?? '',
+        ...field.values.map((value) => value.type === 'options' || value.type === 'from-supertag'
+          ? index.nodesById.get(value.value)?.text ?? '' : String(value.value)),
+      ]),
+    ].join(' ').toLocaleLowerCase();
 
     if (text === normalizedQuery) {
       exact.push(node);
     } else if (text.startsWith(normalizedQuery)) {
       prefix.push(node);
-    } else if (text.includes(normalizedQuery)) {
+    } else if (text.includes(normalizedQuery) || semanticText.includes(normalizedQuery)) {
       contains.push(node);
     }
   }
