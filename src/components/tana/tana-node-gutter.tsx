@@ -48,6 +48,7 @@ export type TanaNodeChromeProps = {
   onZoom: () => void;
   open: boolean;
   semanticType: TanaNodeSemanticType;
+  showChrome?: boolean;
 };
 
 /** Presentation-only props passed from the DnD wrapper into the Plate element. */
@@ -58,7 +59,7 @@ export const TanaNodeChromeContext = React.createContext<TanaNodeChromeProps | n
 export function TanaNodeChrome() {
   const props = React.useContext(TanaNodeChromeContext);
 
-  return props ? <TanaNodeGutter {...props} /> : null;
+  return props && props.showChrome !== false ? <TanaNodeGutter {...props} /> : null;
 }
 
 /**
@@ -76,7 +77,7 @@ export function TanaNodeBullet({
   hasChildren?: boolean;
   semanticType: TanaNodeSemanticType;
 }) {
-  const size = compact ? 'size-3' : 'size-3.5';
+  const size = semanticType === 'content' && !compact ? 'size-[9px]' : compact ? 'size-3' : 'size-3.5';
   const iconClassName = cn(size, 'shrink-0');
 
   if (
@@ -139,6 +140,17 @@ export function TanaNodeBullet({
  * Presentation-only shell around existing Plate controls. The caller keeps
  * ownership of Toggle, Zoom, and DnD callbacks and refs.
  */
+function GutterGlyph({ children, offset = 0 }: {
+  children: React.ReactNode;
+  offset?: number;
+}) {
+  return (
+    <span className="grid size-5 place-items-center leading-none" style={{ lineHeight: 0, transform: `translateY(${offset}px)` }}>
+      {children}
+    </span>
+  );
+}
+
 export function TanaNodeGutter({
   className,
   ...props
@@ -188,10 +200,12 @@ export function TanaNodeGutter({
           }}
           onMouseDown={(event) => event.preventDefault()}
         >
-          <ChevronRightIcon
-            aria-hidden="true"
-            className={cn('size-3.5 transition-transform duration-100', open && 'rotate-90')}
-          />
+          <GutterGlyph>
+            <ChevronRightIcon
+              aria-hidden="true"
+              className={cn('size-3.5 transition-transform duration-100', open && 'rotate-90')}
+            />
+          </GutterGlyph>
         </button>
       )}
 
@@ -204,7 +218,7 @@ export function TanaNodeGutter({
           title="拖动节点"
           type="button"
         >
-          {dragHandle}
+          <GutterGlyph offset={-2}>{dragHandle}</GutterGlyph>
         </button>
       )}
 
@@ -221,12 +235,14 @@ export function TanaNodeGutter({
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
-        <TanaNodeBullet
-          compact={isFocusedNode}
-          fieldType={fieldType}
-          hasChildren={hasChildren}
-          semanticType={semanticType}
-        />
+        <GutterGlyph offset={2}>
+          <TanaNodeBullet
+            compact={isFocusedNode}
+            fieldType={fieldType}
+            hasChildren={hasChildren}
+            semanticType={semanticType}
+          />
+        </GutterGlyph>
       </button>
     </span>
   );

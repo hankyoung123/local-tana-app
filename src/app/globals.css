@@ -149,30 +149,6 @@
   color: var(--tana-text-tertiary);
 }
 
-/*
- * The page Body affordance is the trailing empty Plate Node itself. Plate's
- * generic placeholder is suppressed for this one Node so it has a stable,
- * unfocused presentation without introducing a second input.
- */
-.tana-emptyZoomBodyNode [data-slate-node='element']::before {
-  --tw-content: none !important;
-  content: none !important;
-}
-
-.tana-emptyZoomBodyNode::after {
-  position: absolute;
-  z-index: 10;
-  top: 0;
-  left: var(--tana-display-indent);
-  display: flex;
-  height: 1.5rem;
-  align-items: center;
-  color: var(--tana-text-tertiary);
-  content: '输入内容…';
-  font-size: 0.875rem;
-  pointer-events: none;
-}
-
 .tana-nodeFields [data-radix-select-trigger] svg {
   color: var(--tana-text-tertiary);
 }

@@ -11,7 +11,6 @@ import {
 import { expandListItemsWithChildren } from '@platejs/list';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
-import { GripVertical } from 'lucide-react';
 import {
   ElementApi,
   type NodeEntry,
@@ -478,6 +477,10 @@ function Draggable({
           )
         : undefined
     : undefined;
+  // Value Nodes are rendered as part of their owning Field row. Their
+  // semantic marker is the canonical boundary, so a missing or temporarily
+  // broken Field Definition cannot re-expose a duplicate node chrome.
+  const isMergedFieldValue = semanticType === 'value';
   const gutterLabel =
     derivedTitle ||
     (semanticField
@@ -549,6 +552,7 @@ function Draggable({
     onZoom: () => nodeId && editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId),
     open: openIds.has(nodeId ?? ''),
     semanticType,
+    showChrome: !isMergedFieldValue,
   };
 
   return (
@@ -759,7 +763,11 @@ const DragHandle = React.memo(function DragHandle({
           }}
           data-plate-prevent-deselect
         >
-          <GripVertical className="text-muted-foreground" />
+          <span aria-hidden="true" className="grid grid-cols-2 grid-rows-3 gap-[2px] leading-[0]">
+            {Array.from({ length: 6 }, (_, index) => (
+              <span key={index} className="size-[2px] rounded-full bg-current" />
+            ))}
+          </span>
         </div>
       </TooltipTrigger>
       <TooltipContent>拖动以移动</TooltipContent>

@@ -299,7 +299,7 @@ describe('Tana outliner behavior', () => {
     );
   });
 
-  test('ensures one trailing empty Plate body child without a detached input', () => {
+  test('does not append an empty body child when the page already has content', () => {
     const editor = createPlateEditor({
       nodeId: {
         filter: isTanaNodeElement,
@@ -317,25 +317,10 @@ describe('Tana outliner behavior', () => {
     assert.equal(zoomToTanaNode(editor, 'project'), true);
     assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.ensureBodyChild(), true);
 
-    const bodyPath = getTanaNodePath(editor.children, 'generated');
-
-    assert.ok(bodyPath);
-    assert.equal(editor.children[bodyPath![0]].indent, 1);
-    assert.deepEqual(getTanaParentPath(editor.children, bodyPath!), [0]);
-    assert.equal(editor.children[bodyPath![0]].children[0].text, '');
-
-    const afterFirstEnsure = structuredClone(editor.children);
-
-    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.ensureBodyChild(), true);
-    assert.deepEqual(editor.children, afterFirstEnsure);
-
-    editor.tf.select(bodyPath!, { edge: 'start' });
-    editor.tf.insertText('Body');
-
-    assert.equal(editor.children[bodyPath![0]].children[0].text, 'Body');
+    assert.equal(getTanaNodePath(editor.children, 'generated'), undefined);
     assert.deepEqual(
       getTanaZoomRange(editor.children, 'project').map(([index]) => editor.children[index].id),
-      ['project', 'note', 'generated']
+      ['project', 'note']
     );
   });
 

@@ -174,9 +174,25 @@ function ensureZoomBodyChild(editor: PlateEditor) {
 
   if (!hostEntry || !isTanaFieldHostNode(editor.children, hostEntry[1])) return false;
 
-  const trailingChild = getTanaDirectChildPaths(editor.children, hostEntry[1]).at(-1);
+  const directChildPaths = getTanaDirectChildPaths(editor.children, hostEntry[1]);
+  const trailingChild = directChildPaths.at(-1);
 
   if (trailingChild && isEmptyZoomBodyChild(editor, trailingChild)) return true;
+
+  // Once a page has ordinary body content, its normal Plate Enter workflow is
+  // the insertion affordance. Do not materialize an extra empty Node merely
+  // because the page was opened in Zoom.
+  const hasOrdinaryBodyChild = directChildPaths.some((path) => {
+    const entry = editor.api.node(path);
+
+    return (
+      !!entry &&
+      ElementApi.isElement(entry[0]) &&
+      getNodeSemanticType(entry[0], { document: editor.children, path }) === 'content'
+    );
+  });
+
+  if (hasOrdinaryBodyChild) return true;
 
   return insertZoomBodyChild(editor, { select: false });
 }
