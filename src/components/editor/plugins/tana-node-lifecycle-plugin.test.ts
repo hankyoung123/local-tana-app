@@ -239,3 +239,78 @@ test('deleting a reference occurrence preserves its canonical target and childre
   assert.equal(lifecycle(editor).deletePermanently('project-reference'), true);
   assert.deepEqual(editor.children.filter((node) => canonical.some((item) => item.id === node.id)), canonical);
 });
+
+test('Reference projection closes the trash/restore/delete lifecycle without rebinding', async () => {
+  const { getTanaProjectionTarget } = await import('@/lib/tana/index');
+  const { getReferenceSubtreeRows } = await import('@/components/tana/node-renderer-registry');
+  const { TanaReferencePlugin } = await import('./tana-reference-plugin');
+  const { NodeProjection } = await import('@/components/tana/node-projection');
+  const { TanaTrashView } = await import('@/components/tana/tana-trash-view');
+  const { Plate } = await import('platejs/react');
+  const { createElement } = await import('react');
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const editor = createEditor(workspaceWithLifecycleSubtree());
+  editor.tf.insertNodes([
+    { id: 'child', type: KEYS.p, indent: 3, children: [{ text: 'Child', bold: true }] },
+    { id: 'grandchild', type: KEYS.p, indent: 4, children: [{ text: 'Grandchild' }] },
+  ], { at: [5] });
+  const reference = editor.getTransforms(TanaReferencePlugin).reference;
+  let index = buildTanaIndex(editor.children);
+  assert.equal(getTanaProjectionTarget(index, 'project-reference')?.id, 'project-node');
+  assert.deepEqual(getReferenceSubtreeRows(index, 'project-node').map(({ id }) => id),
+    ['project-status', 'project-status-value', 'child', 'grandchild']);
+
+  const beforeEdit = structuredClone(editor.children);
+  assert.equal(reference.setTargetTitle('child', 'Edited child'), true);
+  const expected = beforeEdit.map((node) => node.id === 'child'
+    ? { ...node, children: [{ text: 'Edited child', bold: true }] } : node);
+  assert.deepEqual(editor.children, expected);
+  const canonicalIds = ['project-node', 'project-status', 'project-status-value', 'child', 'grandchild'];
+  const hierarchy = () => canonicalIds.map((id) => {
+    const current = buildTanaIndex(editor.children);
+    return [id, current.parentNodeIds.get(id), current.nodesById.get(id)?.node.indent];
+  });
+  const originalHierarchy = hierarchy();
+  const occurrence = structuredClone(editor.children.find((node) => node.id === 'project-reference'));
+
+  assert.equal(lifecycle(editor).trash('project-node'), true);
+  index = buildTanaIndex(editor.children);
+  assert.equal(getTanaProjectionTarget(index, 'project-reference'), undefined);
+  assert.deepEqual(getReferenceSubtreeRows(index, 'project-node'), []);
+  const beforeStaleEdit = structuredClone(editor.children);
+  assert.equal(reference.setTargetTitle('child', 'Stale edit'), false);
+  assert.deepEqual(editor.children, beforeStaleEdit);
+  const brokenMarkup = () => renderToStaticMarkup(createElement(NodeProjection, {
+    index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference',
+  }));
+  assert.match(brokenMarkup(), /目标已删除/);
+  assert.doesNotMatch(brokenMarkup(), /<input/);
+  const trashMarkup = renderToStaticMarkup(createElement(Plate, { editor,
+    children: createElement(TanaTrashView, { index, node: index.nodesById.get('trash')! }) }));
+  assert.match(trashMarkup, /tana-projectionRow/);
+  assert.match(trashMarkup, /Project tag/);
+  assert.match(trashMarkup, /Status/);
+  assert.match(trashMarkup, /Open/);
+  assert.doesNotMatch(trashMarkup, /<input/);
+  assert.match(trashMarkup, /永久删除/);
+
+  assert.equal(lifecycle(editor).restore('project-node'), true);
+  assert.deepEqual(hierarchy(), originalHierarchy);
+  assert.equal(getTanaProjectionTarget(buildTanaIndex(editor.children), 'project-reference')?.id, 'project-node');
+  assert.equal(getReferenceSubtreeRows(buildTanaIndex(editor.children), 'project-node').length, 4);
+  const liveMarkup = renderToStaticMarkup(createElement(Plate, { editor,
+    children: createElement(NodeProjection, { index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference' }) }));
+  assert.match(liveMarkup, /<input/);
+  assert.match(liveMarkup, /value="Project"/);
+  assert.doesNotMatch(liveMarkup, /目标已删除/);
+  assert.deepEqual(editor.children.find((node) => node.id === 'project-reference'), occurrence);
+
+  assert.equal(lifecycle(editor).trash('project-node'), true);
+  assert.equal(lifecycle(editor).deletePermanently('project-node'), true);
+  index = buildTanaIndex(editor.children);
+  for (const id of canonicalIds) assert.equal(index.nodesById.has(id), false);
+  assert.match(brokenMarkup(), /目标已删除/);
+  editor.tf.insertNodes({ id: 'replacement', type: KEYS.p, indent: 2, children: [{ text: 'Project' }] }, { at: [2] });
+  assert.equal(getTanaProjectionTarget(buildTanaIndex(editor.children), 'project-reference'), undefined);
+  assert.deepEqual(editor.children.find((node) => node.id === 'project-reference'), occurrence);
+});

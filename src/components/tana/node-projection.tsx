@@ -7,6 +7,7 @@ import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   resolveTanaNodeTitle,
+  getTanaProjectionTarget,
   type NodeId,
   type TanaFieldNode,
   type TanaIndex,
@@ -94,7 +95,7 @@ export function TanaNodeRowChrome({
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
   target: TanaNode;
-  variant: ProjectionVariant;
+  variant: ProjectionVariant | 'trash';
 }) {
   const editor = useEditorRef();
   const tags = target.supertagIds.map((supertagId) => ({
@@ -118,7 +119,9 @@ export function TanaNodeRowChrome({
   // Projection identity is presentation-only: the canonical outline keeps the
   // target's own bullet, while a Reference or Search result declares why the
   // same canonical Node is being shown here.
-  const semanticType = isBlockReference ? 'reference' : 'search';
+  const semanticType = variant === 'trash'
+    ? target.semanticType
+    : isBlockReference ? 'reference' : 'search';
   const navigate = () => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
 
   return (
@@ -131,6 +134,7 @@ export function TanaNodeRowChrome({
             : 'shrink-0 text-[var(--tana-node-bullet)]'
         }
         type="button"
+        disabled={variant === 'trash'}
         onClick={navigate}
       >
         <TanaNodeBullet compact={isBlockReference} semanticType={semanticType} />
@@ -141,7 +145,7 @@ export function TanaNodeRowChrome({
         ) : (
           <ProjectionTitleInput
             displayTitle={displayTitle}
-            readOnly={titleIsExpression}
+            readOnly={titleIsExpression || variant === 'trash'}
             targetNodeId={target.id}
             title={editableTitle}
           />
@@ -186,7 +190,7 @@ export function NodeProjection({
   targetNodeId: NodeId | undefined;
   variant: ProjectionVariant;
 }) {
-  const target = targetNodeId ? index.nodesById.get(targetNodeId) : undefined;
+  const target = getTanaProjectionTarget(index, targetNodeId);
 
   if (!target) {
     const semanticType = variant === 'block-reference' ? 'reference' : 'search';

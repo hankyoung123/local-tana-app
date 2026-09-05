@@ -24,13 +24,13 @@ import {
 import type {
   FieldValue,
   NodeId,
-  TanaBlockElement,
   TanaIndex,
   TanaNode,
   TanaNodeSemanticType,
 } from '@/lib/tana';
 import {
   getFieldValueCandidates,
+  getTanaProjectionTarget,
   isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
 } from '@/lib/tana';
@@ -65,6 +65,8 @@ export type TanaNodeRenderer = {
 /** Read-only rows from canonical hierarchy; never traverse Reference edges. */
 export function getReferenceSubtreeRows(index: TanaIndex, targetNodeId: NodeId) {
   const rows: Array<{ id: NodeId; depth: number }> = [];
+  const target = getTanaProjectionTarget(index, targetNodeId);
+  if (!target || target.id !== targetNodeId) return rows;
   const stack = (index.childrenByParent.get(targetNodeId) ?? []).slice().reverse()
     .map((id) => ({ id, depth: 1 }));
   while (stack.length) {
@@ -85,7 +87,8 @@ export function getReferenceSubtreeRows(index: TanaIndex, targetNodeId: NodeId) 
  * edits always write to — the canonical target Node.
  */
 function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
-  const targetNodeId = (element as TanaBlockElement).tanaReferenceTargetId;
+  const occurrenceId = typeof element.id === 'string' ? element.id : undefined;
+  const targetNodeId = getTanaProjectionTarget(index, occurrenceId)?.id;
   const editor = useEditorRef();
   const openIds = usePluginOption(TogglePlugin, 'openIds');
   const open = typeof element.id === 'string' && openIds?.has(element.id);
@@ -101,7 +104,7 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
           onClick={() => editor.getApi(TogglePlugin).toggle.toggleIds([String(element.id)], !open)}>
           {open ? '▾' : '▸'}
         </button>}
-        <div className="min-w-0 flex-1"><NodeProjection index={index} targetNodeId={targetNodeId} variant="block-reference" /></div>
+        <div className="min-w-0 flex-1"><NodeProjection index={index} targetNodeId={occurrenceId} variant="block-reference" /></div>
       </div>
       {rows.map(({ id, depth }) => <div key={id} style={{ marginLeft: depth * 20 }}>
         <NodeProjection index={index} targetNodeId={id} variant="block-reference" />

@@ -63,3 +63,18 @@ test('Reference expansion derives canonical subtree order and prunes hidden Fiel
   ]);
   assert.deepEqual(document, before);
 });
+
+test('Reference chains and cycles never produce recursive projected subtrees', async () => {
+  const { buildTanaIndex, getTanaProjectionTarget } = await import('@/lib/tana/index');
+  const { getReferenceSubtreeRows } = await import('./node-renderer-registry');
+  const index = buildTanaIndex([
+    { id: 'root', type: 'p', children: [{ text: 'Root' }] },
+    { id: 'ref-a', type: 'p', indent: 1, tanaReferenceTargetId: 'ref-b', children: [{ text: '' }] },
+    { id: 'ref-b', type: 'p', tanaReferenceTargetId: 'ref-a', children: [{ text: '' }] },
+  ]);
+  assert.deepEqual(getReferenceSubtreeRows(index, 'root'), [{ id: 'ref-a', depth: 1 }]);
+  for (const id of ['ref-a', 'ref-b']) {
+    assert.equal(getTanaProjectionTarget(index, id), undefined);
+    assert.deepEqual(getReferenceSubtreeRows(index, id), []);
+  }
+});
