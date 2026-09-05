@@ -57,7 +57,8 @@ function getTitleTextPath(target: [TanaBlockElement, Path]): Path | undefined {
 function setTargetTitle(editor: PlateEditor, targetNodeId: NodeId, title: string): boolean {
   const target = getTanaNodeEntry(editor, targetNodeId);
 
-  if (!target || target[0].tanaSystemNode !== undefined) return false;
+  if (!target || target[0].tanaReferenceTargetId !== undefined ||
+    !isTanaNodeActive(buildTanaIndex(editor.children), targetNodeId)) return false;
 
   const titleTextPath = getTitleTextPath(target);
 

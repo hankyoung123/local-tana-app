@@ -600,6 +600,20 @@ export function isTanaNodeActive(index: TanaIndex, nodeId: NodeId): boolean {
   );
 }
 
+/** Resolve a projection to one live canonical Node, never follow Reference chains. */
+export function getTanaProjectionTarget(
+  index: TanaIndex,
+  nodeId: NodeId | undefined
+): TanaNode | undefined {
+  if (!nodeId || !isTanaNodeActive(index, nodeId)) return;
+  const node = index.nodesById.get(nodeId)!;
+  if (node.referenceTargetId === undefined) return node;
+  const target = index.nodesById.get(node.referenceTargetId);
+  return target && target.referenceTargetId === undefined && isTanaNodeActive(index, target.id)
+    ? target
+    : undefined;
+}
+
 /** Active instances are derived from membership at the point of use. */
 export function getActiveSupertagInstances(
   index: TanaIndex,

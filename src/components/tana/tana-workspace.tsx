@@ -9,6 +9,7 @@ import {
   Settings2Icon,
 } from 'lucide-react';
 import {
+  type PlateEditor,
   useEditorRef,
   useEditorSelector,
   useHotkeys,
@@ -75,6 +76,26 @@ function SearchResult({
       </span>
     </CommandItem>
   );
+}
+
+/** Selection uses current canonical data, then clears and dismisses the dialog. */
+export function selectTanaSearchResult(
+  editor: PlateEditor,
+  nodeId: string,
+  setQuery: (query: string) => void,
+  setOpen: (open: boolean) => void
+) {
+  const navigated = editor.getTransforms(TanaZoomPlugin).zoom.toResult(nodeId);
+  setQuery('');
+  setOpen(false);
+  return navigated;
+}
+
+/** Dialog dismissal finishes before Plate restores focus to the newly zoomed Node. */
+export function focusAfterTanaSearch(editor: PlateEditor) {
+  const nodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+  if (nodeId) return editor.getApi(TanaZoomPlugin).zoom.focus(nodeId);
+  editor.tf.focus();
 }
 
 export function TanaWorkspace({
@@ -156,9 +177,7 @@ function TanaWorkspaceContent({
   const activeNodeId = focusedNodeId ?? selectedNodeId;
 
   const navigateToSearchResult = (nodeId: string) => {
-    editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
-    setSearch('');
-    setSearchOpen(false);
+    selectTanaSearchResult(editor, nodeId, setSearch, setSearchOpen);
   };
 
   const openSearch = React.useCallback(() => {
@@ -275,7 +294,7 @@ function TanaWorkspaceContent({
           <Dialog open={searchOpen} onOpenChange={(open) => { setSearchOpen(open); if (!open) setSearch(''); }}>
             <DialogContent onCloseAutoFocus={(event) => {
               event.preventDefault();
-              editor.tf.focus();
+              focusAfterTanaSearch(editor);
             }}>
               <DialogTitle>全局搜索</DialogTitle>
               <DialogDescription>搜索标题、字段、标签和引用。</DialogDescription>

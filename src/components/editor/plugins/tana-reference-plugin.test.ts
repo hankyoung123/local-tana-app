@@ -43,6 +43,7 @@ describe('Tana Reference projection mutations', () => {
     ]);
     const reference = editor.getTransforms(TanaReferencePlugin).reference;
 
+    assert.equal(reference.setTargetTitle('project-reference', 'Must not edit occurrence'), false);
     assert.equal(reference.setTargetTitle('project', 'Renamed project'), true);
     assert.equal(editor.children[0].id, 'project');
     assert.deepEqual(editor.children[0].children, [{ text: 'Renamed project' }]);

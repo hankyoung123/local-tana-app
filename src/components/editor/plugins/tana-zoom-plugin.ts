@@ -4,6 +4,7 @@ import { ElementApi } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { buildTanaIndex, getTanaProjectionTarget } from '@/lib/tana/index';
 import { isTanaFieldHostNode } from '@/lib/tana/fields';
 import {
   getTanaAncestorPaths,
@@ -281,6 +282,10 @@ export const TanaZoomPlugin = createPlatePlugin<
   }))
   .extendEditorTransforms(({ editor }) => ({
     zoom: {
+      toResult: (nodeId: NodeId) => {
+        const target = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+        return target ? zoomTo(editor, target.id) : false;
+      },
       ensureBodyChild: () => ensureZoomBodyChild(editor),
       insertBodyChild: () => insertZoomBodyChild(editor),
       out: () => zoomOut(editor),
