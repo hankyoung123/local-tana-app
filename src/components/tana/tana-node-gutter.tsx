@@ -145,7 +145,11 @@ export function TanaNodeGutter({
   return (
     <div
       className={cn(
-        'tana-nodeGutter absolute flex h-6 w-14 items-center',
+        // Three fixed hit targets keep collapse, drag, and Zoom independent.
+        // The gutter sits immediately before the Node text, so the persistent
+        // bullet remains the closest affordance in both default and hover
+        // states: `>  ⋮  ●  Node`.
+        'tana-nodeGutter absolute grid h-6 w-[60px] grid-cols-3 items-center',
         className
       )}
       contentEditable={false}
@@ -154,7 +158,7 @@ export function TanaNodeGutter({
       {hasChildren && (
         <button
           aria-label={open ? `折叠 ${label}` : `展开 ${label}`}
-          className="absolute left-0 grid size-6 place-items-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
+          className="col-start-1 grid size-5 place-self-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
           data-plate-prevent-deselect
           title={open ? '折叠节点' : '展开节点'}
           type="button"
@@ -174,7 +178,7 @@ export function TanaNodeGutter({
 
       <button
         aria-label={`聚焦 ${semanticLabels[semanticType]}：${label}`}
-        className="absolute right-0 grid size-6 place-items-center rounded text-[var(--tana-node-bullet)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-accent)] focus-visible:bg-[var(--tana-hover)] focus-visible:text-[var(--tana-accent)]"
+        className="col-start-3 grid size-5 place-self-center rounded text-[var(--tana-node-bullet)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-accent)] focus-visible:bg-[var(--tana-hover)] focus-visible:text-[var(--tana-accent)]"
         data-plate-prevent-deselect
         title="聚焦节点"
         type="button"
@@ -195,7 +199,7 @@ export function TanaNodeGutter({
       {isDraggable && (
         <button
           aria-label="拖动节点"
-          className="absolute right-5 grid size-6 place-items-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
+          className="col-start-2 grid size-5 place-self-center rounded text-[var(--tana-text-tertiary)] opacity-0 transition-opacity hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:opacity-100 group-hover/tanaNode:opacity-100"
           data-plate-prevent-deselect
           ref={dragHandleRef}
           title="拖动节点"

@@ -41,7 +41,7 @@ export function TanaCardsView({
         {results.map((node) => (
           <article
             key={node.id}
-            className="cursor-pointer overflow-hidden rounded-lg border bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)]"
+            className="tana-projectionCard cursor-pointer overflow-hidden rounded-md border border-[var(--tana-divider)] bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)]"
             onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
           >
             <NodeProjection

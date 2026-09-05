@@ -436,12 +436,12 @@ function TableRow({
   const editableTitle = getProjectionEditableTitle(node);
 
   return (
-    <tr className="border-b border-[var(--tana-divider)] last:border-0 hover:bg-[var(--tana-hover)]">
-      <td className="min-w-56 px-2 py-1.5 align-middle">
+    <tr className="tana-projectionRow border-b border-[var(--tana-divider)] last:border-0 hover:bg-[var(--tana-hover)]">
+      <td className="min-w-56 px-1.5 py-1 align-middle">
         <div className="flex items-center gap-1.5">
           <button
             aria-label={`打开 ${displayTitle || '未命名节点'}`}
-            className="grid size-6 shrink-0 place-items-center rounded text-[var(--tana-node-bullet)] hover:bg-[var(--tana-accent-soft)] hover:text-[var(--tana-accent)]"
+            className="grid size-5 shrink-0 place-items-center rounded text-[var(--tana-node-bullet)] hover:bg-[var(--tana-accent-soft)] hover:text-[var(--tana-accent)]"
             title="打开节点"
             type="button"
             onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)}
@@ -457,7 +457,7 @@ function TableRow({
         </div>
       </td>
       {fieldIds.map((fieldId) => (
-        <td key={fieldId} className="min-w-32 px-2 py-1.5 align-middle text-xs">
+        <td key={fieldId} className="min-w-32 px-1.5 py-1 align-middle text-xs">
           <FieldCell fieldId={fieldId} index={index} nodeId={node.id} />
         </td>
       ))}
@@ -502,12 +502,12 @@ export function TanaTableView({
 
   return (
     <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse">
+        <table className="tana-projectionTable min-w-full border-collapse">
           <thead className="border-b border-[var(--tana-divider)] text-left text-[var(--tana-text-tertiary)] text-xs">
             <tr>
-              <th className="px-2 py-1.5 font-medium">Title</th>
+              <th className="px-1.5 py-1 font-medium">Title</th>
               {visibleFields.map((fieldId) => (
-                <th key={fieldId} className="px-2 py-1.5 font-medium">
+                <th key={fieldId} className="px-1.5 py-1 font-medium">
                   {fieldName(fieldId)}
                 </th>
               ))}
@@ -517,7 +517,7 @@ export function TanaTableView({
             {results.length === 0 ? (
               <tr>
                 <td
-                  className="px-2 py-8 text-center text-[var(--tana-text-tertiary)] text-xs"
+                  className="px-1.5 py-8 text-center text-[var(--tana-text-tertiary)] text-xs"
                   colSpan={visibleFields.length + 1}
                 >
                   没有匹配的节点
@@ -529,7 +529,7 @@ export function TanaTableView({
                   {activeGroupFieldId && (
                     <tr className="border-y border-[var(--tana-divider)] text-[var(--tana-text-tertiary)] text-xs">
                       <th
-                        className="px-2 py-1.5 text-left font-medium"
+                        className="px-1.5 py-1 text-left font-medium"
                         colSpan={visibleFields.length + 1}
                       >
                         {group.label} · {group.nodes.length}

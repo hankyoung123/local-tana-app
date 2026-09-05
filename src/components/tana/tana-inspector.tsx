@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  getActiveSupertagInstances,
   getNodeReferenceCandidatesFromIndex,
   getNodeFieldDescriptors,
   getSupertagTemplateFields,
@@ -30,10 +29,14 @@ import {
   type NodeId,
   type TanaBlockElement,
   type TanaFieldDescriptor,
+  type TanaIndex,
 } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
-import { TanaSearchDefinitionEditor } from './tana-view-editor';
+import {
+  TanaSearchDefinitionEditor,
+  TanaViewConfigurationEditor,
+} from './tana-view-editor';
 
 const fieldTypeLabels: Record<FieldType, string> = {
   checkbox: '复选框',
@@ -79,6 +82,10 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
   const systemFields = descriptors.filter(({ source }) => source === 'system');
   const customFields = descriptors.filter(({ source }) => source === 'custom');
   const isSupertagDefinition = node.semanticTypes.includes('supertag-definition');
+  const isFieldDefinition = node.fieldDefinition !== undefined;
+  const isSearch = node.searchDefinition !== undefined;
+  const isView = node.viewDefinition !== undefined;
+  const isOrdinaryNode = !isFieldDefinition && !isSupertagDefinition && !isSearch && !isView;
   const parentNode = index.parentNodeIds.get(node.id)
     ? index.nodesById.get(index.parentNodeIds.get(node.id)!)
     : undefined;
@@ -104,16 +111,16 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
     <aside className="h-full w-80 shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
       <div className="px-5 pt-5 pb-4">
         <p className="mb-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.12em]">
-          当前节点
+          配置
         </p>
         <h2 className="truncate font-medium text-[15px] text-[var(--tana-text)]">
           {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
         </h2>
       </div>
 
-      {node.fieldDefinition && (
+      {isFieldDefinition && (
         <FieldDefinitionEditor
-          definition={node.fieldDefinition}
+          definition={node.fieldDefinition!}
           fieldId={node.id}
         />
       )}
@@ -125,57 +132,19 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
         />
       )}
 
-      <FieldSection title="属性">
-        {systemFields.map((field) => (
-          <SystemFieldRow key={field.key} descriptor={field} />
-        ))}
-      </FieldSection>
+      {isOrdinaryNode && (
+        <OrdinaryNodeProperties
+          customFields={customFields}
+          index={index}
+          nodeId={node.id}
+          supertagGroups={supertagGroups}
+          systemFields={systemFields}
+        />
+      )}
 
-      <FieldSection title="标签字段">
-        {supertagGroups.size === 0 ? (
-          <p className="text-[var(--tana-text-tertiary)] text-xs">当前节点没有标签字段。</p>
-        ) : (
-          Array.from(supertagGroups.entries()).map(([supertagId, fields]) => (
-            <div key={supertagId} className="mb-3 last:mb-0">
-              <p className="mb-1.5 text-[var(--tana-accent)] text-xs">
-                #{index.nodesById.get(supertagId)?.text || '未命名超级标签'}
-              </p>
-              <div className="space-y-0.5">
-                {fields.map((field) => (
-                  <PresentationFieldRow
-                    key={field.key}
-                    descriptor={field}
-                    nodeId={node.id}
-                  />
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-      </FieldSection>
-
-      <OptionalSupertagFieldsSection nodeId={node.id} />
-
-      <FieldSection title={isSupertagDefinition ? '模板字段' : '自定义字段'}>
-        {customFields.length === 0 ? (
-          <p className="mb-2 text-[var(--tana-text-tertiary)] text-xs">
-            {isSupertagDefinition ? '暂无模板字段。' : '暂无自定义字段。'}
-          </p>
-        ) : (
-          <div className="mb-3 space-y-0.5">
-            {customFields.map((field) => (
-              <PresentationFieldRow
-                key={field.key}
-                descriptor={field}
-                nodeId={node.id}
-              />
-            ))}
-          </div>
-        )}
-        <p className="mt-2 text-[var(--tana-text-tertiary)] text-[11px]">
-          在正文空节点输入 &gt; 添加字段
-        </p>
-      </FieldSection>
+      {isSupertagDefinition && (
+        <SupertagFieldsSection fields={customFields} nodeId={node.id} />
+      )}
 
       {isSupertagDefinition && (
         <SupertagInheritanceSection supertagId={node.id} />
@@ -183,19 +152,18 @@ export function TanaInspector({ activeNodeId }: { activeNodeId: NodeId | null })
 
       {isSupertagDefinition && <SupertagPresentationSection supertagId={node.id} />}
 
-      {isSupertagDefinition && (
-        <SupertagInstancesSection supertagId={node.id} />
+      {isOrdinaryNode && <ReferencesConfigurationSection nodeId={node.id} />}
+
+      {isSearch && (
+        <TanaSearchDefinitionEditor
+          editor={editor}
+          index={index}
+          node={node.node as TanaBlockElement}
+          nodeId={node.id}
+        />
       )}
 
-      <ReferenceBindingSection nodeId={node.id} />
-      <ReferencesSection nodeId={node.id} />
-
-      <TanaSearchDefinitionEditor
-        editor={editor}
-        index={index}
-        node={node.node as TanaBlockElement}
-        nodeId={node.id}
-      />
+      {isView && <TanaViewConfigurationEditor index={index} nodeId={node.id} />}
     </aside>
   );
 }
@@ -214,6 +182,88 @@ function FieldSection({
       </h3>
       {children}
     </section>
+  );
+}
+
+/** Ordinary Nodes expose only their derived properties and reference actions. */
+function OrdinaryNodeProperties({
+  customFields,
+  index,
+  nodeId,
+  supertagGroups,
+  systemFields,
+}: {
+  customFields: readonly TanaFieldDescriptor[];
+  index: TanaIndex;
+  nodeId: NodeId;
+  supertagGroups: ReadonlyMap<NodeId, readonly TanaFieldDescriptor[]>;
+  systemFields: readonly TanaFieldDescriptor[];
+}) {
+  return (
+    <FieldSection title="属性">
+      <div className="space-y-0.5">
+        {systemFields.map((field) => (
+          <SystemFieldRow key={field.key} descriptor={field} />
+        ))}
+      </div>
+
+      {supertagGroups.size > 0 && (
+        <div className="mt-3 space-y-3 border-t border-[var(--tana-divider)] pt-3">
+          {Array.from(supertagGroups.entries()).map(([supertagId, fields]) => (
+            <div key={supertagId}>
+              <p className="mb-1 text-[var(--tana-accent)] text-[11px]">
+                #{index.nodesById.get(supertagId)?.text || '未命名超级标签'}
+              </p>
+              <div className="space-y-0.5">
+                {fields.map((field) => (
+                  <PresentationFieldRow
+                    key={field.key}
+                    descriptor={field}
+                    nodeId={nodeId}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {customFields.length > 0 && (
+        <div className="mt-3 space-y-0.5 border-t border-[var(--tana-divider)] pt-3">
+          {customFields.map((field) => (
+            <PresentationFieldRow key={field.key} descriptor={field} nodeId={nodeId} />
+          ))}
+        </div>
+      )}
+
+      <OptionalSupertagFieldRows nodeId={nodeId} />
+    </FieldSection>
+  );
+}
+
+/** A Supertag Definition exposes its real template Field Nodes, not instance data. */
+function SupertagFieldsSection({
+  fields,
+  nodeId,
+}: {
+  fields: readonly TanaFieldDescriptor[];
+  nodeId: NodeId;
+}) {
+  return (
+    <FieldSection title="字段">
+      {fields.length === 0 ? (
+        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无模板字段。</p>
+      ) : (
+        <div className="space-y-0.5">
+          {fields.map((field) => (
+            <PresentationFieldRow key={field.key} descriptor={field} nodeId={nodeId} />
+          ))}
+        </div>
+      )}
+      <p className="mt-2 text-[var(--tana-text-tertiary)] text-[11px]">
+        在正文空节点输入 &gt; 添加字段
+      </p>
+    </FieldSection>
   );
 }
 
@@ -432,7 +482,7 @@ function PresentationFieldRow({
 }
 
 /** Optional template bindings remain definitions until the user materializes a real Field Node. */
-function OptionalSupertagFieldsSection({ nodeId }: { nodeId: NodeId }) {
+function OptionalSupertagFieldRows({ nodeId }: { nodeId: NodeId }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
   const node = index.nodesById.get(nodeId);
@@ -456,7 +506,8 @@ function OptionalSupertagFieldsSection({ nodeId }: { nodeId: NodeId }) {
   if (templates.length === 0) return null;
 
   return (
-    <FieldSection title="可选字段">
+    <div className="mt-3 border-t border-[var(--tana-divider)] pt-3">
+      <p className="mb-1 text-[var(--tana-text-tertiary)] text-[11px]">可选字段</p>
       <div className="space-y-0.5">
         {templates.map((template) => (
           <button
@@ -474,7 +525,7 @@ function OptionalSupertagFieldsSection({ nodeId }: { nodeId: NodeId }) {
           </button>
         ))}
       </div>
-    </FieldSection>
+    </div>
   );
 }
 
@@ -681,108 +732,69 @@ function FieldDefinitionEditor({
   );
 }
 
-function SupertagInstancesSection({ supertagId }: { supertagId: NodeId }) {
-  const editor = useEditorRef();
-  const index = useTanaIndex();
-  const instances = getActiveSupertagInstances(index, supertagId);
-
-  return (
-    <FieldSection title={`实例 · ${instances.length}`}>
-      {instances.length === 0 ? (
-        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无实例。</p>
-      ) : (
-        <div className="space-y-0.5">
-          {instances.map((instance) => (
-            <button
-              key={instance.id}
-              className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
-              type="button"
-              onClick={() =>
-                editor.getTransforms(TanaZoomPlugin).zoom.to(instance.id)
-              }
-            >
-              <span className="min-w-0 flex-1 truncate">
-                {instance.text || '未命名节点'}
-              </span>
-              <ArrowUpRightIcon className="size-3 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 group-hover:opacity-100" />
-            </button>
-          ))}
-        </div>
-      )}
-    </FieldSection>
-  );
-}
-
-/** Creates a block Reference by adding only tanaReferenceTargetId to this Node. */
-function ReferenceBindingSection({ nodeId }: { nodeId: NodeId }) {
+/** Ordinary Node reference controls keep every relation derived from TanaIndex. */
+function ReferencesConfigurationSection({ nodeId }: { nodeId: NodeId }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
   const node = index.nodesById.get(nodeId);
-
-  if (!node || node.systemNode || node.referenceTargetId) return null;
-
-  const candidates = getNodeReferenceCandidatesFromIndex(index).filter(
-    (candidate) => candidate.id !== nodeId
-  );
-
-  return (
-    <FieldSection title="节点引用">
-      <Select
-        onValueChange={(targetNodeId) =>
-          editor.getTransforms(TanaReferencePlugin).reference.setTarget(nodeId, targetNodeId)
-        }
-      >
-        <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
-          <SelectValue placeholder="选择被引用节点" />
-        </SelectTrigger>
-        <SelectContent>
-          {candidates.map((candidate) => (
-            <SelectItem key={candidate.id} value={candidate.id}>
-              {candidate.text || '未命名节点'}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </FieldSection>
-  );
-}
-
-/** Backlinks stay derived in TanaIndex; this section only navigates their sources. */
-function ReferencesSection({ nodeId }: { nodeId: NodeId }) {
-  const editor = useEditorRef();
-  const index = useTanaIndex();
   const references = index.backlinks.get(nodeId) ?? [];
+  const canCreateReference = !!node && !node.systemNode && !node.referenceTargetId;
+  const candidates = canCreateReference
+    ? getNodeReferenceCandidatesFromIndex(index).filter((candidate) => candidate.id !== nodeId)
+    : [];
 
   return (
-    <FieldSection title={`引用 · ${references.length}`}>
-      {references.length === 0 ? (
-        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无引用。</p>
-      ) : (
-        <div className="space-y-0.5">
-          {references.map((reference, position) => {
-            const source = index.nodesById.get(reference.sourceNodeId);
-            const kindLabel = reference.kind === 'inline' ? '行内' : '节点';
-
-            return (
-              <button
-                key={`${reference.kind}-${reference.sourceNodeId}-${reference.path.join('.')}-${position}`}
-                className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
-                type="button"
-                onClick={() =>
-                  editor.getTransforms(TanaZoomPlugin).zoom.to(reference.sourceNodeId)
-                }
-              >
-                <Link2Icon className="size-3 shrink-0 text-[var(--tana-reference)]" />
-                <span className="min-w-0 flex-1 truncate">
-                  {source?.text || '未命名节点'}
-                </span>
-                <span className="shrink-0 text-[var(--tana-text-tertiary)] text-[10px]">{kindLabel}</span>
-                <ArrowUpRightIcon className="size-3 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 group-hover:opacity-100" />
-              </button>
-            );
-          })}
-        </div>
+    <FieldSection title="引用">
+      {canCreateReference && (
+        <Select
+          onValueChange={(targetNodeId) =>
+            editor.getTransforms(TanaReferencePlugin).reference.setTarget(nodeId, targetNodeId)
+          }
+        >
+          <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
+            <SelectValue placeholder="引用另一个节点" />
+          </SelectTrigger>
+          <SelectContent>
+            {candidates.map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.text || '未命名节点'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
+
+      <div className={canCreateReference ? 'mt-3 border-t border-[var(--tana-divider)] pt-3' : undefined}>
+        <p className="mb-1 text-[var(--tana-text-tertiary)] text-[11px]">
+          被引用 {references.length}
+        </p>
+        {references.length === 0 ? (
+          <p className="text-[var(--tana-text-tertiary)] text-xs">暂无引用。</p>
+        ) : (
+          <div className="space-y-0.5">
+            {references.map((reference, position) => {
+              const source = index.nodesById.get(reference.sourceNodeId);
+
+              return (
+                <button
+                  key={`${reference.kind}-${reference.sourceNodeId}-${reference.path.join('.')}-${position}`}
+                  className="group flex min-h-8 w-full items-center gap-2 rounded px-1.5 text-left text-xs hover:bg-[var(--tana-hover)]"
+                  type="button"
+                  onClick={() =>
+                    editor.getTransforms(TanaZoomPlugin).zoom.to(reference.sourceNodeId)
+                  }
+                >
+                  <Link2Icon className="size-3 shrink-0 text-[var(--tana-reference)]" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {source?.text || '未命名节点'}
+                  </span>
+                  <ArrowUpRightIcon className="size-3 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 group-hover:opacity-100" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </FieldSection>
   );
 }

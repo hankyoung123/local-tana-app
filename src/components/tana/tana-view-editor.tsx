@@ -2,10 +2,11 @@
 
 import * as React from "react";
 
-import { ListFilterIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import type { PlateEditor } from "platejs/react";
+import { LayoutPanelTopIcon, ListFilterIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useEditorRef, type PlateEditor } from "platejs/react";
 
 import { TanaSearchPlugin } from "@/components/editor/plugins/tana-search-plugin";
+import { TanaViewPlugin } from "@/components/editor/plugins/tana-view-plugin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +20,7 @@ import {
   describeTanaQueryClause,
   getFieldValueCandidates,
   isTanaNodeActive,
+  resolveTanaCollectionSource,
   type FieldDefinition,
   type FieldValue,
   type NodeId,
@@ -26,7 +28,12 @@ import {
   type TanaIndex,
   type TanaQueryExpression,
   type TanaQueryPredicate,
+  type TanaViewDefinition,
 } from "@/lib/tana";
+
+import { TanaCalendarToolbarControls } from "./tana-calendar-view";
+import { TanaCardsToolbarControls } from "./tana-cards-view";
+import { TanaTableToolbarControls } from "./tana-table-view";
 
 type QueryGroup = Extract<TanaQueryExpression, { type: "and" | "or" }>;
 type QueryPredicateKind = TanaQueryPredicate["kind"];
@@ -37,6 +44,74 @@ const graphPredicateKinds: readonly Extract<
   QueryPredicateKind,
   "child-of" | "descendant-of" | "parent-is" | "references" | "referenced-by"
 >[] = ["parent-is", "child-of", "descendant-of", "references", "referenced-by"];
+
+const viewTypeLabels: Record<TanaViewDefinition["type"], string> = {
+  calendar: "日历",
+  cards: "卡片",
+  outline: "大纲",
+  table: "表格",
+};
+
+/**
+ * View settings remain on the canonical View Node. This is only a contextual
+ * presentation of the existing TanaViewPlugin controls; it owns no results
+ * and no local view configuration state.
+ */
+export function TanaViewConfigurationEditor({
+  index,
+  nodeId,
+}: {
+  index: TanaIndex;
+  nodeId: NodeId;
+}) {
+  const editor = useEditorRef();
+  const view = index.nodesById.get(nodeId);
+
+  if (!view?.viewDefinition) return null;
+
+  const type = view.viewDefinition.type;
+  const results = resolveTanaCollectionSource(index, view).nodes;
+
+  return (
+    <section className="border-t border-[var(--tana-divider)] px-5 py-4">
+      <h3 className="mb-2.5 font-medium text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
+        视图配置
+      </h3>
+      <Select
+        value={type}
+        onValueChange={(nextType) =>
+          editor
+            .getTransforms(TanaViewPlugin)
+            .view.setType(nodeId, nextType as TanaViewDefinition["type"])
+        }
+      >
+        <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
+          <LayoutPanelTopIcon className="size-3.5" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(viewTypeLabels).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {type !== "outline" && (
+        <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-[var(--tana-divider)] pt-3">
+          {type === "table" ? (
+            <TanaTableToolbarControls index={index} results={results} view={view} />
+          ) : type === "cards" ? (
+            <TanaCardsToolbarControls index={index} results={results} view={view} />
+          ) : (
+            <TanaCalendarToolbarControls index={index} results={results} view={view} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 /**
  * The persisted AST remains on the Plate Node. Local state below is only an
@@ -75,14 +150,14 @@ export function TanaSearchDefinitionEditor({
   }
 
   return (
-    <section className="border-t p-5">
+    <section className="border-t border-[var(--tana-divider)] px-5 py-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 font-semibold text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
+        <h3 className="flex items-center gap-2 font-medium text-[10px] text-[var(--tana-text-tertiary)] uppercase tracking-[0.1em]">
           <ListFilterIcon className="size-3.5" />
           搜索定义
         </h3>
         <button
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded p-1 text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
           type="button"
           aria-label="移除搜索定义"
           onClick={() =>
@@ -130,7 +205,7 @@ function QueryExpressionEditor({
       );
     case "not":
       return (
-        <div className="rounded-md border border-amber-200 bg-amber-50/40 p-2">
+        <div className="rounded border border-amber-200 bg-amber-50/40 p-2">
           <QueryNodeHeader label="非（NOT）" onRemove={onRemove} />
           <div className="mt-2 border-amber-200 border-l pl-2">
             <QueryExpressionEditor
@@ -190,7 +265,7 @@ function QueryGroupEditor({
   };
 
   return (
-    <div className="rounded-md border bg-muted/20 p-2">
+        <div className="rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2">
       <div className="flex items-center gap-2">
         <Select
           value={expression.type}
@@ -337,7 +412,7 @@ function QueryPredicateRow({
 
   if (editing) {
     return (
-      <div className="rounded border bg-white p-2">
+        <div className="rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2">
         <QueryPredicateForm
           key={JSON.stringify(predicate)}
           index={index}
@@ -353,7 +428,7 @@ function QueryPredicateRow({
   }
 
   return (
-    <div className="flex items-start gap-2 rounded bg-white px-2 py-1.5 text-xs">
+    <div className="flex items-start gap-2 rounded px-2 py-1.5 text-xs hover:bg-[var(--tana-hover)]">
       <span className="min-w-0 flex-1">
         {describeTanaQueryClause(index, predicate)}
       </span>
