@@ -2,20 +2,18 @@
 
 import {
   BlockSelectionPlugin,
-  duplicateBlockSelectionNodes,
-  setBlockSelectionIndent,
 } from '@platejs/selection/react';
 import { TogglePlugin } from '@platejs/toggle/react';
 
 import { BlockSelection } from '@/components/ui/block-selection';
 import {
   canDuplicate,
-  canIndent,
-  canOutdent,
   canSelect,
   isTanaNodeInteractable,
+  getTanaNodeDescendantPaths,
 } from '@/lib/tana';
 import { canMutateTanaNode } from '../mutation-policy';
+import { indentTanaSelection, getTanaSelectedRootPaths } from './tana-node-identity-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 const EMPTY_OPEN_IDS = new Set<string>();
@@ -54,35 +52,22 @@ export const BlockSelectionKit = [
   })).extendEditorTransforms(({ editor }) => ({
     blockSelection: {
       duplicate: () => {
-        const selected = editor
-          .getApi(BlockSelectionPlugin)
-          .blockSelection.getNodes({ sort: true });
-
-        if (
-          selected.some(([, path]) =>
-            !canMutateTanaNode(editor, path, canDuplicate)
-          )
-        ) {
-          return;
-        }
-
-        duplicateBlockSelectionNodes(editor);
+        const roots = getTanaSelectedRootPaths(editor);
+        if (roots.some(path => !canMutateTanaNode(editor, path, canDuplicate))) return;
+        const duplicateIds = new Set<string>();
+        editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
+          for (const root of roots.toReversed()) {
+            const paths = [root, ...getTanaNodeDescendantPaths(editor.children, root)];
+            const nodes = paths.map(path => editor.api.node(path)!);
+            editor.tf.duplicateNodes({ nodes });
+            const inserted = editor.children[paths.at(-1)![0] + 1];
+            if (typeof inserted?.id === 'string') duplicateIds.add(inserted.id);
+          }
+        }));
+        editor.setOption(BlockSelectionPlugin, 'selectedIds', duplicateIds);
       },
-      setIndent: (indent, options) => {
-        const selected = editor
-          .getApi(BlockSelectionPlugin)
-          .blockSelection.getNodes({ sort: true });
-        const canChangeIndent = indent < 0 ? canOutdent : canIndent;
-
-        if (
-          selected.some(([, path]) =>
-            !canMutateTanaNode(editor, path, canChangeIndent)
-          )
-        ) {
-          return;
-        }
-
-        setBlockSelectionIndent(editor, indent, options);
+      setIndent: (indent) => {
+        indentTanaSelection(editor, indent);
       },
     },
   })),

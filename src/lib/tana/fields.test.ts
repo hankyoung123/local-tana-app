@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
+import { TogglePlugin } from '@platejs/toggle/react';
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
@@ -136,15 +137,17 @@ describe('Field occurrence Nodes', () => {
     assert.equal(normalEditor.children[0].children[0].text, 'FirstSecond');
 
     const normalTabEditor = createEditor([
-      { children: [{ text: 'First' }], id: 'first', type: KEYS.p },
-      { children: [{ text: 'Second' }], id: 'second', type: KEYS.p }
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'First' }], id: 'first', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Second' }], id: 'second', indent: 1, type: KEYS.p }
     ]);
+    normalTabEditor.getApi(TogglePlugin).toggle.toggleIds(['workspace'], true);
     normalTabEditor.tf.select({
-      anchor: { offset: 0, path: [1, 0] },
-      focus: { offset: 0, path: [1, 0] }
+      anchor: { offset: 0, path: [2, 0] },
+      focus: { offset: 0, path: [2, 0] }
     });
     assert.equal(normalTabEditor.tf.tab({ reverse: false }), true);
-    assert.equal(normalTabEditor.children[1].indent, 1);
+    assert.equal(normalTabEditor.children[2].indent, 2);
   });
 
   test('blocks expanded text deletion that crosses a Field subtree', () => {

@@ -58,11 +58,11 @@ export const BasicMarksKit = [
   }),
   SubscriptPlugin.configure({
     inputRules: [SubscriptRules.markdown()],
-    shortcuts: { toggle: { keys: 'mod+comma' } },
+    shortcuts: { toggle: null },
   }),
   SuperscriptPlugin.configure({
     inputRules: [SuperscriptRules.markdown()],
-    shortcuts: { toggle: { keys: 'mod+period' } },
+    shortcuts: { toggle: null },
   }),
   HighlightPlugin.configure({
     inputRules: [

@@ -1,11 +1,12 @@
+import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { canMutateTanaNode } from '../mutation-policy';
 import { canIndent, canOutdent } from '@/lib/tana/node-behavior';
-import { ElementApi, nanoid } from 'platejs';
-import type { Path, TElement } from 'platejs';
+import { ElementApi, KEYS, NodeApi, TextApi, nanoid } from 'platejs';
+import type { Path, TElement, TText } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
+import { getTanaNodeDescendantPaths, getTanaAncestorPaths, getTanaParentPath } from '@/lib/tana/outliner';
 import type { TanaBlockElement } from '@/lib/tana/types';
 import { TanaSupertagPlugin } from './tana-supertag-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
@@ -28,6 +29,23 @@ const TANA_SEMANTIC_KEYS = [
   'tanaTime',
   'tanaViewDefinition'
 ] as const;
+
+const SOFT_LINE_BREAK = /[\r\n\u2028\u2029]/;
+
+/** Preserve rich leaves and inline formatting while promoting soft breaks. */
+function splitRichNodeLines(node: TElement | TText): (TElement | TText)[] {
+  if (TextApi.isText(node)) {
+    return node.text.split(/\r\n|[\r\n\u2028\u2029]/).map(text => ({ ...node, text }));
+  }
+  const groups: (TElement | TText)[][] = [[]];
+  for (const child of node.children) {
+    splitRichNodeLines(child).forEach((part, index) => {
+      if (index > 0) groups.push([]);
+      groups.at(-1)!.push(part);
+    });
+  }
+  return groups.map(children => ({ ...node, children }) as TElement);
+}
 
 function getTanaNodeAtCollapsedSelection(editor: PlateEditor) {
   const selection = editor.selection;
@@ -112,35 +130,80 @@ function getTanaPageRoot(editor: PlateEditor): TanaPageRoot | undefined {
   };
 }
 
-function selectionHasProtectedOutdentNode(editor: PlateEditor): boolean {
-  const pageRoot = getTanaPageRoot(editor);
+/** Only disjoint selected roots participate; descendants shift exactly once. */
+export function getTanaSelectedRootPaths(editor: PlateEditor): Path[] {
+  const selected = editor.plugins[BlockSelectionPlugin.key]
+    ? editor.getApi(BlockSelectionPlugin).blockSelection.getNodes({ sort: true })
+    : [];
+  const paths = (selected.length ? selected : editor.api.blocks())
+    .filter(([node, path]) => isTanaNodeElement(node, path))
+    .map(([, path]) => path);
+  const indexes = new Set(paths.map(path => path[0]));
+  return paths.filter(path => !getTanaAncestorPaths(editor.children, path)
+    .some(ancestor => indexes.has(ancestor[0])));
+}
 
-  // A missing page boundary is an invalid runtime state. Do not let a Tab
-  // mutation widen that failure into a second root.
-  if (!pageRoot) return true;
+/** Shift the existing canonical subtree, without visiting Reference targets. */
+function shiftTanaSubtreeIndent(editor: PlateEditor, rootPath: Path, delta: number) {
+  const paths = [rootPath, ...getTanaNodeDescendantPaths(editor.children, rootPath)];
+  for (const path of paths) {
+    const node = editor.api.node<TElement>(path)![0];
+    editor.tf.setNodes({ indent: (typeof node.indent === 'number' ? node.indent : 0) + delta }, { at: path });
+  }
+}
 
-  const pageNodeIndexes = new Set([
-    pageRoot.path[0],
-    ...getTanaNodeDescendantPaths(editor.children, pageRoot.path).map((path) => path[0]),
-  ]);
-  const minimumPageChildIndent = pageRoot.indent + 1;
-
-  return Array.from(
-    editor.api.nodes({ block: true, mode: 'lowest' })
-  ).some(([node, path]) => {
-    if (!ElementApi.isElement(node) || !isTanaNodeElement(node, path)) {
-      return false;
+export function indentTanaSelection(editor: PlateEditor, delta: number): boolean {
+  if (delta !== 1 && delta !== -1) return false;
+  const roots = getTanaSelectedRootPaths(editor);
+  const page = getTanaPageRoot(editor);
+  if (!page || roots.length === 0) return false;
+  const policy = delta < 0 ? canOutdent : canIndent;
+  const pageChildren = new Set(getTanaNodeDescendantPaths(editor.children, page.path).map(path => path[0]));
+  if (roots.some(path => {
+    const node = editor.api.node<TElement>(path)?.[0];
+    if (!node || !pageChildren.has(path[0]) || !canMutateTanaNode(editor, path, policy)) return true;
+    const indent = typeof node.indent === 'number' ? node.indent : 0;
+    if (delta < 0) return indent <= page.indent + 1;
+    // Indentation needs a preceding sibling to become the new parent.
+    const parent = getTanaParentPath(editor.children, path);
+    for (let index = path[0] - 1; index > (parent?.[0] ?? -1); index--) {
+      const previous = editor.api.node<TElement>([index])?.[0];
+      if (previous?.indent === indent) {
+        return !canMutateTanaNode(editor, [index], canIndent);
+      }
     }
-
-    if (isSystemNode(node)) return true;
-
-    // Block-selection normally excludes Zoom-external Nodes through the shared
-    // interactable predicate. Keep the transform boundary closed as well: a
-    // cross-page selection must not outdent a Node outside this page subtree.
-    if (!pageNodeIndexes.has(path[0])) return true;
-
-    return (typeof node.indent === 'number' ? node.indent : 0) <= minimumPageChildIndent;
-  });
+    return true;
+  })) return false;
+  const rootIds = roots.map(path => editor.children[path[0]].id as string);
+  const selection = editor.selection;
+  const anchorId = selection && editor.children[selection.anchor.path[0]].id;
+  const focusId = selection && editor.children[selection.focus.path[0]].id;
+  editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
+    // Outdent from right to left so selected siblings retain their order.
+    for (const id of delta < 0 ? rootIds.toReversed() : rootIds) {
+      let path = editor.api.node({ at: [], id })![1];
+      if (delta < 0) {
+        const parent = getTanaParentPath(editor.children, path)!;
+        const parentEnd = getTanaNodeDescendantPaths(editor.children, parent).at(-1)!;
+        const descendants = getTanaNodeDescendantPaths(editor.children, path);
+        const end = descendants.at(-1) ?? path;
+        if (end[0] < parentEnd[0]) {
+          editor.tf.moveNodes({ at: path, to: [parentEnd[0] + (descendants.length ? 1 : 0)] });
+          path = editor.api.node({ at: [], id })![1];
+        }
+      }
+      shiftTanaSubtreeIndent(editor, path, delta);
+    }
+    if (selection) {
+      const anchor = editor.children.findIndex(node => node.id === anchorId);
+      const focus = editor.children.findIndex(node => node.id === focusId);
+      if (anchor >= 0 && focus >= 0) editor.tf.select({
+        anchor: { ...selection.anchor, path: [anchor, ...selection.anchor.path.slice(1)] },
+        focus: { ...selection.focus, path: [focus, ...selection.focus.path.slice(1)] },
+      });
+    }
+  }));
+  return true;
 }
 
 function moveWouldPrecedeWorkspace(
@@ -282,6 +345,53 @@ function removeTargetsSystemNode(
   return !!getSystemNodeAtPath(editor, getCurrentBlockPath(editor));
 }
 
+/** Move one canonical subtree across exactly one adjacent sibling subtree. */
+export function moveTanaSibling(editor: PlateEditor, nodeId: string, direction: -1 | 1) {
+  const entry = editor.api.node<TanaBlockElement>({ at: [], id: nodeId });
+  if (!entry || !canMutateTanaNode(editor, entry[1], canIndent)) return false;
+  const [node, path] = entry;
+  if (editor.getOption(TanaZoomPlugin, 'focusedNodeId') === nodeId) return false;
+  const parent = getTanaParentPath(editor.children, path);
+  if (!parent) return false;
+  const siblings = getTanaNodeDescendantPaths(editor.children, parent).filter(candidate =>
+    getTanaParentPath(editor.children, candidate)?.[0] === parent[0]);
+  const neighbor = siblings[siblings.findIndex(candidate => candidate[0] === path[0]) + direction];
+  if (!neighbor || !canMutateTanaNode(editor, neighbor, canIndent)) return false;
+  const neighborEnd = getTanaNodeDescendantPaths(editor.children, neighbor).at(-1) ?? neighbor;
+  const selection = editor.selection;
+  const anchorNode = selection && editor.children[selection.anchor.path[0]];
+  const focusNode = selection && editor.children[selection.focus.path[0]];
+  editor.tf.withNewBatch(() => {
+    const carriesChildren = getTanaNodeDescendantPaths(editor.children, path).length > 0;
+    editor.tf.moveNodes({ at: path, to: direction < 0 ? neighbor : [neighborEnd[0] + (carriesChildren ? 1 : 0)] });
+    // Range moves preserve canonical IDs; reattach Plate's caret after its
+    // remove/insert operations rather than keeping a second selection model.
+    if (selection && anchorNode && focusNode) {
+      const anchorIndex = editor.children.findIndex(candidate => candidate.id === anchorNode.id);
+      const focusIndex = editor.children.findIndex(candidate => candidate.id === focusNode.id);
+      if (anchorIndex >= 0 && focusIndex >= 0) editor.tf.select({
+        anchor: { ...selection.anchor, path: [anchorIndex, ...selection.anchor.path.slice(1)] },
+        focus: { ...selection.focus, path: [focusIndex, ...selection.focus.path.slice(1)] },
+      });
+    }
+  });
+  return node.id === nodeId;
+}
+
+/** Insert an ordinary sibling without entering the current canonical subtree. */
+export function insertTanaSibling(editor: PlateEditor, nodeId: string, before = false) {
+  const entry = editor.api.node<TanaBlockElement>({ at: [], id: nodeId });
+  if (!entry || !isTanaNodeElement(entry) || !canMutateTanaNode(editor, entry[1], canIndent)) return false;
+  if (editor.getOption(TanaZoomPlugin, 'focusedNodeId') === nodeId) return false;
+  const [node, path] = entry;
+  const end = getTanaNodeDescendantPaths(editor.children, path).at(-1) ?? path;
+  editor.tf.withNewBatch(() => editor.tf.insertNodes({
+    type: KEYS.p, id: nanoid(), indent: node.indent ?? 0,
+    children: [{ text: '' }],
+  }, { at: before ? path : [end[0] + 1], select: true }));
+  return true;
+}
+
 /**
  * Plate owns ordinary Node splitting. The focused Zoom Node is page Header
  * presentation, so Enter there deliberately leaves the document unchanged.
@@ -294,9 +404,15 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
 }).overrideEditor(({
   editor,
   tf: {
+    apply,
+    normalizeNode,
+    insertFragment,
+    insertNodes,
     deleteBackward,
     deleteForward,
     insertBreak,
+    insertText,
+    insertTextData,
     mergeNodes,
     moveNodes,
     removeNodes,
@@ -304,6 +420,39 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
   },
 }) => ({
   transforms: {
+    apply(operation) {
+      // Low-level writers must not bypass the semantic editing invariant.
+      if ((operation.type === 'insert_text' && SOFT_LINE_BREAK.test(operation.text)) ||
+          (operation.type === 'insert_node' && SOFT_LINE_BREAK.test(NodeApi.string(operation.node)))) {
+        throw new Error('Tana Nodes cannot contain soft line breaks');
+      }
+      return apply(operation);
+    },
+    normalizeNode(entry) {
+      const [node, path] = entry;
+      if (ElementApi.isElement(node) && isTanaNodeElement(node, path) && SOFT_LINE_BREAK.test(NodeApi.string(node))) {
+        throw new Error('Tana Nodes cannot contain soft line breaks');
+      }
+      return normalizeNode(entry);
+    },
+    insertNodes(nodes, options) {
+      const incoming = Array.isArray(nodes) ? nodes : [nodes];
+      if (incoming.some(node => SOFT_LINE_BREAK.test(NodeApi.string(node)))) {
+        throw new Error('Tana Nodes cannot contain soft line breaks');
+      }
+      return insertNodes(nodes, options);
+    },
+    insertFragment(fragment, options) {
+      const lines = fragment.flatMap(node => splitRichNodeLines(node).map((part, index) => {
+        if (index && ElementApi.isElement(part)) {
+          const ordinary: TElement = { ...part, id: nanoid(), type: KEYS.p };
+          TANA_SEMANTIC_KEYS.forEach(key => delete ordinary[key]);
+          return ordinary;
+        }
+        return part;
+      }));
+      editor.tf.withNewBatch(() => insertFragment(lines, options));
+    },
     deleteBackward(unit) {
       if (hasSystemMergeBoundary(editor, 'start')) return;
 
@@ -313,6 +462,33 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       if (hasSystemMergeBoundary(editor, 'end')) return;
 
       return deleteForward(unit);
+    },
+    insertSoftBreak() {
+      const entry = getTanaNodeAtCollapsedSelection(editor);
+      if (entry) insertTanaSibling(editor, entry[0].id as string);
+    },
+    insertText(text, options) {
+      if (!/[\r\n\u2028\u2029]/.test(text)) return insertText(text, options);
+      if (options?.at) editor.tf.select(options.at);
+      const blocks = editor.api.blocks();
+      if (blocks.some(([node, path]) =>
+        !canMutateTanaNode(editor, path, canIndent) ||
+        node.id === editor.getOption(TanaZoomPlugin, 'focusedNodeId'))) return;
+      // Newlines are document boundaries, including plain-text paste. Plate
+      // retains selection, marks, splitting and history ownership.
+      editor.tf.withNewBatch(() => {
+        const lines = text.split(/\r\n|[\r\n\u2028\u2029]/);
+        lines.forEach((line, index) => {
+          if (index) editor.tf.insertBreak();
+          insertText(line);
+        });
+      });
+    },
+    insertTextData(data) {
+      const text = data.getData('text/plain');
+      if (!/[\r\n\u2028\u2029]/.test(text)) return insertTextData(data);
+      editor.tf.insertText(text);
+      return true;
     },
     insertBreak() {
       const entry = getTanaNodeAtCollapsedSelection(editor);
@@ -331,35 +507,29 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
 
       const previousId = node.id;
       const selectionAtStart = isSelectionAtStart(editor, path);
-
-      insertBreak();
-
-      const rightPath = [path[0] + 1];
-      const rightEntry = editor.api.node(rightPath);
-
-      if (!rightEntry || !ElementApi.isElement(rightEntry[0])) return;
-
-      if (selectionAtStart) {
-        const rightId = typeof rightEntry[0].id === 'string' ? rightEntry[0].id : nanoid();
-
-        // Slate copies node properties to the right split while retaining them
-        // on the empty left block. Move the fresh ID left and the existing ID
-        // right, then remove duplicate semantics from the new empty Node.
-        editor.tf.setNodes({ id: rightId }, { at: path });
-        TANA_SEMANTIC_KEYS.forEach((key) => editor.tf.unsetNodes(key, { at: path }));
-        editor.tf.setNodes({ id: previousId }, { at: rightPath });
-        editor.getTransforms(TanaSupertagPlugin).supertag.applyDefaultChild(rightId);
-        return;
-      }
-
-      // At a middle/end split, Slate leaves the original Node on the left and
-      // clones its properties to the right. Keep the original identity and
-      // semantics on the left, then make the new right sibling ordinary.
-      const newNodeId = nanoid();
-
-      editor.tf.setNodes({ id: newNodeId }, { at: rightPath });
-      TANA_SEMANTIC_KEYS.forEach((key) => editor.tf.unsetNodes(key, { at: rightPath }));
-      editor.getTransforms(TanaSupertagPlugin).supertag.applyDefaultChild(newNodeId);
+      const subtreeEnd = getTanaNodeDescendantPaths(editor.children, path).at(-1);
+      const batch = editor.api.isMerging() ? editor.tf.withMerging : editor.tf.withNewBatch;
+      batch(() => editor.tf.withoutNormalizing(() => {
+        insertBreak();
+        const rightPath = [path[0] + 1];
+        const rightEntry = editor.api.node(rightPath);
+        if (!rightEntry || !ElementApi.isElement(rightEntry[0])) return;
+        if (selectionAtStart) {
+          const rightId = typeof rightEntry[0].id === 'string' ? rightEntry[0].id : nanoid();
+          editor.tf.setNodes({ id: rightId }, { at: path });
+          TANA_SEMANTIC_KEYS.forEach(key => editor.tf.unsetNodes(key, { at: path }));
+          editor.tf.setNodes({ id: previousId }, { at: rightPath });
+          editor.getTransforms(TanaSupertagPlugin).supertag.applyDefaultChild(rightId);
+          return;
+        }
+        const newNodeId = nanoid();
+        editor.tf.setNodes({ id: newNodeId }, { at: rightPath });
+        TANA_SEMANTIC_KEYS.forEach(key => editor.tf.unsetNodes(key, { at: rightPath }));
+        // The left identity still owns its original children. Move only the
+        // newly split block using Plate's primitive, before hierarchy is read.
+        if (subtreeEnd) moveNodes({ at: rightPath, to: [subtreeEnd[0] + 1] });
+        editor.getTransforms(TanaSupertagPlugin).supertag.applyDefaultChild(newNodeId);
+      }));
     },
     mergeNodes(options = {}) {
       const path = Array.isArray(options.at)
@@ -409,16 +579,25 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       return removeNodes(options);
     },
     tab(options) {
-      const policy = options?.reverse ? canOutdent : canIndent;
-      if (editor.api.blocks().some(([, path]) => !canMutateTanaNode(editor, path, policy))) return true;
-
-      if (options?.reverse === true && selectionHasProtectedOutdentNode(editor)) {
-        return true;
-      }
-
-      if (getSystemNodeAtPath(editor, getCurrentBlockPath(editor))) return true;
-
-      return tab(options);
+      if (!getTanaSelectedRootPaths(editor).length) return tab(options);
+      indentTanaSelection(editor, options?.reverse ? -1 : 1);
+      return true;
+    },
+  },
+})).extendEditorTransforms(({ editor }) => ({
+  tanaNodeIdentity: {
+    moveSibling: (nodeId: string, direction: -1 | 1) => moveTanaSibling(editor, nodeId, direction),
+    insertBefore: (nodeId: string) => insertTanaSibling(editor, nodeId, true),
+    insertAfter: (nodeId: string) => insertTanaSibling(editor, nodeId),
+    splitNode: (nodeId: string, selection: NonNullable<PlateEditor['selection']>) => {
+      const entry = editor.api.node<TanaBlockElement>({ at: [], id: nodeId });
+      if (!entry || selection.anchor.path[0] !== entry[1][0] || selection.focus.path[0] !== entry[1][0]) return false;
+      if (!canMutateTanaNode(editor, entry[1], canIndent)) return false;
+      editor.tf.withNewBatch(() => {
+        editor.tf.select(selection);
+        editor.tf.insertBreak();
+      });
+      return true;
     },
   },
 }));

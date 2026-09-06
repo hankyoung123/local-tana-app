@@ -25,6 +25,7 @@ import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-l
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
+import { TanaShortcutsPlugin } from '@/components/editor/plugins/tana-shortcuts-plugin';
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
@@ -34,6 +35,7 @@ export const EditorKit = [
   // Local Tana semantics: its focusedNodeId lives in the Plate plugin store.
   TanaZoomPlugin,
   TanaNodeIdentityPlugin,
+  TanaShortcutsPlugin,
   TanaTimePlugin,
   TanaNodeLifecyclePlugin,
 

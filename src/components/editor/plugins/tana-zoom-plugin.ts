@@ -292,13 +292,4 @@ export const TanaZoomPlugin = createPlatePlugin<
       root: () => zoomRoot(editor),
       to: (nodeId: NodeId) => zoomTo(editor, nodeId),
     },
-  }))
-  .overrideEditor(({ editor, getOption, tf: { escape } }) => ({
-    transforms: {
-      escape: () => {
-        if (!getOption('focusedNodeId')) return escape();
-
-        return zoomOut(editor);
-      },
-    },
   }));
