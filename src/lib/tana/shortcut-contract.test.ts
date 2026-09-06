@@ -83,8 +83,8 @@ test('shortcut aliases add scoped Collapse All, Expand All and Windows Zoom', ()
   const editor = fixture();
   assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.in']?.keys, ['mod+period', 'alt+right']);
   assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.out']?.keys, ['mod+comma', 'alt+left']);
-  assert.equal(editor.meta.shortcuts['tanaShortcuts.collapseAll']?.keys, 'mod+alt+up');
-  assert.equal(editor.meta.shortcuts['tanaShortcuts.expandAll']?.keys, 'mod+alt+down');
+  assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.collapseAll']?.keys, ['ctrl+meta+up', 'ctrl+alt+up']);
+  assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.expandAll']?.keys, ['ctrl+meta+down', 'ctrl+alt+down']);
   run(editor, 'collapseAll');
   assert.equal(editor.getOptions(TogglePlugin).openIds!.has('b'), false);
   run(editor, 'expandAll');

@@ -57,7 +57,8 @@ export const TanaShortcutsPlugin = createPlatePlugin({
     ['shift+enter', 'after'], ['mod+shift+enter', 'before'],
     ['mod+enter', 'done'], [['mod+period', 'alt+right'], 'in'], [['mod+comma', 'alt+left'], 'out'],
     ['escape', 'menu'], ['mod+up', 'collapse'], ['mod+down', 'expand'],
-    ['mod+alt+up', 'collapseAll'], ['mod+alt+down', 'expandAll'],
+    [['ctrl+meta+up', 'ctrl+alt+up'], 'collapseAll'],
+    [['ctrl+meta+down', 'ctrl+alt+down'], 'expandAll'],
     ['mod+shift+up', 'up'], ['mod+shift+down', 'down'],
     ['mod+shift+backspace', 'trash'], ['mod+shift+d', 'duplicate'],
   ].map(([keys, action]) => [action, {

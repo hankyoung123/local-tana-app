@@ -9,6 +9,7 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import { getTanaNodeDescendantPaths, getTanaAncestorPaths, getTanaParentPath } from '@/lib/tana/outliner';
 import { containsTanaSoftLineBreak, splitTanaNodeLines } from '@/lib/tana/single-line';
 import type { TanaBlockElement, TanaDoneState } from '@/lib/tana/types';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 import { TanaSupertagPlugin } from './tana-supertag-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
@@ -231,10 +232,13 @@ export function moveTanaDndSubtrees(
     return { id: node.id as string, indent: typeof node.indent === 'number' ? node.indent : 0 };
   });
   const insertAt = to[0] - paths.filter((path) => path[0] < to[0]).length;
+  let relocated = false;
 
   editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
-    paths.toReversed().forEach((path) => editor.tf.removeNodes({ at: path }));
-    editor.tf.insertNodes(nodes as TElement[], { at: [insertAt] });
+    relocated = editor.getTransforms(TanaNodeLifecyclePlugin).node
+      .relocateSubtreesRaw(nodes as TElement[], paths, [insertAt]);
+
+    if (!relocated) return;
 
     rootStates.forEach(({ id, indent }) => {
       const moved = editor.api.node<TElement>({ at: [], id });
@@ -242,7 +246,7 @@ export function moveTanaDndSubtrees(
     });
   }));
 
-  return true;
+  return relocated;
 }
 
 function applyTanaDoneState(

@@ -246,6 +246,36 @@ function removeSelectedOrdinaryNodes(
 }
 
 /**
+ * Relocate an already-resolved set of flat document paths with the raw
+ * structural transforms captured below the lifecycle boundary. This is for
+ * semantic moves, where removal is not deletion and therefore must never
+ * enter Trash.
+ */
+function relocateSubtreesRaw(
+  editor: PlateEditor,
+  removeNodes: PlateEditor['tf']['removeNodes'],
+  nodes: readonly TElement[],
+  paths: readonly Path[],
+  at: Path
+): boolean {
+  if (
+    at.length !== 1 ||
+    nodes.length === 0 ||
+    nodes.length !== paths.length ||
+    paths.some((path) => path.length !== 1)
+  ) {
+    return false;
+  }
+
+  editor.tf.withoutNormalizing(() => {
+    paths.toReversed().forEach((path) => removeNodes({ at: path }));
+    editor.tf.insertNodes(nodes.slice(), { at });
+  });
+
+  return true;
+}
+
+/**
  * Owns the ordinary Node lifecycle without adding placement/history state:
  * removal moves canonical subtrees to the existing Trash Node, restore appends
  * them to Home by default, and permanent deletion is restricted to Trash
@@ -277,6 +307,16 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
         void nodeId;
         return false;
       },
+      relocateSubtreesRaw: (
+        nodes: readonly TElement[],
+        paths: readonly Path[],
+        at: Path
+      ): boolean => {
+        void nodes;
+        void paths;
+        void at;
+        return false;
+      },
     },
   }))
   .overrideEditor(({ editor, tf: { removeNodes } }) => ({
@@ -286,6 +326,11 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
       restore: (nodeId: NodeId, destination?: TanaRestoreDestination) =>
         restore(editor, removeNodes, nodeId, destination),
       trash: (nodeId: NodeId) => trash(editor, removeNodes, nodeId),
+      relocateSubtreesRaw: (
+        nodes: readonly TElement[],
+        paths: readonly Path[],
+        at: Path
+      ) => relocateSubtreesRaw(editor, removeNodes, nodes, paths, at),
     },
     removeNodes(options = {}) {
       const at = Array.isArray(options.at) ? options.at : undefined;
