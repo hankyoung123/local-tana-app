@@ -55,8 +55,9 @@ export const TanaShortcutsPlugin = createPlatePlugin({
 })).configure({
   shortcuts: Object.fromEntries([
     ['shift+enter', 'after'], ['mod+shift+enter', 'before'],
-    ['mod+enter', 'done'], ['mod+period', 'in'], ['mod+comma', 'out'],
+    ['mod+enter', 'done'], [['mod+period', 'alt+right'], 'in'], [['mod+comma', 'alt+left'], 'out'],
     ['escape', 'menu'], ['mod+up', 'collapse'], ['mod+down', 'expand'],
+    ['mod+alt+up', 'collapseAll'], ['mod+alt+down', 'expandAll'],
     ['mod+shift+up', 'up'], ['mod+shift+down', 'down'],
     ['mod+shift+backspace', 'trash'], ['mod+shift+d', 'duplicate'],
   ].map(([keys, action]) => [action, {
@@ -79,6 +80,8 @@ export const TanaShortcutsPlugin = createPlatePlugin({
         case 'out': editor.getTransforms(TanaZoomPlugin).zoom.out(); break;
         case 'collapse': setTanaScopeExpanded(editor, false); break;
         case 'expand': setTanaScopeExpanded(editor, true); break;
+        case 'collapseAll': setTanaScopeExpanded(editor, false, true); break;
+        case 'expandAll': setTanaScopeExpanded(editor, true, true); break;
         case 'up': commands.moveSibling(id, -1); break;
         case 'down': commands.moveSibling(id, 1); break;
         case 'trash': editor.getTransforms(TanaNodeLifecyclePlugin).node.trash(id); break;
@@ -96,18 +99,7 @@ export const TanaShortcutsPlugin = createPlatePlugin({
           }));
           break;
         }
-        case 'done': {
-          const current = entry[0].tanaDoneState;
-          const next = current === undefined ? 'todo' : current === 'todo' ? 'done' : undefined;
-          if (next) {
-            editor.tf.setNodes({ tanaDoneState: next, checked: next === 'done', listStyleType: 'todo' }, { at: entry[1] });
-          } else {
-            editor.tf.unsetNodes('tanaDoneState', { at: entry[1] });
-            editor.tf.unsetNodes('checked', { at: entry[1] });
-            editor.tf.unsetNodes('listStyleType', { at: entry[1] });
-          }
-          break;
-        }
+        case 'done': commands.toggleDone(id); break;
       }
       event.preventDefault();
       return true;

@@ -39,6 +39,24 @@ test('Done cycles semantic state while preserving identity, hierarchy, and check
   assert.equal(editor.children[3].tanaDoneState, undefined);
   assert.equal(editor.children[3].checked, undefined);
 });
+test('Done adapter fields cannot remain independent from tanaDoneState', () => {
+  const editor = fixture();
+
+  editor.tf.setNodes({ checked: true }, { at: [3] });
+  assert.equal(editor.children[3].tanaDoneState, undefined);
+  assert.equal(editor.children[3].checked, undefined);
+
+  editor.tf.setNodes({ checked: false, listStyleType: 'todo' }, { at: [3] });
+  assert.equal(editor.children[3].tanaDoneState, 'todo');
+  assert.equal(editor.children[3].checked, false);
+
+  editor.tf.withoutNormalizing(() => {
+    editor.tf.setNodes({ tanaDoneState: 'done', checked: false }, { at: [3] });
+  });
+  assert.equal(editor.children[3].tanaDoneState, 'done');
+  assert.equal(editor.children[3].checked, true);
+  assert.equal(editor.children[3].listStyleType, 'todo');
+});
 test('Zoom shortcuts use canonical zoom and no formatting aliases remain', () => {
   const editor = fixture();
   run(editor, 'in');
@@ -61,6 +79,17 @@ test('move and collapse shortcuts act on complete canonical subtree', () => {
   run(editor, 'expand');
   assert.equal(editor.getOptions(TogglePlugin).openIds!.has('b'), true);
 });
+test('shortcut aliases add scoped Collapse All, Expand All and Windows Zoom', () => {
+  const editor = fixture();
+  assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.in']?.keys, ['mod+period', 'alt+right']);
+  assert.deepEqual(editor.meta.shortcuts['tanaShortcuts.out']?.keys, ['mod+comma', 'alt+left']);
+  assert.equal(editor.meta.shortcuts['tanaShortcuts.collapseAll']?.keys, 'mod+alt+up');
+  assert.equal(editor.meta.shortcuts['tanaShortcuts.expandAll']?.keys, 'mod+alt+down');
+  run(editor, 'collapseAll');
+  assert.equal(editor.getOptions(TogglePlugin).openIds!.has('b'), false);
+  run(editor, 'expandAll');
+  assert.equal(editor.getOptions(TogglePlugin).openIds!.has('b'), true);
+});
 test('Trash shortcut moves canonical subtree to existing Trash', () => {
   const editor = fixture();
   assert.equal(editor.meta.shortcuts['tanaShortcuts.trash']?.keys, 'mod+shift+backspace');
@@ -70,7 +99,7 @@ test('Trash shortcut moves canonical subtree to existing Trash', () => {
 test('composition does not execute any outliner shortcut', () => {
   const editor = fixture();
   const before = structuredClone(editor.children);
-  for (const action of ['done', 'before', 'after', 'in', 'out', 'up', 'down', 'trash', 'duplicate', 'collapse', 'expand', 'menu']) run(editor, action, true);
+  for (const action of ['done', 'before', 'after', 'in', 'out', 'up', 'down', 'trash', 'duplicate', 'collapse', 'expand', 'collapseAll', 'expandAll', 'menu']) run(editor, action, true);
   assert.deepEqual(editor.children, before);
 });
 test('duplicate shortcut includes descendants with fresh identities', () => {

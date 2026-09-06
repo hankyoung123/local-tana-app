@@ -29,6 +29,12 @@ test('SQLite loading fails closed without writes for invalid schema, JSON or inv
       rows = [row];
       await assert.rejects(loadPlateDocument(initialDocument));
     }
+    for (const lineBreak of ['\\n', '\\r', '\\r\\n', '\\u2028', '\\u2029']) {
+      const invalid = structuredClone(initialDocument);
+      invalid[2].children = [{text: 'before' + lineBreak + 'after'}];
+      rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalid)}];
+      await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
+    }
     assert.equal(writes.some(([sql]) => /INSERT|UPDATE|ALTER|DROP/.test(sql)), false);
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(initialDocument)}];
     assert.deepEqual(await loadPlateDocument(initialDocument), initialDocument);

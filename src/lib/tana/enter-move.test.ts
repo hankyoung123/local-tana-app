@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TogglePlugin } from '@platejs/toggle/react';
-import { KEYS, type Value } from 'platejs';
+import { KEYS, NodeApi, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { isTanaNodeElement } from './constants';
+import { getTanaParentPath } from './outliner';
 
 globalThis.requestAnimationFrame ??= () => 0;
 function fixture(depths: number[]) {
@@ -85,4 +86,126 @@ test('Enter inherits Done semantic state on the newly created sibling', () => {
   assert.equal(sibling.tanaDoneState, 'done');
   assert.equal(sibling.checked, true);
   assert.equal(sibling.listStyleType, 'todo');
+});
+
+for (const [label, start, end, originalText, freshText] of [
+  ['beginning', 0, 2, 'de 0', ''],
+  ['middle', 2, 4, 'No', ' 0'],
+  ['end', 4, 6, 'Node', ''],
+] as const) test(`expanded Enter at ${label} keeps canonical ownership in one history entry`, () => {
+  const editor = fixture([1, 2, 3, 1]);
+  const before = structuredClone(editor.children);
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: start },
+    focus: { path: [1, 0], offset: end },
+  });
+  editor.tf.insertBreak();
+
+  const originalPath = editor.children.findIndex((node) => node.id === 'n0');
+  const originalChildren = editor.children
+    .slice(originalPath + 1)
+    .filter((node) => node.id === 'n1' || node.id === 'n2');
+  const fresh = editor.children.find((node) =>
+    !['workspace', 'n0', 'n1', 'n2', 'n3'].includes(node.id as string)
+  );
+
+  assert.ok(fresh);
+  assert.equal(new Set(editor.children.map((node) => node.id)).size, editor.children.length);
+  assert.equal(originalChildren.length, 2);
+  assert.deepEqual(getTanaParentPath(editor.children, [originalPath + 1]), [originalPath]);
+  assert.equal(NodeApi.string(editor.children[originalPath]!), originalText);
+  assert.equal(NodeApi.string(fresh), freshText);
+  assert.deepEqual(Object.keys(fresh).filter((key) => key.startsWith('tana')), []);
+  editor.tf.undo();
+  assert.deepEqual(editor.children, before);
+  editor.tf.redo();
+  assert.equal(new Set(editor.children.map((node) => node.id)).size, editor.children.length);
+});
+
+test('expanded Enter strips every semantic adapter from the fresh ordinary Node', () => {
+  const editor = fixture([1, 2, 3, 1]);
+  editor.tf.setNodes({
+    checked: true,
+    listStyleType: 'todo',
+    tanaDoneState: 'done',
+    tanaFieldDefinition: { type: 'plain' },
+    tanaFieldId: 'field',
+    tanaPresentation: { hiddenFieldNodeIds: ['n1'] },
+    tanaReferenceTargetId: 'n3',
+    tanaSearchDefinition: { query: { children: [], type: 'and' } },
+    tanaSupertagIds: ['tag'],
+    tanaSupertagDefinition: {},
+    tanaTime: { unit: 'day', value: '2026-01-01' },
+    tanaViewDefinition: { type: 'outline' },
+  }, { at: [1] });
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: 2 },
+    focus: { path: [1, 0], offset: 4 },
+  });
+  editor.tf.insertBreak();
+
+  const fresh = editor.children.find((node) =>
+    !['workspace', 'n0', 'n1', 'n2', 'n3'].includes(node.id as string)
+  );
+
+  assert.ok(fresh);
+  assert.equal(fresh.tanaDoneState, 'done');
+  assert.equal(fresh.checked, true);
+  assert.equal(fresh.listStyleType, 'todo');
+  assert.deepEqual(Object.keys(fresh).filter((key) =>
+    [
+      'tanaFieldDefinition',
+      'tanaFieldId',
+      'tanaPresentation',
+      'tanaReferenceTargetId',
+      'tanaSearchDefinition',
+      'tanaSupertagDefinition',
+      'tanaSupertagIds',
+      'tanaTime',
+      'tanaViewDefinition',
+    ].includes(key)
+  ), []);
+});
+
+test('expanded Enter never splits Workspace or crosses a protected system boundary', () => {
+  const editor = fixture([1, 1]);
+  const before = structuredClone(editor.children);
+  editor.tf.select({
+    anchor: { path: [0, 0], offset: 0 },
+    focus: { path: [0, 0], offset: 4 },
+  });
+  editor.tf.insertBreak();
+  assert.deepEqual(editor.children, before);
+
+  editor.tf.select({
+    anchor: { path: [0, 0], offset: 3 },
+    focus: { path: [1, 0], offset: 2 },
+  });
+  editor.tf.insertBreak();
+  assert.deepEqual(editor.children, before);
+});
+
+test('expanded Enter keeps the system marker on exactly one canonical Node', () => {
+  const editor = fixture([1, 1]);
+  editor.tf.setNodes({ tanaSystemNode: 'schema' }, { at: [1] });
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: 2 },
+    focus: { path: [1, 0], offset: 4 },
+  });
+  editor.tf.insertBreak();
+  assert.deepEqual(
+    editor.children.filter((node) => node.tanaSystemNode === 'schema').map((node) => node.id),
+    ['n0']
+  );
+});
+
+test('expanded Enter across ordinary interactable Nodes deletes then splits through the identity boundary', () => {
+  const editor = fixture([1, 1]);
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: 2 },
+    focus: { path: [2, 0], offset: 2 },
+  });
+  editor.tf.insertBreak();
+  assert.equal(new Set(editor.children.map((node) => node.id)).size, editor.children.length);
+  assert.ok(editor.children.some((node) => node.id === 'n0'));
 });

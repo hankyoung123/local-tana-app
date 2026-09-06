@@ -1,7 +1,7 @@
 import type { Descendant, TElement, Value } from 'platejs';
 
 import { isTauri } from '@tauri-apps/api/core';
-import { KEYS } from 'platejs';
+import { KEYS, NodeApi } from 'platejs';
 
 import {
   isTanaNodeElement,
@@ -11,6 +11,7 @@ import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import { isTanaFieldHostNode } from './fields';
 import { isTanaQueryAst } from './query-ast';
 import { isTanaDay } from './time';
+import { containsTanaSoftLineBreak } from './single-line';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
 
@@ -73,6 +74,8 @@ function isElement(value: Descendant): value is TElement {
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaDoneState?: unknown;
+    checked?: unknown;
+    listStyleType?: unknown;
     tanaFieldDefinition?: unknown;
     tanaFieldId?: unknown;
     tanaFieldOptional?: unknown;
@@ -91,6 +94,15 @@ function hasValidSemanticData(element: TElement): boolean {
   };
 
   if (semantic.tanaDoneState !== undefined && semantic.tanaDoneState !== 'todo' && semantic.tanaDoneState !== 'done') {
+    return false;
+  }
+
+  if (semantic.tanaDoneState === undefined) {
+    if (semantic.checked !== undefined || semantic.listStyleType === 'todo') return false;
+  } else if (
+    semantic.checked !== (semantic.tanaDoneState === 'done') ||
+    semantic.listStyleType !== 'todo'
+  ) {
     return false;
   }
 
@@ -406,6 +418,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
         typeof descendant.id !== 'string' ||
         descendant.id.trim().length === 0 ||
         (descendant.indent !== undefined && (!Number.isInteger(descendant.indent) || Number(descendant.indent) < 0)) ||
+        containsTanaSoftLineBreak(NodeApi.string(descendant)) ||
         nodeIds.has(descendant.id) ||
         !hasValidSemanticData(descendant)
       ) {

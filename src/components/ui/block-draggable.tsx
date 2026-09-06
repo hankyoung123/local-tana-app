@@ -5,6 +5,7 @@ import * as React from 'react';
 import {
   type CanDropCallback,
   DndPlugin,
+  getDropPath,
   useDraggable,
   useDropLine,
 } from '@platejs/dnd';
@@ -30,7 +31,7 @@ import {
 } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import { shiftTanaSubtreeIndent } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { moveTanaDndSubtrees } from '@/components/editor/plugins/tana-node-identity-plugin';
 import {
   TanaNodeChrome,
   TanaNodeChromeContext,
@@ -55,6 +56,7 @@ import { cn } from '@/lib/utils';
 import {
   canDrag as canDragByNodeBehavior,
   canDrop as canDropByNodeBehavior,
+  getTanaAncestorPaths,
   hasTanaNodeDescendants,
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
@@ -73,6 +75,16 @@ const EMPTY_OPEN_IDS = new Set<string>();
 
 function getNodeIndent(node: TElement): number {
   return typeof node.indent === 'number' ? node.indent : 0;
+}
+
+/** Completes Plate's drop as one canonical range move plus indent rebase. */
+export function completeTanaDndDrop(
+  editor: PlateEditor,
+  draggedIds: readonly string[],
+  to: Path,
+  targetIndent: number
+) {
+  return moveTanaDndSubtrees(editor, draggedIds, to, targetIndent);
 }
 
 /**
@@ -294,6 +306,16 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
   if (dragEntry && !isInteractable(dragEntry[1])) return false;
 
   if (
+    (dropEntry[0] as TElement & { tanaSystemNode?: unknown }).tanaSystemNode !== undefined ||
+    (dragEntry && !canDragByNodeBehavior(dragEntry[0] as TElement, {
+      document: editor.children,
+      path: dragEntry[1],
+    }))
+  ) {
+    return false;
+  }
+
+  if (
     dragEntry &&
     !canDropByNodeBehavior(
       dragEntry[0] as TElement,
@@ -316,6 +338,28 @@ export const canDropOnInteractableTanaNode: CanDropCallback = ({
 
   if (dragged.length !== dragIds.length || !dragged.every(([, path]) => isInteractable(path))) {
     return false;
+  }
+
+  if (dragged.some(([, path]) =>
+    path[0] === dropEntry[1][0] ||
+    getTanaNodeDescendantPaths(editor.children, path)
+      .some((descendant) => descendant[0] === dropEntry[1][0])
+  )) {
+    return false;
+  }
+
+  const draggedIndexes = new Set(dragged.map(([, path]) => path[0]));
+  const draggedRootPaths = dragged
+    .map(([, path]) => path)
+    .filter((path) => !getTanaAncestorPaths(editor.children, path)
+      .some((ancestor) => draggedIndexes.has(ancestor[0])));
+
+  // Plate has no stable multi-range destination between selected roots. Reject
+  // that ambiguous placement before the adapter can observe it as a no-op.
+  if (draggedRootPaths.length > 1) {
+    const firstRoot = draggedRootPaths[0]![0];
+    const lastRoot = draggedRootPaths.at(-1)![0];
+    if (dropEntry[1][0] >= firstRoot && dropEntry[1][0] <= lastRoot) return false;
   }
 
   const dropParentPath = getTanaParentPath(editor.children, dropEntry[1]);
@@ -502,35 +546,34 @@ function Draggable({
       // override it, so their source is blocked even without a rendered handle.
       drag: isDraggable ? undefined : { canDrag: () => false },
       element,
-      onDropHandler: (_, { dragItem }) => {
-        const id = (dragItem as { id: string[] | string }).id;
+      onDropHandler: (_, { dragItem, monitor, nodeRef }) => {
+        if (!('id' in dragItem) || !('editorId' in dragItem) || dragItem.editorId !== editor.id) return false;
 
-        // Plate moves the flat range but intentionally leaves semantic indent
-        // untouched. Reapply one root delta after the move so cross-depth
-        // drops preserve every descendant's relative depth.
-        const draggedIds = Array.isArray(id) ? id : [id];
-        const rootId = draggedIds[0];
-        const sourceEntry = rootId ? editor.api.node({ at: [], id: rootId }) : undefined;
-        const dropTargetId = editor.getOptions(DndPlugin).dropTarget?.id;
-        const targetEntry = dropTargetId
-          ? editor.api.node({ at: [], id: dropTargetId })
-          : undefined;
-        const oldIndent = sourceEntry ? getNodeIndent(sourceEntry[0] as TElement) : undefined;
-        const targetIndent = targetEntry ? getNodeIndent(targetEntry[0] as TElement) : undefined;
-
-        queueMicrotask(() => {
-          if (oldIndent === undefined || targetIndent === undefined) return;
-          const moved = editor.api.node({ at: [], id: rootId });
-          if (!moved) return;
-          const delta = targetIndent - oldIndent;
-          if (delta === 0) return;
-          editor.tf.withNewBatch(() => shiftTanaSubtreeIndent(editor, moved[1], delta));
+        const result = getDropPath(editor, {
+          canDropNode: canDropOnInteractableTanaNode,
+          dragItem,
+          element,
+          monitor,
+          nodeRef,
+          orientation: 'vertical',
         });
 
-        if (blockSelectionApi) {
+        if (!result) return true;
+
+        const id = dragItem.id as string | string[];
+        const draggedIds = Array.isArray(id) ? id : [id];
+        const moved = completeTanaDndDrop(
+          editor,
+          draggedIds,
+          result.to,
+          getNodeIndent(element)
+        );
+
+        if (moved && blockSelectionApi) {
           blockSelectionApi.add(id);
         }
         resetPreview();
+        return true;
       },
     });
 

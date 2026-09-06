@@ -359,3 +359,26 @@ test('rejects malformed Query AST and illegal flat indent at the persistence bou
   assert.equal(isValidTanaDocument(document), false);
   assert.equal(isPlateDocument([{ text: 'top-level text' }]), false);
 });
+
+test('rejects soft line breaks and impossible Done adapter states at the persistence boundary', () => {
+  for (const lineBreak of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+    const document = withWorkspace([
+      { children: [{ text: `A${lineBreak}B` }], id: `multiline-${lineBreak.charCodeAt(0)}`, type: 'p' },
+    ]);
+    assert.equal(isValidTanaDocument(document), false);
+  }
+
+  const todoChecked = withWorkspace([
+    { children: [{ text: 'Task' }], checked: true, id: 'task', listStyleType: 'todo', tanaDoneState: 'todo', type: 'p' },
+  ]);
+  const doneUnchecked = withWorkspace([
+    { children: [{ text: 'Task' }], checked: false, id: 'task', listStyleType: 'todo', tanaDoneState: 'done', type: 'p' },
+  ]);
+  const uncheckedTaskList = withWorkspace([
+    { children: [{ text: 'Task' }], checked: false, id: 'task', listStyleType: 'todo', type: 'p' },
+  ]);
+
+  assert.equal(isValidTanaDocument(todoChecked), false);
+  assert.equal(isValidTanaDocument(doneUnchecked), false);
+  assert.equal(isValidTanaDocument(uncheckedTaskList), false);
+});

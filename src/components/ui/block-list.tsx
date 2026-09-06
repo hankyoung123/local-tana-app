@@ -6,16 +6,15 @@ import type { TListElement } from 'platejs';
 
 import { isOrderedList } from '@platejs/list';
 import {
-  useTodoListElement,
-  useTodoListElementState,
-} from '@platejs/list/react';
-import {
   type PlateElementProps,
   type RenderNodeWrapper,
+  useEditorRef,
   useReadOnly,
 } from 'platejs/react';
 
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
+import type { TanaBlockElement } from '@/lib/tana/types';
 import { cn } from '@/lib/utils';
 
 const config: Record<
@@ -33,6 +32,10 @@ const config: Record<
 
 export const BlockList: RenderNodeWrapper = (props) => {
   if (!props.element.listStyleType) return;
+  if (
+    props.element.listStyleType === 'todo' &&
+    (props.element as TanaBlockElement).tanaDoneState === undefined
+  ) return;
   if (!isOrderedList(props.element)) return;
 
   return (props) => <List {...props} />;
@@ -63,9 +66,9 @@ function List(props: PlateElementProps & { lineBreakBadge?: React.ReactNode }) {
 }
 
 function TodoMarker(props: PlateElementProps) {
-  const state = useTodoListElementState({ element: props.element });
-  const { checkboxProps } = useTodoListElement(state);
+  const editor = useEditorRef();
   const readOnly = useReadOnly();
+  const node = props.element as TanaBlockElement;
 
   return (
     <div contentEditable={false}>
@@ -74,7 +77,12 @@ function TodoMarker(props: PlateElementProps) {
           '-left-6 absolute top-1',
           readOnly && 'pointer-events-none'
         )}
-        {...checkboxProps}
+        checked={node.tanaDoneState === 'done'}
+        onCheckedChange={() => {
+          if (readOnly || typeof node.id !== 'string') return;
+          editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.toggleDone(node.id);
+        }}
+        onMouseDown={(event) => event.preventDefault()}
       />
     </div>
   );
@@ -87,7 +95,7 @@ function TodoLi(
     <li
       className={cn(
         'list-none',
-        (props.element.checked as boolean) &&
+        (props.element as TanaBlockElement).tanaDoneState === 'done' &&
           'text-muted-foreground line-through'
       )}
     >
