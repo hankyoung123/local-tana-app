@@ -46,3 +46,43 @@ test('Zoom shortcuts navigate into the canonical Node and back', async ({ page }
   await page.keyboard.press('ControlOrMeta+,');
   await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('工作区');
 });
+
+test('Tab keeps an empty child caret at its text coordinate', async ({ page }) => {
+  await page.goto('/editor');
+  const source = page
+    .getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true })
+    .locator('xpath=ancestor::*[@data-slate-node="element"][1]');
+  const sourceMarginLeft = await source.evaluate(
+    (element) => Number.parseFloat(getComputedStyle(element).marginLeft)
+  );
+  await source.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.press('Tab');
+
+  const geometry = await page.evaluate(() => {
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : undefined;
+    const text = selection?.anchorNode?.parentElement?.closest(
+      '[data-slate-node="text"]'
+    );
+    const element = text?.closest('[data-slate-node="element"]');
+    const gutter = element?.querySelector<HTMLElement>('.tana-nodeGutter');
+
+    if (!range || !text || !element || !gutter) return null;
+
+    return {
+      caretLeft: range.getBoundingClientRect().left,
+      gutterPosition: getComputedStyle(gutter).position,
+      gutterRight: gutter.getBoundingClientRect().right,
+      marginLeft: Number.parseFloat(getComputedStyle(element).marginLeft),
+      textLeft: text.getBoundingClientRect().left,
+    };
+  });
+
+  expect(geometry).not.toBeNull();
+  expect(geometry!.gutterPosition).toBe('absolute');
+  expect(geometry!.marginLeft).toBeGreaterThan(sourceMarginLeft);
+  expect(geometry!.caretLeft).toBeCloseTo(geometry!.textLeft, 0);
+  expect(geometry!.caretLeft).toBeCloseTo(geometry!.gutterRight, 0);
+});
