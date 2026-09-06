@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/context-menu';
 import { setBlockType } from '@/components/editor/transforms';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { useIsTouchDevice } from '@/hooks/use-is-touch-device';
 import {
   canDuplicate,
@@ -76,6 +77,10 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
       document: editor.children,
       path: selectedNode![1],
     });
+  const canMoveSelection =
+    !!selectedNode &&
+    typeof selectedNodeId === 'string' &&
+    canMutateTanaNode(editor, selectedNode[1], canIndent);
 
   const handleTurnInto = React.useCallback(
     (type: string) => {
@@ -156,6 +161,28 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
               >
                 添加子节点
               </ContextMenuItem>
+            )}
+            {canMoveSelection && (
+              <>
+                <ContextMenuItem
+                  onClick={() => {
+                    const entry = editor.api.node({ at: [], id: selectedNodeId });
+                    if (!entry || !canMutateTanaNode(editor, entry[1], canIndent)) return;
+                    editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.moveSibling(selectedNodeId, -1);
+                  }}
+                >
+                  上移
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() => {
+                    const entry = editor.api.node({ at: [], id: selectedNodeId });
+                    if (!entry || !canMutateTanaNode(editor, entry[1], canIndent)) return;
+                    editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.moveSibling(selectedNodeId, 1);
+                  }}
+                >
+                  下移
+                </ContextMenuItem>
+              </>
             )}
             {canDelete && (
               <ContextMenuItem

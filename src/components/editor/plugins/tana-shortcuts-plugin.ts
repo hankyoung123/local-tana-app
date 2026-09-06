@@ -96,7 +96,18 @@ export const TanaShortcutsPlugin = createPlatePlugin({
           }));
           break;
         }
-        case 'done': editor.tf.setNodes({ checked: !entry[0].checked, listStyleType: 'todo' }, { at: entry[1] }); break;
+        case 'done': {
+          const current = entry[0].tanaDoneState;
+          const next = current === undefined ? 'todo' : current === 'todo' ? 'done' : undefined;
+          if (next) {
+            editor.tf.setNodes({ tanaDoneState: next, checked: next === 'done', listStyleType: 'todo' }, { at: entry[1] });
+          } else {
+            editor.tf.unsetNodes('tanaDoneState', { at: entry[1] });
+            editor.tf.unsetNodes('checked', { at: entry[1] });
+            editor.tf.unsetNodes('listStyleType', { at: entry[1] });
+          }
+          break;
+        }
       }
       event.preventDefault();
       return true;

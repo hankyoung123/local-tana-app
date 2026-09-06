@@ -30,6 +30,7 @@ import {
 } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { shiftTanaSubtreeIndent } from '@/components/editor/plugins/tana-node-identity-plugin';
 import {
   TanaNodeChrome,
   TanaNodeChromeContext,
@@ -503,6 +504,28 @@ function Draggable({
       element,
       onDropHandler: (_, { dragItem }) => {
         const id = (dragItem as { id: string[] | string }).id;
+
+        // Plate moves the flat range but intentionally leaves semantic indent
+        // untouched. Reapply one root delta after the move so cross-depth
+        // drops preserve every descendant's relative depth.
+        const draggedIds = Array.isArray(id) ? id : [id];
+        const rootId = draggedIds[0];
+        const sourceEntry = rootId ? editor.api.node({ at: [], id: rootId }) : undefined;
+        const dropTargetId = editor.getOptions(DndPlugin).dropTarget?.id;
+        const targetEntry = dropTargetId
+          ? editor.api.node({ at: [], id: dropTargetId })
+          : undefined;
+        const oldIndent = sourceEntry ? getNodeIndent(sourceEntry[0] as TElement) : undefined;
+        const targetIndent = targetEntry ? getNodeIndent(targetEntry[0] as TElement) : undefined;
+
+        queueMicrotask(() => {
+          if (oldIndent === undefined || targetIndent === undefined) return;
+          const moved = editor.api.node({ at: [], id: rootId });
+          if (!moved) return;
+          const delta = targetIndent - oldIndent;
+          if (delta === 0) return;
+          editor.tf.withNewBatch(() => shiftTanaSubtreeIndent(editor, moved[1], delta));
+        });
 
         if (blockSelectionApi) {
           blockSelectionApi.add(id);

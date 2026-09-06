@@ -239,6 +239,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
     const tanaNode = descendant as TanaBlockElement;
     const semanticContext = { document, path };
     const node: TanaNode = {
+      doneState: tanaNode.tanaDoneState,
       fieldDefinition: tanaNode.tanaFieldDefinition,
       id: descendant.id,
       node: descendant,

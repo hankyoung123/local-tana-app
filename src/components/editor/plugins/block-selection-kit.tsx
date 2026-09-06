@@ -10,10 +10,9 @@ import {
   canDuplicate,
   canSelect,
   isTanaNodeInteractable,
-  getTanaNodeDescendantPaths,
 } from '@/lib/tana';
 import { canMutateTanaNode } from '../mutation-policy';
-import { indentTanaSelection, getTanaSelectedRootPaths } from './tana-node-identity-plugin';
+import { duplicateTanaSubtree, indentTanaSelection, getTanaSelectedRootPaths } from './tana-node-identity-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 const EMPTY_OPEN_IDS = new Set<string>();
@@ -54,16 +53,7 @@ export const BlockSelectionKit = [
       duplicate: () => {
         const roots = getTanaSelectedRootPaths(editor);
         if (roots.some(path => !canMutateTanaNode(editor, path, canDuplicate))) return;
-        const duplicateIds = new Set<string>();
-        editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
-          for (const root of roots.toReversed()) {
-            const paths = [root, ...getTanaNodeDescendantPaths(editor.children, root)];
-            const nodes = paths.map(path => editor.api.node(path)!);
-            editor.tf.duplicateNodes({ nodes });
-            const inserted = editor.children[paths.at(-1)![0] + 1];
-            if (typeof inserted?.id === 'string') duplicateIds.add(inserted.id);
-          }
-        }));
+        const duplicateIds = new Set(duplicateTanaSubtree(editor, roots));
         editor.setOption(BlockSelectionPlugin, 'selectedIds', duplicateIds);
       },
       setIndent: (indent) => {

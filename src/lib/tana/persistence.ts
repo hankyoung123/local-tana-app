@@ -72,6 +72,7 @@ function isElement(value: Descendant): value is TElement {
 
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
+    tanaDoneState?: unknown;
     tanaFieldDefinition?: unknown;
     tanaFieldId?: unknown;
     tanaFieldOptional?: unknown;
@@ -88,6 +89,10 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaTime?: unknown;
     tanaViewDefinition?: unknown;
   };
+
+  if (semantic.tanaDoneState !== undefined && semantic.tanaDoneState !== 'todo' && semantic.tanaDoneState !== 'done') {
+    return false;
+  }
 
   if (
     semantic.tanaDefaultChildSupertagId !== undefined &&
@@ -361,6 +366,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
     const isTanaNode = isTanaNodeElement(descendant, path);
     const semantic = descendant as TElement & {
       key?: unknown;
+      tanaDoneState?: unknown;
       tanaFieldDefinition?: unknown;
       tanaFieldId?: unknown;
       tanaFieldOptional?: unknown;
@@ -378,6 +384,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
+      semantic.tanaDoneState !== undefined ||
       semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldId !== undefined ||
       semantic.tanaFieldOptional !== undefined ||

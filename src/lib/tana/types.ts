@@ -4,6 +4,7 @@ import type { TanaNodeSemanticType } from './node-semantic';
 
 export type NodeId = string;
 export type FieldId = NodeId;
+export type TanaDoneState = 'todo' | 'done';
 
 /**
  * Time is a Node semantic, not a separate calendar record. `day` uses the
@@ -120,6 +121,8 @@ export type SupertagDefinition = {
 };
 
 export type TanaBlockElement = TElement & {
+  /** Canonical completion state; Plate checkbox fields are presentation only. */
+  tanaDoneState?: TanaDoneState;
   tanaFieldDefinition?: FieldDefinition;
   /** Applies only to a Field binding directly beneath a Supertag definition. */
   tanaFieldOptional?: true;
@@ -156,6 +159,7 @@ export type TanaNode = {
   /** Canonical Plate text, retained when a title expression changes display. */
   rawText: string;
   text: string;
+  doneState?: TanaDoneState;
   /** Derived from directly applied (and inherited) Supertag configuration. */
   titleExpression?: string;
   fieldDefinition?: FieldDefinition;

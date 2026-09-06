@@ -568,6 +568,73 @@ describe('canonical Tana workspace document', () => {
     assert.equal(editor.children.findIndex((node) => node.id === 'beta'), restoredAlphaPath);
   });
 
+  const backspaceGoldenCases = [
+    ['same-level previous sibling', [
+      { id: 'alpha', indent: 2, text: 'Alpha' },
+      { id: 'beta', indent: 2, text: 'Beta' },
+    ], 1, 'alpha'],
+    ['different indent', [
+      { id: 'alpha', indent: 1, text: 'Alpha' },
+      { id: 'beta', indent: 2, text: 'Beta' },
+    ], 1, 'alpha'],
+    ['current has children', [
+      { id: 'alpha', indent: 2, text: 'Alpha' },
+      { id: 'beta', indent: 2, text: 'Beta' },
+      { id: 'beta-child', indent: 3, text: 'Child' },
+    ], 1, 'alpha'],
+    ['previous has children', [
+      { id: 'alpha', indent: 2, text: 'Alpha' },
+      { id: 'alpha-child', indent: 3, text: 'Child' },
+      { id: 'beta', indent: 2, text: 'Beta' },
+    ], 2, 'alpha-child'],
+    ['first child', [
+      { id: 'alpha', indent: 2, text: 'Alpha' },
+    ], 0, 'alpha'],
+    ['empty Node', [
+      { id: 'alpha', indent: 2, text: 'Alpha' },
+      { id: 'beta', indent: 2, text: '' },
+    ], 1, 'alpha'],
+  ] as const;
+
+  for (const [label, rows, currentOffset, survivorId] of backspaceGoldenCases) {
+    test(`Backspace golden: ${label}`, () => {
+      const editor = createEditor([
+        ...minimalWorkspace(),
+        ...rows.map(({ id, indent, text }) => ({
+          children: [{ text }], id, indent, type: KEYS.p,
+        })),
+      ]);
+      const currentRow = rows[currentOffset]!;
+      const currentIndex = editor.children.findIndex((node) => node.id === currentRow.id);
+      editor.tf.select({
+        anchor: { offset: 0, path: [currentIndex, 0] },
+        focus: { offset: 0, path: [currentIndex, 0] },
+      });
+      editor.tf.deleteBackward('character');
+      assert.equal(editor.children.some((node) => node.id === survivorId), true);
+      assert.equal(editor.children.some((node) => node.id === currentRow.id), label === 'first child');
+      assert.equal(new Set(editor.children.map((node) => node.id)).size, editor.children.length);
+    });
+  }
+
+  test('Backspace golden: heading and formatted text keep native presentation', () => {
+    const editor = createEditor([
+      ...minimalWorkspace(),
+      { children: [{ text: 'Heading' }], id: 'heading', indent: 2, type: KEYS.h2 },
+      { children: [{ text: 'Bold', bold: true }], id: 'formatted', indent: 2, type: KEYS.p },
+    ]);
+    const currentIndex = editor.children.findIndex((node) => node.id === 'formatted');
+    editor.tf.select({
+      anchor: { offset: 0, path: [currentIndex, 0] },
+      focus: { offset: 0, path: [currentIndex, 0] },
+    });
+    editor.tf.deleteBackward('character');
+    assert.equal(editor.children.some((node) => node.id === 'formatted'), false);
+    const heading = editor.children.find((node) => node.id === 'heading');
+    assert.equal(heading?.type, KEYS.h2);
+    assert.equal(heading?.children[0].text, 'Heading');
+  });
+
   test('restores a mis-indented system Node as a Workspace direct child without creating Nodes', () => {
     const editor = createEditor(minimalWorkspace());
 

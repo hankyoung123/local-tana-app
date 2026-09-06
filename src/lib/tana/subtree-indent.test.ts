@@ -7,6 +7,7 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { isTanaNodeElement } from './constants';
+import { shiftTanaSubtreeIndent } from '@/components/editor/plugins/tana-node-identity-plugin';
 
 globalThis.requestAnimationFrame ??= () => 0;
 function fixture(depths: number[]) {
@@ -24,6 +25,14 @@ function select(editor: ReturnType<typeof fixture>, i: number) {
   editor.tf.select({ path: [i + 1, 0], offset: 0 });
 }
 const depthsOf = (editor: ReturnType<typeof fixture>) => editor.children.slice(1).map(n => n.indent);
+
+test('cross-depth DnD delta shifts the complete subtree and preserves relative depth', () => {
+  const editor = fixture([1, 2, 3]);
+  shiftTanaSubtreeIndent(editor, [1], 2);
+  assert.deepEqual(depthsOf(editor), [3, 4, 5]);
+  assert.equal((editor.children[2].indent as number) - (editor.children[1].indent as number), 1);
+  assert.equal((editor.children[3].indent as number) - (editor.children[1].indent as number), 2);
+});
 for (const [label, depths, selected, reverse, expected] of [
   ['leaf', [1, 1], [1], false, [1, 2]],
   ['parent with child', [1, 1, 2], [1], false, [1, 2, 3]],

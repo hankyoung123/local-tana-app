@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TogglePlugin } from '@platejs/toggle/react';
+import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
@@ -23,15 +24,20 @@ function run(editor: ReturnType<typeof fixture>, action: string, composing = fal
   assert.ok(shortcut?.handler);
   shortcut.handler({ editor, event: { isComposing: composing, keyCode: 0, preventDefault() {} } as KeyboardEvent, eventDetails: {} as never });
 }
-test('Done toggles existing Plate checkbox fields without changing identity or hierarchy', () => {
+test('Done cycles semantic state while preserving identity, hierarchy, and checkbox presentation', () => {
   const editor = fixture();
   run(editor, 'done');
-  assert.equal(editor.children[3].checked, true);
+  assert.equal(editor.children[3].tanaDoneState, 'todo');
+  assert.equal(editor.children[3].checked, false);
   assert.equal(editor.children[3].listStyleType, 'todo');
   assert.equal(editor.children[3].id, 'b');
   assert.equal(editor.children[3].indent, 1);
   run(editor, 'done');
-  assert.equal(editor.children[3].checked, false);
+  assert.equal(editor.children[3].tanaDoneState, 'done');
+  assert.equal(editor.children[3].checked, true);
+  run(editor, 'done');
+  assert.equal(editor.children[3].tanaDoneState, undefined);
+  assert.equal(editor.children[3].checked, undefined);
 });
 test('Zoom shortcuts use canonical zoom and no formatting aliases remain', () => {
   const editor = fixture();
@@ -57,6 +63,7 @@ test('move and collapse shortcuts act on complete canonical subtree', () => {
 });
 test('Trash shortcut moves canonical subtree to existing Trash', () => {
   const editor = fixture();
+  assert.equal(editor.meta.shortcuts['tanaShortcuts.trash']?.keys, 'mod+shift+backspace');
   run(editor, 'trash');
   assert.deepEqual(editor.children.map(n => n.id), ['workspace', 'a', 'a-child', 'trash', 'b', 'b-child']);
 });
@@ -73,4 +80,30 @@ test('duplicate shortcut includes descendants with fresh identities', () => {
   assert.equal(titles.filter(t => t === 'b').length, 2);
   assert.equal(titles.filter(t => t === 'b-child').length, 2);
   assert.equal(new Set(editor.children.map(n => n.id)).size, editor.children.length);
+});
+
+test('duplicate remaps subtree-local relations and preserves external relations', () => {
+  const editor = fixture();
+  editor.tf.setNodes({
+    tanaReferenceTargetId: 'b-child',
+  }, { at: [3] });
+  editor.tf.setNodes({ tanaReferenceTargetId: 'external' }, { at: [4] });
+  run(editor, 'duplicate');
+  const copiedRoot = editor.children.find((node) =>
+    node.id !== 'b' && node.children[0].text === 'b'
+  );
+  assert.ok(copiedRoot);
+  const copiedChild = editor.children.find((node) =>
+    node.id !== 'b-child' && node.children[0].text === 'b-child'
+  );
+  assert.ok(copiedChild);
+  assert.equal(copiedRoot.tanaReferenceTargetId, copiedChild.id);
+  assert.equal(
+    editor.children.find((node) => node.id === copiedChild.id)?.tanaReferenceTargetId,
+    'external'
+  );
+  assert.deepEqual(
+    new Set(editor.getOption(BlockSelectionPlugin, 'selectedIds')),
+    new Set([copiedRoot.id, copiedChild.id])
+  );
 });

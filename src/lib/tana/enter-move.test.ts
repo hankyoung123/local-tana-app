@@ -68,3 +68,21 @@ for (const offset of [0, 3, 6]) test(`Enter at offset ${offset} preserves identi
   editor.tf.undo();
   assert.deepEqual(editor.children, before);
 });
+
+test('Enter inherits Done semantic state on the newly created sibling', () => {
+  const editor = fixture([1, 2, 3, 1]);
+  editor.tf.setNodes({ tanaDoneState: 'done', checked: true, listStyleType: 'todo' }, { at: [1] });
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: 6 },
+    focus: { path: [1, 0], offset: 6 },
+  });
+  editor.tf.insertBreak();
+  const sibling = editor.children.find((node) =>
+    node.id !== 'n0' && node.id !== 'n1' && node.id !== 'n2' && node.id !== 'n3' &&
+    node.children[0]?.text === ''
+  );
+  assert.ok(sibling);
+  assert.equal(sibling.tanaDoneState, 'done');
+  assert.equal(sibling.checked, true);
+  assert.equal(sibling.listStyleType, 'todo');
+});

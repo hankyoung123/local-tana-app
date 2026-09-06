@@ -1,6 +1,6 @@
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { canMutateTanaNode } from '../mutation-policy';
-import { canIndent, canOutdent } from '@/lib/tana/node-behavior';
+import { canDuplicate, canIndent, canOutdent } from '@/lib/tana/node-behavior';
 import { ElementApi, KEYS, NodeApi, TextApi, nanoid } from 'platejs';
 import type { Path, TElement, TText } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -19,6 +19,7 @@ const TANA_SEMANTIC_KEYS = [
   'tanaFieldOptional',
   'tanaFieldPinned',
   'tanaFieldValueType',
+  'tanaDoneState',
   'tanaDefaultChildSupertagId',
   'tanaPresentation',
   'tanaReferenceTargetId',
@@ -144,12 +145,54 @@ export function getTanaSelectedRootPaths(editor: PlateEditor): Path[] {
 }
 
 /** Shift the existing canonical subtree, without visiting Reference targets. */
-function shiftTanaSubtreeIndent(editor: PlateEditor, rootPath: Path, delta: number) {
+export function shiftTanaSubtreeIndent(editor: PlateEditor, rootPath: Path, delta: number) {
   const paths = [rootPath, ...getTanaNodeDescendantPaths(editor.children, rootPath)];
   for (const path of paths) {
     const node = editor.api.node<TElement>(path)![0];
     editor.tf.setNodes({ indent: (typeof node.indent === 'number' ? node.indent : 0) + delta }, { at: path });
   }
+}
+
+function remapSubtreeRelation(value: unknown, ids: ReadonlyMap<string, string>, remap = false): unknown {
+  if (typeof value === 'string') return remap ? ids.get(value) ?? value : value;
+  if (Array.isArray(value)) return value.map((item) => remapSubtreeRelation(item, ids, remap));
+  if (!value || typeof value !== 'object') return value;
+  const relationKeys = new Set([
+    'tanaReferenceTargetId', 'tanaFieldId', 'tanaDefaultChildSupertagId',
+    'nodeId', 'fieldId', 'supertagId', 'tanaSupertagIds', 'hiddenFieldNodeIds',
+    'extends', 'visibleFieldIds',
+  ]);
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+    key, remapSubtreeRelation(item, ids, relationKeys.has(key)),
+  ]));
+}
+
+/** Duplicate one or more disjoint canonical subtrees with fresh NodeIds. */
+export function duplicateTanaSubtree(editor: PlateEditor, roots = getTanaSelectedRootPaths(editor)): string[] {
+  if (roots.length === 0 || roots.some((path) => !canMutateTanaNode(editor, path, canDuplicate))) return [];
+  const copied: TElement[] = [];
+  const copiedIds: string[] = [];
+  const idMap = new Map<string, string>();
+  const sourcePaths = roots.flatMap((root) => [root, ...getTanaNodeDescendantPaths(editor.children, root)]);
+  for (const path of sourcePaths) {
+    const source = editor.api.node<TElement>(path)?.[0];
+    if (!source || typeof source.id !== 'string') return [];
+    const nextId = nanoid();
+    idMap.set(source.id, nextId);
+  }
+  for (const path of sourcePaths) {
+    const source = editor.api.node<TElement>(path)?.[0];
+    if (!source || typeof source.id !== 'string') return [];
+    const clone = structuredClone(source) as TElement;
+    clone.id = idMap.get(source.id)!;
+    const remapped = remapSubtreeRelation(clone, idMap) as TElement;
+    remapped.id = clone.id;
+    copied.push(remapped);
+    copiedIds.push(remapped.id as string);
+  }
+  const end = Math.max(...roots.map((root) => (getTanaNodeDescendantPaths(editor.children, root).at(-1) ?? root)[0]));
+  editor.tf.withNewBatch(() => editor.tf.insertNodes(copied, { at: [end + 1] }));
+  return copiedIds;
 }
 
 export function indentTanaSelection(editor: PlateEditor, delta: number): boolean {
@@ -525,6 +568,16 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
         const newNodeId = nanoid();
         editor.tf.setNodes({ id: newNodeId }, { at: rightPath });
         TANA_SEMANTIC_KEYS.forEach(key => editor.tf.unsetNodes(key, { at: rightPath }));
+        if (node.tanaDoneState !== undefined) {
+          editor.tf.setNodes({
+            tanaDoneState: node.tanaDoneState,
+            checked: node.tanaDoneState === 'done',
+            listStyleType: 'todo',
+          }, { at: rightPath });
+        } else {
+          editor.tf.unsetNodes('checked', { at: rightPath });
+          editor.tf.unsetNodes('listStyleType', { at: rightPath });
+        }
         // The left identity still owns its original children. Move only the
         // newly split block using Plate's primitive, before hierarchy is read.
         if (subtreeEnd) moveNodes({ at: rightPath, to: [subtreeEnd[0] + 1] });
