@@ -11,6 +11,7 @@ import { buildTanaIndex } from '@/lib/tana/index';
 import { runTanaQuery } from '@/lib/tana/query';
 import type { TanaQueryExpression } from '@/lib/tana/types';
 import { TanaReferencePlugin } from './tana-reference-plugin';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 function createEditor(value: Value) {
@@ -298,7 +299,7 @@ describe('Tana Reference projection mutations', () => {
     assert.equal(editor.children[5].tanaReferenceTargetId, 'target');
   });
 
-  test('edits a Reference projection by focusing its complete canonical rich title', () => {
+  test('edits a Reference projection in place without changing Zoom, then returns to its occurrence', () => {
     const editor = createEditor([
       {
         children: [
@@ -313,14 +314,62 @@ describe('Tana Reference projection mutations', () => {
       { children: [{ text: '' }], id: 'project-reference', tanaReferenceTargetId: 'project', type: KEYS.p },
     ]);
 
-    assert.equal(editor.getTransforms(TanaReferencePlugin).reference.editTarget('project-reference'), true);
-    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'project');
-    assert.equal(editor.selection?.anchor.path[0], 0);
-    assert.deepEqual(editor.children[0].children, [
-      { bold: true, text: 'Project' },
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+    const occurrence = structuredClone(editor.children[2]);
+
+    assert.equal(reference.editTarget('project-reference'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
+    assert.equal(editor.getOption(TanaReferencePlugin, 'editingReferenceId'), 'project-reference');
+    assert.equal(reference.setTargetTitle('project', 'Renamed project'), true);
+    assert.deepEqual(editor.children[0].children.slice(0, 3), [
+      { bold: true, text: 'Renamed project' },
       { text: ' with ' },
       { children: [{ text: '' }], key: 'related', type: KEYS.mention },
     ]);
-    assert.equal(editor.children[2].tanaReferenceTargetId, 'project');
+    assert.deepEqual(editor.children[2], occurrence);
+    assert.equal(reference.exitEditMode('project-reference'), true);
+    assert.equal(editor.getOption(TanaReferencePlugin, 'editingReferenceId'), null);
+    assert.deepEqual(editor.selection?.anchor.path, [2, 0]);
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to('project'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'project');
+  });
+
+  test('restores a trashed canonical target from Block and Inline Reference actions without rebinding', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'target', indent: 2, type: KEYS.p },
+      { children: [{ text: '' }], id: 'block-reference', indent: 2, tanaReferenceTargetId: 'target', type: KEYS.p },
+      {
+        children: [
+          { text: 'See ' },
+          { children: [{ text: '' }], key: 'target', type: KEYS.mention },
+        ],
+        id: 'inline-host',
+        indent: 2,
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+      { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+      { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+    ]);
+    const lifecycle = editor.getTransforms(TanaNodeLifecyclePlugin).node;
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+    editor.getApi(TogglePlugin).toggle.toggleIds(['workspace', 'home'], true);
+
+    assert.equal(lifecycle.trash('target'), true);
+    assert.equal(reference.restoreTarget('block-reference'), true);
+    assert.equal(buildTanaIndex(editor.children).nodesById.get('target')?.referenceTargetId, undefined);
+    assert.equal(lifecycle.trash('target'), true);
+    assert.equal(reference.restoreTarget('target'), true);
+    assert.equal(lifecycle.trash('target'), true);
+    assert.equal(lifecycle.deletePermanently('target'), true);
+    assert.equal(reference.restoreTarget('block-reference'), false);
+    editor.tf.insertNodes({ children: [{ text: 'Project' }], id: 'replacement', indent: 2, type: KEYS.p }, { at: [2] });
+    assert.equal(reference.restoreTarget('block-reference'), false);
+    assert.equal(editor.children.find((node) => node.id === 'block-reference')?.tanaReferenceTargetId, 'target');
   });
 });

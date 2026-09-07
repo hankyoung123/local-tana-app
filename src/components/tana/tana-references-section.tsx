@@ -25,6 +25,28 @@ type ReferenceGroup = {
   relations: readonly ReferenceRelation[];
 };
 
+export function getTanaReferencesSectionId(nodeId: NodeId): string {
+  return `tana-references-${nodeId}`;
+}
+
+/** Zooms the owner, then locates the already-derived References surface. */
+export function openTanaReferences(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  locate: (sectionId: string) => void = (sectionId) => {
+    if (typeof window === 'undefined') return;
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ block: 'start' });
+    });
+  }
+): boolean {
+  if (!editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId)) return false;
+
+  locate(getTanaReferencesSectionId(nodeId));
+  return true;
+}
+
 export function getReferenceBreadcrumb(index: TanaIndex, nodeId: NodeId): string {
   const labels: string[] = [];
   const visited = new Set<NodeId>();
@@ -114,7 +136,11 @@ export function TanaReferencesSection({
   if (referenceCount === 0 && unlinkedMentions.length === 0) return null;
 
   return (
-    <section aria-label="引用此节点" className="mt-8 border-t border-[var(--tana-divider)] pt-5">
+    <section
+      aria-label="引用此节点"
+      className="mt-8 border-t border-[var(--tana-divider)] pt-5"
+      id={getTanaReferencesSectionId(nodeId)}
+    >
       <h2 className="mb-3">
         <button
           aria-controls={contentId}

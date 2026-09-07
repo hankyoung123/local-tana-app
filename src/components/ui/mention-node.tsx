@@ -9,6 +9,8 @@ import { IS_APPLE, KEYS } from 'platejs';
 import {
   PlateElement,
   useFocused,
+  usePath,
+  usePluginOption,
   useReadOnly,
   useSelected,
 } from 'platejs/react';
@@ -23,8 +25,12 @@ import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
 import {
   getNodeDisplayNameFromIndex,
   getNodeReferenceCandidatesFromIndex,
+  getTanaProjectionTarget,
   getTanaReferenceTargetResolution,
+  isTanaNodeInTrash,
 } from '@/lib/tana/index';
+import type { NodeId, TanaIndex } from '@/lib/tana/types';
+import { resolveTanaNodeTitle } from '@/lib/tana/title';
 
 import {
   InlineCombobox,
@@ -34,6 +40,71 @@ import {
   InlineComboboxInput,
   InlineComboboxItem,
 } from './inline-combobox';
+
+export type InlineReferenceExpansionRow = {
+  depth: number;
+  id: NodeId;
+};
+
+/** Expands only canonical hierarchy; a Reference edge is never traversed. */
+export function getInlineReferenceExpansionRows(
+  index: TanaIndex,
+  targetNodeId: NodeId
+): readonly InlineReferenceExpansionRow[] {
+  const target = getTanaProjectionTarget(index, targetNodeId);
+
+  if (!target || target.id !== targetNodeId) return [];
+
+  const rows: InlineReferenceExpansionRow[] = [];
+  const visited = new Set<NodeId>([targetNodeId]);
+  const stack = (index.childrenByParent.get(targetNodeId) ?? [])
+    .slice()
+    .reverse()
+    .map((id) => ({ depth: 1, id }));
+
+  while (stack.length > 0) {
+    const row = stack.pop()!;
+    const node = index.nodesById.get(row.id);
+
+    if (!node || visited.has(node.id)) continue;
+    visited.add(node.id);
+    rows.push(row);
+
+    if (node.referenceTargetId !== undefined) continue;
+
+    for (const childId of (index.childrenByParent.get(node.id) ?? []).slice().reverse()) {
+      stack.push({ depth: row.depth + 1, id: childId });
+    }
+  }
+
+  return rows;
+}
+
+function InlineReferenceExpansion({
+  index,
+  targetNodeId,
+}: {
+  index: TanaIndex;
+  targetNodeId: NodeId;
+}) {
+  const rows = getInlineReferenceExpansionRows(index, targetNodeId);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <span
+      aria-label="已展开引用子节点"
+      className="ml-1 inline-flex max-w-full flex-col rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] px-2 py-1 align-top text-xs text-[var(--tana-text-secondary)] shadow-sm"
+      contentEditable={false}
+    >
+      {rows.map(({ depth, id }) => (
+        <span key={id} className="truncate" style={{ paddingInlineStart: `${(depth - 1) * 12}px` }}>
+          {resolveTanaNodeTitle(index, id) || '未命名节点'}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 export function MentionElement(
   props: PlateElementProps<TMentionElement> & {
@@ -45,6 +116,7 @@ export function MentionElement(
   const focused = useFocused();
   const mounted = useMounted();
   const readOnly = useReadOnly();
+  const path = usePath();
   const index = useTanaIndex();
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
   const target = getTanaReferenceTargetResolution(index, targetNodeId);
@@ -55,19 +127,45 @@ export function MentionElement(
   const alias = typeof element.value === 'string' && element.value.trim()
     ? element.value.trim()
     : undefined;
-  const displayName = target.status === 'live' ? alias ?? canonicalName : alias ?? canonicalName;
+  const displayName = alias ?? canonicalName;
+  const occurrencePath = path.join('.');
+  const expandedInlineReferencePath = usePluginOption(
+    TanaReferencePlugin,
+    'expandedInlineReferencePath'
+  );
+  const expanded = target.status === 'live' && expandedInlineReferencePath === occurrencePath;
+  const toggleInlineExpansion = React.useCallback(() => {
+    if (target.status !== 'live') return;
+    props.editor
+      .getTransforms(TanaReferencePlugin)
+      .reference.toggleInlineExpansion(occurrencePath, target.target.id);
+  }, [occurrencePath, props.editor, target]);
 
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
-      if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
       if (!navigable || target.status !== 'live') return;
+
+      if ('key' in event) {
+        if (event.key === 'ArrowDown' && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleInlineExpansion();
+          return;
+        }
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+      } else if (event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleInlineExpansion();
+        return;
+      }
 
       event.preventDefault();
       event.stopPropagation();
 
       props.editor.getTransforms(TanaZoomPlugin).zoom.to(target.target.id);
     },
-    [navigable, props.editor, target]
+    [navigable, props.editor, target, toggleInlineExpansion]
   );
 
   const mention = (
@@ -113,28 +211,46 @@ export function MentionElement(
           {props.children}
         </>
       )}
+      {target.status === 'trashed-or-unavailable' && isTanaNodeInTrash(index, targetNodeId) && (
+        <button
+          aria-label="恢复原节点"
+          className="ml-1 rounded px-1 text-[10px] text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+          contentEditable={false}
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            props.editor.getTransforms(TanaReferencePlugin).reference.restoreTarget(targetNodeId);
+          }}
+        >
+          恢复原节点
+        </button>
+      )}
     </PlateElement>
   );
 
   if (target.status !== 'live') return mention;
 
   return (
-    <HoverCard openDelay={350}>
-      <HoverCardTrigger asChild>{mention}</HoverCardTrigger>
-      <HoverCardContent className="w-72 p-3" side="top">
-        <p className="truncate font-medium text-sm">{canonicalName || '未命名节点'}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {index.childrenByParent.get(target.target.id)?.length ?? 0} 个直接子节点
-        </p>
-        <button
-          className="mt-2 rounded px-1.5 py-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
-          type="button"
-          onClick={() => props.editor.getTransforms(TanaZoomPlugin).zoom.to(target.target.id)}
-        >
-          快速展开节点
-        </button>
-      </HoverCardContent>
-    </HoverCard>
+    <>
+      <HoverCard openDelay={350}>
+        <HoverCardTrigger asChild>{mention}</HoverCardTrigger>
+        <HoverCardContent className="w-72 p-3" side="top">
+          <p className="truncate font-medium text-sm">{canonicalName || '未命名节点'}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {index.childrenByParent.get(target.target.id)?.length ?? 0} 个直接子节点
+          </p>
+          <button
+            className="mt-2 rounded px-1.5 py-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+            type="button"
+            onClick={toggleInlineExpansion}
+          >
+            {expanded ? '收起引用子节点' : '在当前处展开'}
+          </button>
+        </HoverCardContent>
+      </HoverCard>
+      {expanded && <InlineReferenceExpansion index={index} targetNodeId={target.target.id} />}
+    </>
   );
 }
 

@@ -12,9 +12,11 @@ import { buildTanaIndex } from '@/lib/tana';
 
 import {
   getReferenceBreadcrumb,
+  getTanaReferencesSectionId,
   getTanaReferenceBacklinkTitle,
   getTanaReferenceGroups,
   navigateTanaReferenceRelation,
+  openTanaReferences,
   TanaReferencesSection,
 } from './tana-references-section';
 
@@ -131,5 +133,35 @@ describe('Tana References section', () => {
     assert.match(markup, /aria-expanded="true"/);
     assert.match(markup, /未链接提及/);
     assert.match(markup, />关联</);
+  });
+
+  test('opens the derived References section and excludes Trash sources from the count', () => {
+    const value: Value = [
+      { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+      {
+        children: [{ text: '' }, { children: [{ text: '' }], key: 'target', type: KEYS.mention }],
+        id: 'active-source',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+      {
+        children: [{ text: '' }, { children: [{ text: '' }], key: 'target', type: KEYS.mention }],
+        id: 'trashed-source',
+        indent: 1,
+        type: KEYS.p,
+      },
+    ];
+    const index = buildTanaIndex(value);
+    const editor = createPlateEditor({
+      nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+      plugins: EditorKit,
+      value,
+    });
+    let located = '';
+
+    assert.equal(getTanaReferenceGroups(index, 'target')[0]?.relations.length, 1);
+    assert.equal(openTanaReferences(editor, 'target', (sectionId) => { located = sectionId; }), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'target');
+    assert.equal(located, getTanaReferencesSectionId('target'));
   });
 });

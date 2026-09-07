@@ -38,6 +38,7 @@ import {
   type TanaNodeChromeProps,
 } from '@/components/tana/tana-node-gutter';
 import { getNodeRenderer } from '@/components/tana/node-renderer-registry';
+import { openTanaReferences } from '@/components/tana/tana-references-section';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import {
   getTanaDisplayIndent,
@@ -623,9 +624,10 @@ function Draggable({
       nodeId && toggleTanaNodeCollapse(editor, nodeId, tanaPath),
     onZoom: () => nodeId && editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId),
     open: openIds.has(nodeId ?? ''),
-    referenceCount,
+    referenceCount: isFocusedNode ? 0 : referenceCount,
     semanticType,
     showChrome: !isMergedFieldValue,
+    onOpenReferences: () => nodeId && openTanaReferences(editor, nodeId),
   };
 
   return (

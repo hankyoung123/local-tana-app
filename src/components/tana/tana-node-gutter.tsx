@@ -45,6 +45,7 @@ export type TanaNodeChromeProps = {
   isSelectionAreaVisible?: boolean;
   nodeLabel: string;
   onCollapse: () => void;
+  onOpenReferences?: () => void;
   onZoom: () => void;
   open: boolean;
   /** Derived incoming Reference count; presentation only. */
@@ -169,6 +170,7 @@ export function TanaNodeGutter({
     isSelectionAreaVisible = false,
     nodeLabel,
     onCollapse,
+    onOpenReferences,
     onZoom,
     open,
     referenceCount = 0,
@@ -248,13 +250,22 @@ export function TanaNodeGutter({
         </GutterGlyph>
       </button>
 
-      {referenceCount > 0 && (
-        <span
+      {referenceCount > 0 && !isFocusedNode && (
+        <button
           aria-label={`${referenceCount} 个引用`}
-          className="pointer-events-none absolute top-0 left-full ml-1 grid min-w-4 place-items-center rounded-full bg-[var(--tana-reference)] px-1 font-medium text-[10px] leading-4 text-white"
+          className="absolute top-0 left-full ml-1 grid min-w-4 place-items-center rounded-full bg-[var(--tana-reference)] px-1 font-medium text-[10px] leading-4 text-white hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent-soft)]"
+          data-plate-prevent-deselect
+          title="查看引用"
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenReferences?.();
+          }}
+          onMouseDown={(event) => event.preventDefault()}
         >
           {referenceCount}
-        </span>
+        </button>
       )}
     </span>
   );

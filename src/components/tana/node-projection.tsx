@@ -10,6 +10,7 @@ import { TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
 import {
   getNodeDisplayNameFromIndex,
   getTanaReferenceTargetResolution,
+  isTanaNodeInTrash,
   resolveTanaNodeTitle,
   getTanaProjectionTarget,
   type NodeId,
@@ -115,11 +116,15 @@ export function ProjectionTitleInput({
   targetNodeId,
   title,
   displayTitle = title,
+  onExitEdit,
   readOnly = false,
+  autoFocus = false,
 }: {
+  autoFocus?: boolean;
   targetNodeId: NodeId;
   title: string;
   displayTitle?: string;
+  onExitEdit?: () => void;
   readOnly?: boolean;
 }) {
   const editor = useEditorRef();
@@ -136,6 +141,7 @@ export function ProjectionTitleInput({
       aria-label="编辑引用目标标题"
       className={`${projectionTitleClassName} rounded bg-transparent outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]`}
       data-plate-prevent-deselect
+      autoFocus={autoFocus}
       type="text"
       value={title}
       onChange={(event) =>
@@ -146,6 +152,11 @@ export function ProjectionTitleInput({
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
         event.stopPropagation();
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onExitEdit?.();
+          return;
+        }
         if (event.key === 'Enter') event.preventDefault();
       }}
     />
@@ -163,14 +174,18 @@ export function getProjectionEditableTitle(target: TanaNode): string {
 export function TanaNodeRowChrome({
   fieldIds,
   index,
+  isEditing = false,
   onEdit,
+  onExitEdit,
   target,
   variant,
 }: {
   /** Optional presentation-only Field selection used by Cards. */
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
+  isEditing?: boolean;
   onEdit?: () => void;
+  onExitEdit?: () => void;
   target: TanaNode;
   variant: ProjectionVariant | 'trash';
 }) {
@@ -212,7 +227,7 @@ export function TanaNodeRowChrome({
     <div
       className={projectionRowClassName}
       contentEditable={false}
-      onDoubleClick={isBlockReference ? edit : undefined}
+      onDoubleClick={isBlockReference && !isEditing ? edit : undefined}
     >
       <button
         aria-label={`打开 ${displayTitle || '未命名节点'}`}
@@ -230,11 +245,13 @@ export function TanaNodeRowChrome({
       <div className="min-w-0 flex-1">
         {target.systemNode ? (
           <p className={projectionTitleClassName}>{displayTitle}</p>
-        ) : isBlockReference ? (
+        ) : isBlockReference && !isEditing ? (
           <RichTitleProjection index={index} nodes={target.node.children} />
         ) : (
           <ProjectionTitleInput
+            autoFocus={isEditing}
             displayTitle={displayTitle}
+            onExitEdit={onExitEdit}
             readOnly={titleIsExpression || variant === 'trash'}
             targetNodeId={target.id}
             title={editableTitle}
@@ -272,13 +289,19 @@ export function TanaNodeRowChrome({
 export function NodeProjection({
   fieldIds,
   index,
+  isEditing = false,
   onEdit,
+  onExitEdit,
+  onRestore,
   targetNodeId,
   variant,
 }: {
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
+  isEditing?: boolean;
   onEdit?: () => void;
+  onExitEdit?: () => void;
+  onRestore?: () => void;
   targetNodeId: NodeId | undefined;
   variant: ProjectionVariant;
 }) {
@@ -293,6 +316,9 @@ export function NodeProjection({
     const unavailableLabel = resolution?.status === 'trashed-or-unavailable'
       ? '目标不可用'
       : '目标已删除';
+    const canRestore = resolution?.status === 'trashed-or-unavailable' &&
+      typeof occurrence?.referenceTargetId === 'string' &&
+      isTanaNodeInTrash(index, occurrence.referenceTargetId);
 
     return (
       <div
@@ -305,9 +331,29 @@ export function NodeProjection({
           <TanaNodeBullet compact semanticType={semanticType} />
         </span>
         <span className="min-w-0 flex-1 truncate">{unavailableLabel}</span>
+        {canRestore && (
+          <button
+            className="shrink-0 rounded px-1.5 py-0.5 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+            disabled={!onRestore}
+            type="button"
+            onClick={onRestore}
+          >
+            恢复原节点
+          </button>
+        )}
       </div>
     );
   }
 
-  return <TanaNodeRowChrome fieldIds={fieldIds} index={index} onEdit={onEdit} target={target} variant={variant} />;
+  return (
+    <TanaNodeRowChrome
+      fieldIds={fieldIds}
+      index={index}
+      isEditing={isEditing}
+      onEdit={onEdit}
+      onExitEdit={onExitEdit}
+      target={target}
+      variant={variant}
+    />
+  );
 }

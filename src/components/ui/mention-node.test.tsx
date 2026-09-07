@@ -8,9 +8,14 @@ import { createPlateEditor, Plate, PlateContent } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
+import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaIndexProvider } from '@/components/tana/tana-index-context';
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { insertTanaInlineReference } from './mention-node';
+import {
+  getInlineReferenceExpansionRows,
+  insertTanaInlineReference,
+} from './mention-node';
 import {
   buildTanaIndex,
   getTanaReferenceTargetResolution,
@@ -66,6 +71,7 @@ test('Inline Mention exposes link semantics only for a direct live canonical tar
   ]);
   assert.match(unavailable, /data-reference-status="trashed-or-unavailable"/);
   assert.match(unavailable, /引用：目标不可用/);
+  assert.match(unavailable, /恢复原节点/);
   assert.doesNotMatch(unavailable, /role="link"/);
 
   const chained = renderMention([
@@ -79,7 +85,41 @@ test('Inline Mention exposes link semantics only for a direct live canonical tar
   const missing = renderMention(mentionValue('missing', undefined));
   assert.match(missing, /data-reference-status="missing"/);
   assert.match(missing, /引用：目标已删除/);
+  assert.doesNotMatch(missing, /恢复原节点/);
   assert.doesNotMatch(missing, /role="link"/);
+});
+
+test('Inline Reference expansion stays in context and derives only the canonical hierarchy', () => {
+  const editor = createPlateEditor({
+    nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+    plugins: EditorKit,
+    value: [
+      { children: [{ text: 'Project' }], id: 'target', type: KEYS.p },
+      { children: [{ text: 'Canonical child' }], id: 'child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Reference child' }], id: 'reference-child', indent: 1, tanaReferenceTargetId: 'other', type: KEYS.p },
+      { children: [{ text: 'Other' }], id: 'other', type: KEYS.p },
+      { children: [{ text: 'Must not follow' }], id: 'other-child', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'See ' }, { children: [{ text: '' }], key: 'target', type: KEYS.mention }],
+        id: 'host',
+        type: KEYS.p,
+      },
+    ] as Value,
+  });
+  const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+  editor.setOption(TanaZoomPlugin, 'focusedNodeId', 'host');
+  assert.equal(reference.toggleInlineExpansion('5.1', 'target'), true);
+  assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'host');
+  assert.equal(editor.getOption(TanaReferencePlugin, 'expandedInlineReferencePath'), '5.1');
+  assert.deepEqual(
+    getInlineReferenceExpansionRows(buildTanaIndex(editor.children), 'target').map(({ id }) => id),
+    ['child', 'reference-child']
+  );
+  assert.equal(reference.setTargetTitle('child', 'Edited canonical child'), true);
+  assert.equal(buildTanaIndex(editor.children).nodesById.get('child')?.text, 'Edited canonical child');
+  assert.equal(reference.toggleInlineExpansion('5.1', 'target'), true);
+  assert.equal(editor.getOption(TanaReferencePlugin, 'expandedInlineReferencePath'), null);
 });
 
 test('selected text plus @ becomes an Inline Reference alias without changing the canonical target', () => {

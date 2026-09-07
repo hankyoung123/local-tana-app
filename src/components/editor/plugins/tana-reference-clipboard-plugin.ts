@@ -1,5 +1,5 @@
 import { BlockSelectionPlugin } from '@platejs/selection/react';
-import { ElementApi, nanoid } from 'platejs';
+import { ElementApi, KEYS, nanoid, NodeApi } from 'platejs';
 import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
@@ -8,8 +8,9 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   buildTanaIndex,
   getNodeReferenceCandidatesFromIndex,
+  getTanaProjectionTarget,
 } from '@/lib/tana/index';
-import { canIndent } from '@/lib/tana/node-behavior';
+import { canUseSlashCommand } from '@/lib/tana/node-behavior';
 import { getTanaAncestorPaths, getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
@@ -26,7 +27,7 @@ function getTanaNodeEntry(editor: PlateEditor): [TanaBlockElement, Path] | undef
     : undefined;
 }
 
-/** Copy only disjoint canonical roots, in document order. */
+/** Copy disjoint roots in document order, always retaining the canonical target ID. */
 export function getTanaReferenceClipboardNodeIds(editor: PlateEditor): NodeId[] {
   const selected = editor.plugins[BlockSelectionPlugin.key]
     ? editor.getApi(BlockSelectionPlugin).blockSelection.getNodes({ sort: true })
@@ -38,16 +39,18 @@ export function getTanaReferenceClipboardNodeIds(editor: PlateEditor): NodeId[] 
       return entry ? [entry] : [];
     })();
   const selectedIndexes = new Set(entries.map(([, path]) => path[0]));
-  const candidateIds = new Set(
-    getNodeReferenceCandidatesFromIndex(buildTanaIndex(editor.children)).map(({ id }) => id)
-  );
+  const index = buildTanaIndex(editor.children);
+  const candidateIds = new Set(getNodeReferenceCandidatesFromIndex(index).map(({ id }) => id));
 
   return entries.flatMap(([node, path]) =>
-    typeof node.id === 'string' &&
-    candidateIds.has(node.id) &&
-    !getTanaAncestorPaths(editor.children, path).some((ancestor) => selectedIndexes.has(ancestor[0]))
-      ? [node.id]
-      : []
+    typeof node.id !== 'string' ||
+    getTanaAncestorPaths(editor.children, path).some((ancestor) => selectedIndexes.has(ancestor[0]))
+      ? []
+      : (() => {
+        const target = getTanaProjectionTarget(index, node.id);
+
+        return target && candidateIds.has(target.id) ? [target.id] : [];
+      })()
   );
 }
 
@@ -70,8 +73,7 @@ function readTanaReferenceClipboardData(data: Pick<DataTransfer, 'getData'>): No
 
     return Array.isArray(nodeIds) &&
       nodeIds.length > 0 &&
-      nodeIds.every((nodeId) => typeof nodeId === 'string' && nodeId.length > 0) &&
-      new Set(nodeIds).size === nodeIds.length
+      nodeIds.every((nodeId) => typeof nodeId === 'string' && nodeId.length > 0)
       ? nodeIds as NodeId[]
       : undefined;
   } catch {
@@ -79,7 +81,54 @@ function readTanaReferenceClipboardData(data: Pick<DataTransfer, 'getData'>): No
   }
 }
 
-/** Inserts fresh occurrence identities while retaining every canonical target and subtree. */
+function isEmptyCurrentNode(editor: PlateEditor, current: [TanaBlockElement, Path]): boolean {
+  return NodeApi.string(current[0]) === '' &&
+    getTanaNodeDescendantPaths(editor.children, current[1]).length === 0;
+}
+
+function pasteBlockReferences(
+  editor: PlateEditor,
+  current: [TanaBlockElement, Path],
+  targetNodeIds: readonly NodeId[]
+): void {
+  const [node, path] = current;
+  const indent = typeof node.indent === 'number' ? node.indent : 0;
+  const trailingOccurrences: TElement[] = targetNodeIds.slice(1).map((targetNodeId) => ({
+    children: [{ text: '' }],
+    id: nanoid(),
+    indent,
+    tanaReferenceTargetId: targetNodeId,
+    type: node.type,
+  }));
+
+  editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
+    node.children
+      .map((_, index) => [...path, index])
+      .toReversed()
+      .forEach((childPath) => editor.tf.removeNodes({ at: childPath }));
+    editor.tf.insertNodes({ text: '' }, { at: [...path, 0] });
+    editor.tf.setNodes({ tanaReferenceTargetId: targetNodeIds[0]! }, { at: path });
+    if (trailingOccurrences.length > 0) {
+      editor.tf.insertNodes(trailingOccurrences, { at: [path[0] + 1] });
+    }
+    editor.tf.select({ path: [...path, 0], offset: 0 });
+  }));
+}
+
+function pasteInlineReferences(editor: PlateEditor, targetNodeIds: readonly NodeId[]): void {
+  editor.tf.withNewBatch(() => {
+    targetNodeIds.forEach((targetNodeId, index) => {
+      if (index > 0) editor.tf.insertText(' ');
+      editor.tf.insertNodes({
+        children: [{ text: '' }],
+        key: targetNodeId,
+        type: KEYS.mention,
+      });
+    });
+  });
+}
+
+/** Pasting converts the current blank Node or inserts inline references at the current caret. */
 export function pasteTanaReferenceOccurrences(
   editor: PlateEditor,
   targetNodeIds: readonly NodeId[]
@@ -92,30 +141,18 @@ export function pasteTanaReferenceOccurrences(
 
   if (
     !current ||
-    !canMutateTanaNode(editor, current[1], canIndent) ||
+    !canMutateTanaNode(editor, current[1], canUseSlashCommand) ||
     targetNodeIds.length === 0 ||
-    new Set(targetNodeIds).size !== targetNodeIds.length ||
     targetNodeIds.some((nodeId) => !candidates.has(nodeId))
   ) {
     return false;
   }
 
-  const currentIndent = typeof current[0].indent === 'number' ? current[0].indent : 0;
-  const insertionPath = [
-    (getTanaNodeDescendantPaths(editor.children, current[1]).at(-1) ?? current[1])[0] + 1,
-  ] as Path;
-  const occurrences: TElement[] = targetNodeIds.map((targetNodeId) => ({
-    children: [{ text: '' }],
-    id: nanoid(),
-    indent: currentIndent,
-    tanaReferenceTargetId: targetNodeId,
-    type: current[0].type,
-  }));
-
-  editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
-    editor.tf.insertNodes(occurrences, { at: insertionPath });
-    editor.tf.select({ path: [...insertionPath, 0], offset: 0 });
-  }));
+  if (isEmptyCurrentNode(editor, current)) {
+    pasteBlockReferences(editor, current, targetNodeIds);
+  } else {
+    pasteInlineReferences(editor, targetNodeIds);
+  }
 
   return true;
 }

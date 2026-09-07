@@ -284,6 +284,7 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
     index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference',
   }));
   assert.match(brokenMarkup(), /目标不可用/);
+  assert.match(brokenMarkup(), /恢复原节点/);
   assert.doesNotMatch(brokenMarkup(), /<input/);
   const trashMarkup = renderToStaticMarkup(createElement(Plate, { editor,
     children: createElement(TanaTrashView, { index, node: index.nodesById.get('trash')! }) }));
@@ -310,6 +311,7 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
   index = buildTanaIndex(editor.children);
   for (const id of canonicalIds) assert.equal(index.nodesById.has(id), false);
   assert.match(brokenMarkup(), /目标已删除/);
+  assert.doesNotMatch(brokenMarkup(), /恢复原节点/);
   editor.tf.insertNodes({ id: 'replacement', type: KEYS.p, indent: 2, children: [{ text: 'Project' }] }, { at: [2] });
   assert.equal(getTanaProjectionTarget(buildTanaIndex(editor.children), 'project-reference'), undefined);
   assert.deepEqual(editor.children.find((node) => node.id === 'project-reference'), occurrence);

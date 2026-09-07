@@ -92,12 +92,14 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const targetNodeId = getTanaProjectionTarget(index, occurrenceId)?.id;
   const editor = useEditorRef();
   const openIds = usePluginOption(TogglePlugin, 'openIds');
+  const editingReferenceId = usePluginOption(TanaReferencePlugin, 'editingReferenceId');
   const open = typeof element.id === 'string' && openIds?.has(element.id);
   const { baseIndent } = useTanaZoomPresentation();
   const indent = typeof element.indent === 'number' ? element.indent : 0;
   const children = targetNodeId ? index.childrenByParent.get(targetNodeId) ?? [] : [];
   const rows = open && targetNodeId ? getReferenceSubtreeRows(index, targetNodeId) : [];
   const reference = editor.getTransforms(TanaReferencePlugin).reference;
+  const isEditing = occurrenceId !== undefined && editingReferenceId === occurrenceId;
   return (
     <div
       aria-label="节点引用"
@@ -115,7 +117,7 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
           reference.editTarget(occurrenceId);
         } else if (event.key === 'Escape') {
           event.preventDefault();
-          reference.focusOccurrence(occurrenceId);
+          reference.exitEditMode(occurrenceId);
         }
       }}
       onDoubleClick={() => occurrenceId && reference.editTarget(occurrenceId)}
@@ -126,7 +128,17 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
           onKeyDown={(event) => event.stopPropagation()}>
           {open ? '▾' : '▸'}
         </button>}
-        <div className="min-w-0 flex-1"><NodeProjection index={index} targetNodeId={occurrenceId} variant="block-reference" /></div>
+        <div className="min-w-0 flex-1">
+          <NodeProjection
+            index={index}
+            isEditing={isEditing}
+            onEdit={() => occurrenceId && reference.editTarget(occurrenceId)}
+            onExitEdit={() => occurrenceId && reference.exitEditMode(occurrenceId)}
+            onRestore={() => occurrenceId && reference.restoreTarget(occurrenceId)}
+            targetNodeId={occurrenceId}
+            variant="block-reference"
+          />
+        </div>
         {targetNodeId && occurrenceId && <button
           aria-label="将引用节点移到这里"
           className="shrink-0 px-1 text-xs text-[var(--tana-text-tertiary)] hover:text-[var(--tana-link)]"

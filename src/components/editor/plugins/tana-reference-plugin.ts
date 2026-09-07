@@ -9,6 +9,7 @@ import {
   getNodeReferenceCandidatesFromIndex,
   getTanaProjectionTarget,
   getTanaReferenceTargetResolution,
+  isTanaNodeInTrash,
   isTanaNodeActive,
 } from '@/lib/tana/index';
 import { canDrag, canUseSlashCommand } from '@/lib/tana/node-behavior';
@@ -19,9 +20,15 @@ import {
   type TanaUnlinkedMention,
 } from '@/lib/tana/unlinked-mentions';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
-import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_REFERENCE_PLUGIN_KEY = 'tanaReference' as const;
+
+type TanaReferenceUiOptions = {
+  /** Transient occurrence-local editing state; never part of the Plate document. */
+  editingReferenceId: NodeId | null;
+  /** Transient inline occurrence path in the current editor context. */
+  expandedInlineReferencePath: string | null;
+};
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -178,18 +185,14 @@ function bringHere(editor: PlateEditor, referenceNodeId: NodeId): boolean {
   return swapped;
 }
 
-/** Editing a projection always focuses the real canonical rich title. */
+/** Opens an occurrence-local projection editor without changing the Zoom scope. */
 function editTarget(editor: PlateEditor, referenceNodeId: NodeId): boolean {
   const index = buildTanaIndex(editor.children);
   const target = getTanaProjectionTarget(index, referenceNodeId);
-  const targetEntry = target && getTanaNodeEntry(editor, target.id);
 
-  if (!target || !targetEntry || !editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)) {
-    return false;
-  }
+  if (!target) return false;
 
-  editor.tf.select(editor.api.end(targetEntry[1])!);
-  editor.tf.focus();
+  editor.setOption(TanaReferencePlugin, 'editingReferenceId', referenceNodeId);
   return true;
 }
 
@@ -202,6 +205,62 @@ function focusOccurrence(editor: PlateEditor, referenceNodeId: NodeId): boolean 
   editor.tf.select(editor.api.start(reference[1])!);
   editor.tf.focus();
   return true;
+}
+
+function exitEditMode(editor: PlateEditor, referenceNodeId: NodeId): boolean {
+  if (editor.getOption(TanaReferencePlugin, 'editingReferenceId') === referenceNodeId) {
+    editor.setOption(TanaReferencePlugin, 'editingReferenceId', null);
+  }
+
+  return focusOccurrence(editor, referenceNodeId);
+}
+
+/** Toggles one inline occurrence's derived subtree in the current UI context. */
+function toggleInlineExpansion(
+  editor: PlateEditor,
+  occurrencePath: string,
+  targetNodeId: NodeId
+): boolean {
+  if (
+    occurrencePath.length === 0 ||
+    getTanaReferenceTargetResolution(buildTanaIndex(editor.children), targetNodeId).status !== 'live'
+  ) {
+    return false;
+  }
+
+  editor.setOption(
+    TanaReferencePlugin,
+    'expandedInlineReferencePath',
+    editor.getOption(TanaReferencePlugin, 'expandedInlineReferencePath') === occurrencePath
+      ? null
+      : occurrencePath
+  );
+
+  return true;
+}
+
+/** Restores a trashed direct target identified by a block or inline occurrence. */
+function restoreTarget(editor: PlateEditor, referenceOrTargetNodeId: NodeId): boolean {
+  const reference = getTanaNodeEntry(editor, referenceOrTargetNodeId);
+  const targetNodeId = reference?.[0].tanaReferenceTargetId ?? referenceOrTargetNodeId;
+  const index = buildTanaIndex(editor.children);
+  const resolution = getTanaReferenceTargetResolution(index, targetNodeId);
+
+  if (
+    !targetNodeId ||
+    resolution.status !== 'trashed-or-unavailable' ||
+    !isTanaNodeInTrash(index, targetNodeId)
+  ) {
+    return false;
+  }
+
+  let restored = false;
+
+  editor.tf.withNewBatch(() => {
+    restored = editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(targetNodeId);
+  });
+
+  return restored;
 }
 
 /** Converts one verified current text match into an inline canonical reference. */
@@ -319,8 +378,15 @@ function setTargetTitle(editor: PlateEditor, targetNodeId: NodeId, title: string
 }
 
 /** Owns block-reference target mutations; projection rendering remains read-only. */
-export const TanaReferencePlugin = createPlatePlugin({
+export const TanaReferencePlugin = createPlatePlugin<
+  typeof TANA_REFERENCE_PLUGIN_KEY,
+  TanaReferenceUiOptions
+>({
   key: TANA_REFERENCE_PLUGIN_KEY,
+  options: {
+    editingReferenceId: null,
+    expandedInlineReferencePath: null,
+  },
   priority: 0,
 })
   .extendEditorTransforms(() => ({
@@ -352,6 +418,19 @@ export const TanaReferencePlugin = createPlatePlugin({
         void referenceNodeId;
         return false;
       },
+      exitEditMode: (referenceNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        return false;
+      },
+      restoreTarget: (referenceNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        return false;
+      },
+      toggleInlineExpansion: (occurrencePath: string, targetNodeId: NodeId): boolean => {
+        void occurrencePath;
+        void targetNodeId;
+        return false;
+      },
       linkUnlinkedMention: (candidate: TanaUnlinkedMention): boolean => {
         void candidate;
         return false;
@@ -370,6 +449,10 @@ export const TanaReferencePlugin = createPlatePlugin({
         bringHere: (referenceNodeId: NodeId) => bringHere(editor, referenceNodeId),
         editTarget: (referenceNodeId: NodeId) => editTarget(editor, referenceNodeId),
         focusOccurrence: (referenceNodeId: NodeId) => focusOccurrence(editor, referenceNodeId),
+        exitEditMode: (referenceNodeId: NodeId) => exitEditMode(editor, referenceNodeId),
+        restoreTarget: (referenceNodeId: NodeId) => restoreTarget(editor, referenceNodeId),
+        toggleInlineExpansion: (occurrencePath: string, targetNodeId: NodeId) =>
+          toggleInlineExpansion(editor, occurrencePath, targetNodeId),
         linkUnlinkedMention: (candidate: TanaUnlinkedMention) =>
           linkUnlinkedMention(editor, candidate),
       },
