@@ -47,6 +47,8 @@ export type TanaNodeChromeProps = {
   onCollapse: () => void;
   onZoom: () => void;
   open: boolean;
+  /** Derived incoming Reference count; presentation only. */
+  referenceCount?: number;
   semanticType: TanaNodeSemanticType;
   showChrome?: boolean;
 };
@@ -169,6 +171,7 @@ export function TanaNodeGutter({
     onCollapse,
     onZoom,
     open,
+    referenceCount = 0,
     semanticType,
   } = props;
   const label = nodeLabel || '未命名节点';
@@ -244,6 +247,15 @@ export function TanaNodeGutter({
           />
         </GutterGlyph>
       </button>
+
+      {referenceCount > 0 && (
+        <span
+          aria-label={`${referenceCount} 个引用`}
+          className="pointer-events-none absolute top-0 left-full ml-1 grid min-w-4 place-items-center rounded-full bg-[var(--tana-reference)] px-1 font-medium text-[10px] leading-4 text-white"
+        >
+          {referenceCount}
+        </span>
+      )}
     </span>
   );
 }

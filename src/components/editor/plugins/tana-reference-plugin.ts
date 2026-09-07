@@ -1,4 +1,4 @@
-import { ElementApi, NodeApi, TextApi } from 'platejs';
+import { ElementApi, KEYS, NodeApi, RangeApi, TextApi } from 'platejs';
 import type { Path } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
@@ -14,6 +14,10 @@ import {
 import { canDrag, canUseSlashCommand } from '@/lib/tana/node-behavior';
 import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+import {
+  findTanaUnlinkedMentions,
+  type TanaUnlinkedMention,
+} from '@/lib/tana/unlinked-mentions';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
@@ -200,6 +204,69 @@ function focusOccurrence(editor: PlateEditor, referenceNodeId: NodeId): boolean 
   return true;
 }
 
+/** Converts one verified current text match into an inline canonical reference. */
+function linkUnlinkedMention(
+  editor: PlateEditor,
+  candidate: TanaUnlinkedMention
+): boolean {
+  const index = buildTanaIndex(editor.children);
+  const current = findTanaUnlinkedMentions(index, candidate.targetNodeId).find(
+    (match) =>
+      match.sourceNodeId === candidate.sourceNodeId &&
+      match.start === candidate.start &&
+      match.end === candidate.end &&
+      match.path.join('.') === candidate.path.join('.')
+  );
+  const source = getTanaNodeEntry(editor, candidate.sourceNodeId);
+  const leaf = editor.api.node(candidate.path)?.[0];
+
+  if (
+    !current ||
+    !source ||
+    !TextApi.isText(leaf) ||
+    !canMutateTanaNode(editor, source[1], canUseSlashCommand)
+  ) {
+    return false;
+  }
+
+  const targetText = index.nodesById.get(candidate.targetNodeId)?.text ?? '';
+
+  editor.tf.withNewBatch(() => {
+    editor.tf.select({
+      anchor: { path: candidate.path, offset: candidate.start },
+      focus: { path: candidate.path, offset: candidate.end },
+    });
+    editor.tf.delete();
+    editor.tf.insertNodes({
+      children: [{ text: '' }],
+      key: candidate.targetNodeId,
+      type: KEYS.mention,
+      value: targetText,
+    });
+  });
+
+  return true;
+}
+
+function captureAliasFromSelection(editor: PlateEditor, text: string): void {
+  const selection = editor.selection;
+
+  if (
+    text !== '@' ||
+    !selection ||
+    !RangeApi.isExpanded(selection) ||
+    selection.anchor.path[0] !== selection.focus.path[0]
+  ) {
+    // A fresh unselected `@` must never reuse a cancelled earlier alias.
+    if (text === '@') delete editor.meta.tanaReferencePendingAlias;
+    return;
+  }
+
+  const alias = editor.api.string(selection).trim();
+
+  if (alias) editor.meta.tanaReferencePendingAlias = alias;
+}
+
 /**
  * The first direct text leaf is the canonical editable title segment. Inline
  * references, Supertag tokens, links, and other rich children stay untouched.
@@ -285,9 +352,13 @@ export const TanaReferencePlugin = createPlatePlugin({
         void referenceNodeId;
         return false;
       },
+      linkUnlinkedMention: (candidate: TanaUnlinkedMention): boolean => {
+        void candidate;
+        return false;
+      },
     },
   }))
-  .overrideEditor(({ editor }) => ({
+  .overrideEditor(({ editor, tf: { insertText } }) => ({
     transforms: {
       reference: {
         setTarget: (referenceNodeId: NodeId, targetNodeId: NodeId) =>
@@ -299,6 +370,12 @@ export const TanaReferencePlugin = createPlatePlugin({
         bringHere: (referenceNodeId: NodeId) => bringHere(editor, referenceNodeId),
         editTarget: (referenceNodeId: NodeId) => editTarget(editor, referenceNodeId),
         focusOccurrence: (referenceNodeId: NodeId) => focusOccurrence(editor, referenceNodeId),
+        linkUnlinkedMention: (candidate: TanaUnlinkedMention) =>
+          linkUnlinkedMention(editor, candidate),
+      },
+      insertText(text, options) {
+        captureAliasFromSelection(editor, text);
+        return insertText(text, options);
       },
     },
   }));

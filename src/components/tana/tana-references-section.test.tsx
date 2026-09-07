@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 import { KEYS, type Value } from 'platejs';
-import { createPlateEditor } from 'platejs/react';
+import { createPlateEditor, Plate } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
@@ -14,6 +15,7 @@ import {
   getTanaReferenceBacklinkTitle,
   getTanaReferenceGroups,
   navigateTanaReferenceRelation,
+  TanaReferencesSection,
 } from './tana-references-section';
 
 describe('Tana References section', () => {
@@ -107,5 +109,27 @@ describe('Tana References section', () => {
     assert.equal(navigateTanaReferenceRelation(editor, inline), true);
     assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'inline-source');
     assert.deepEqual(editor.selection?.anchor.path, [1, 1, 0]);
+  });
+
+  test('keeps References navigable as a collapsible surface and exposes derived unlinked mentions', () => {
+    const value: Value = [
+      { children: [{ text: 'Project' }], id: 'target', type: KEYS.p },
+      { children: [{ text: 'Project plan' }], id: 'source', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(value);
+    const editor = createPlateEditor({
+      nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+      plugins: EditorKit,
+      value,
+    });
+    const markup = renderToStaticMarkup(
+      <Plate editor={editor}>
+        <TanaReferencesSection index={index} nodeId="target" />
+      </Plate>
+    );
+
+    assert.match(markup, /aria-expanded="true"/);
+    assert.match(markup, /未链接提及/);
+    assert.match(markup, />关联</);
   });
 });

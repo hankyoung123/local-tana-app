@@ -286,17 +286,25 @@ export function NodeProjection({
 
   if (!target) {
     const semanticType = variant === 'block-reference' ? 'reference' : 'search';
+    const occurrence = targetNodeId ? index.nodesById.get(targetNodeId) : undefined;
+    const resolution = occurrence?.referenceTargetId
+      ? getTanaReferenceTargetResolution(index, occurrence.referenceTargetId)
+      : undefined;
+    const unavailableLabel = resolution?.status === 'trashed-or-unavailable'
+      ? '目标不可用'
+      : '目标已删除';
 
     return (
       <div
-        aria-label={variant === 'block-reference' ? '引用：目标已删除' : '搜索结果：目标已删除'}
+        aria-label={variant === 'block-reference' ? `引用：${unavailableLabel}` : `搜索结果：${unavailableLabel}`}
         className={`${projectionRowClassName} text-[#9a736d]`}
         contentEditable={false}
+        data-reference-status={resolution?.status ?? 'missing'}
       >
         <span className="grid size-6 shrink-0 place-items-center">
           <TanaNodeBullet compact semanticType={semanticType} />
         </span>
-        <span className="min-w-0 flex-1 truncate">目标已删除</span>
+        <span className="min-w-0 flex-1 truncate">{unavailableLabel}</span>
       </div>
     );
   }

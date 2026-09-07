@@ -69,6 +69,7 @@ import {
   resolveTanaNodeTitle,
   getNodeSemanticType,
   hasNodeSemantic,
+  isTanaNodeActive,
 } from '@/lib/tana';
 
 const EMPTY_OPEN_IDS = new Set<string>();
@@ -507,6 +508,11 @@ function Draggable({
     TANA_FIELD_VALUE_GAP_PX
   }px`;
   const nodeId = typeof element.id === 'string' ? element.id : undefined;
+  const referenceCount = nodeId
+    ? (index.backlinks.get(nodeId) ?? []).filter((relation) =>
+      isTanaNodeActive(index, relation.sourceNodeId)
+    ).length
+    : 0;
   const derivedTitle = nodeId ? resolveTanaNodeTitle(index, nodeId) : undefined;
   const showsDerivedTitle =
     semanticType === 'content' &&
@@ -617,6 +623,7 @@ function Draggable({
       nodeId && toggleTanaNodeCollapse(editor, nodeId, tanaPath),
     onZoom: () => nodeId && editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId),
     open: openIds.has(nodeId ?? ''),
+    referenceCount,
     semanticType,
     showChrome: !isMergedFieldValue,
   };

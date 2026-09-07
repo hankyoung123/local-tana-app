@@ -9,17 +9,28 @@ import { EditorKit } from '@/components/editor/editor-kit';
 import { MentionKit } from '@/components/editor/plugins/mention-kit';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaIndexProvider } from '@/components/tana/tana-index-context';
+import { isTanaNodeElement } from '@/lib/tana/constants';
+import { insertTanaInlineReference } from './mention-node';
 import {
   buildTanaIndex,
   getTanaReferenceTargetResolution,
 } from '@/lib/tana/index';
 
-function mentionValue(targetNodeId: string, target: Value[number] | undefined): Value {
+function mentionValue(
+  targetNodeId: string,
+  target: Value[number] | undefined,
+  alias?: string
+): Value {
   return [
     {
       children: [
         { text: 'See ' },
-        { children: [{ text: '' }], key: targetNodeId, type: KEYS.mention },
+        {
+          children: [{ text: '' }],
+          key: targetNodeId,
+          type: KEYS.mention,
+          value: alias,
+        },
       ],
       id: 'host',
       type: KEYS.p,
@@ -69,6 +80,39 @@ test('Inline Mention exposes link semantics only for a direct live canonical tar
   assert.match(missing, /data-reference-status="missing"/);
   assert.match(missing, /引用：目标已删除/);
   assert.doesNotMatch(missing, /role="link"/);
+});
+
+test('selected text plus @ becomes an Inline Reference alias without changing the canonical target', () => {
+  const editor = createPlateEditor({
+    nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+    plugins: EditorKit,
+    value: [
+      { children: [{ text: 'Project' }], id: 'target', type: KEYS.p },
+      { children: [{ text: 'Sprint' }], id: 'host', type: KEYS.p },
+    ] as Value,
+  });
+
+  editor.tf.select({
+    anchor: { path: [1, 0], offset: 0 },
+    focus: { path: [1, 0], offset: 6 },
+  });
+  editor.tf.insertText('@');
+  assert.equal(editor.meta.tanaReferencePendingAlias, 'Sprint');
+  assert.equal(insertTanaInlineReference(editor, 'target', ''), true);
+
+  const mention = editor.children
+    .find((node) => node.id === 'host')
+    ?.children.find((child) => child.type === KEYS.mention);
+  assert.equal(mention?.key, 'target');
+  assert.equal(mention?.value, 'Sprint');
+  assert.equal(editor.meta.tanaReferencePendingAlias, undefined);
+  assert.equal(editor.children.find((node) => node.id === 'target')?.children[0]?.text, 'Project');
+
+  const markup = renderMention(mentionValue('target', {
+    children: [{ text: 'Project' }], id: 'target', type: KEYS.p,
+  }, 'Sprint'));
+  assert.match(markup, /aria-label="打开引用 Sprint（Project）"/);
+  assert.match(markup, />Sprint</);
 });
 
 test('Inline Mention follows target Trash, restore, permanent delete, and replacement lifecycle without rebinding', () => {

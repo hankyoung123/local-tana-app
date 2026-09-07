@@ -18,6 +18,7 @@ import { useMounted } from '@/hooks/use-mounted';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
 import {
   getNodeDisplayNameFromIndex,
@@ -48,9 +49,13 @@ export function MentionElement(
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
   const target = getTanaReferenceTargetResolution(index, targetNodeId);
   const navigable = target.status === 'live' && canNavigateNode(element);
-  const displayName = target.status === 'live'
+  const canonicalName = target.status === 'live'
     ? getNodeDisplayNameFromIndex(index, target.target.id)
     : target.status === 'missing' ? '目标已删除' : '目标不可用';
+  const alias = typeof element.value === 'string' && element.value.trim()
+    ? element.value.trim()
+    : undefined;
+  const displayName = target.status === 'live' ? alias ?? canonicalName : alias ?? canonicalName;
 
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
@@ -65,7 +70,7 @@ export function MentionElement(
     [navigable, props.editor, target]
   );
 
-  return (
+  const mention = (
     <PlateElement
       {...props}
       className={cn(
@@ -80,7 +85,9 @@ export function MentionElement(
       attributes={{
         ...props.attributes,
         contentEditable: false,
-        'aria-label': navigable ? `打开引用 ${displayName}` : `引用：${displayName}`,
+        'aria-label': navigable
+          ? `打开引用 ${displayName}${alias && alias !== canonicalName ? `（${canonicalName}）` : ''}`
+          : `引用：${displayName}`,
         'aria-disabled': navigable ? undefined : true,
         'data-reference-status': target.status,
         'data-target-node-id': targetNodeId,
@@ -108,6 +115,59 @@ export function MentionElement(
       )}
     </PlateElement>
   );
+
+  if (target.status !== 'live') return mention;
+
+  return (
+    <HoverCard openDelay={350}>
+      <HoverCardTrigger asChild>{mention}</HoverCardTrigger>
+      <HoverCardContent className="w-72 p-3" side="top">
+        <p className="truncate font-medium text-sm">{canonicalName || '未命名节点'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {index.childrenByParent.get(target.target.id)?.length ?? 0} 个直接子节点
+        </p>
+        <button
+          className="mt-2 rounded px-1.5 py-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+          type="button"
+          onClick={() => props.editor.getTransforms(TanaZoomPlugin).zoom.to(target.target.id)}
+        >
+          快速展开节点
+        </button>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+/** Inserts an Inline Reference and consumes a just-captured selected-text alias. */
+export function insertTanaInlineReference(
+  editor: PlateElementProps<TComboboxInputElement>['editor'],
+  targetNodeId: string,
+  search: string
+): boolean {
+  const currentNodeId = editor.api.block()?.[0].id;
+
+  if (
+    typeof currentNodeId === 'string' &&
+    editor.getTransforms(TanaReferencePlugin).reference.createFromEmptyNode(
+      currentNodeId,
+      targetNodeId
+    )
+  ) {
+    delete editor.meta.tanaReferencePendingAlias;
+    return true;
+  }
+
+  const alias = typeof editor.meta.tanaReferencePendingAlias === 'string'
+    ? editor.meta.tanaReferencePendingAlias
+    : undefined;
+  delete editor.meta.tanaReferencePendingAlias;
+  editor.getTransforms({ key: KEYS.mention }).insert.mention({
+    key: targetNodeId,
+    search,
+    value: alias,
+  });
+  editor.tf.move({ unit: 'offset' });
+  return true;
 }
 
 export function MentionInputElement(
@@ -118,24 +178,7 @@ export function MentionInputElement(
   const candidates = getNodeReferenceCandidatesFromIndex(useTanaIndex());
 
   const insertReference = (targetNodeId: string) => {
-    const currentNodeId = editor.api.block()?.[0].id;
-
-    if (
-      typeof currentNodeId === 'string' &&
-      editor.getTransforms(TanaReferencePlugin).reference.createFromEmptyNode(
-        currentNodeId,
-        targetNodeId
-      )
-    ) {
-      return;
-    }
-
-    editor.getTransforms({ key: KEYS.mention }).insert.mention({
-      key: targetNodeId,
-      search,
-      value: undefined,
-    });
-    editor.tf.move({ unit: 'offset' });
+    insertTanaInlineReference(editor, targetNodeId, search);
   };
 
   return (

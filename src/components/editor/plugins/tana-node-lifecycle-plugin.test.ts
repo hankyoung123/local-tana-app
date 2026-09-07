@@ -283,7 +283,7 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
   const brokenMarkup = () => renderToStaticMarkup(createElement(NodeProjection, {
     index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference',
   }));
-  assert.match(brokenMarkup(), /目标已删除/);
+  assert.match(brokenMarkup(), /目标不可用/);
   assert.doesNotMatch(brokenMarkup(), /<input/);
   const trashMarkup = renderToStaticMarkup(createElement(Plate, { editor,
     children: createElement(TanaTrashView, { index, node: index.nodesById.get('trash')! }) }));

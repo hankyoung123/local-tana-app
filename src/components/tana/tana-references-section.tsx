@@ -1,9 +1,11 @@
 'use client';
 
-import { Link2Icon } from 'lucide-react';
+import * as React from 'react';
+import { ChevronDownIcon, Link2Icon } from 'lucide-react';
 import type { PlateEditor } from 'platejs/react';
 import { useEditorRef } from 'platejs/react';
 
+import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   isTanaNodeActive,
@@ -13,6 +15,7 @@ import {
   type ReferenceRelation,
   type TanaIndex,
 } from '@/lib/tana';
+import { findTanaUnlinkedMentions } from '@/lib/tana/unlinked-mentions';
 
 import { TanaNodeBullet } from './tana-node-gutter';
 
@@ -104,52 +107,108 @@ export function TanaReferencesSection({
   const editor = useEditorRef();
   const groups = getTanaReferenceGroups(index, nodeId);
   const referenceCount = groups.reduce((count, group) => count + group.relations.length, 0);
+  const unlinkedMentions = findTanaUnlinkedMentions(index, nodeId);
+  const [expanded, setExpanded] = React.useState(true);
+  const contentId = React.useId();
 
-  if (referenceCount === 0) return null;
+  if (referenceCount === 0 && unlinkedMentions.length === 0) return null;
 
   return (
     <section aria-label="引用此节点" className="mt-8 border-t border-[var(--tana-divider)] pt-5">
-      <h2 className="mb-3 flex items-center gap-2 font-medium text-sm text-[var(--tana-text-secondary)]">
-        <Link2Icon aria-hidden="true" className="size-4 text-[var(--tana-reference)]" />
-        {referenceCount} References
+      <h2 className="mb-3">
+        <button
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left font-medium text-sm text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent-soft)]"
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <ChevronDownIcon
+            aria-hidden="true"
+            className={`size-4 transition-transform ${expanded ? '' : '-rotate-90'}`}
+          />
+          <Link2Icon aria-hidden="true" className="size-4 text-[var(--tana-reference)]" />
+          {referenceCount} References
+        </button>
       </h2>
 
-      <div className="space-y-4">
-        {groups.map((group) => (
-          <section key={group.kind} aria-label={group.label}>
-            <h3 className="mb-1 px-1.5 font-medium text-[10px] text-[var(--tana-text-tertiary)] uppercase tracking-[0.1em]">
-              {group.label}
-            </h3>
-            <div className="space-y-0.5">
-              {group.relations.map((relation, position) => {
-                const source = index.nodesById.get(relation.sourceNodeId);
-                const title = getTanaReferenceBacklinkTitle(index, relation);
+      {expanded && (
+        <div id={contentId} className="space-y-4">
+          {groups.map((group) => (
+            <section key={group.kind} aria-label={group.label}>
+              <h3 className="mb-1 px-1.5 font-medium text-[10px] text-[var(--tana-text-tertiary)] uppercase tracking-[0.1em]">
+                {group.label}
+              </h3>
+              <div className="space-y-0.5">
+                {group.relations.map((relation, position) => {
+                  const source = index.nodesById.get(relation.sourceNodeId);
+                  const title = getTanaReferenceBacklinkTitle(index, relation);
 
-                return (
-                  <button
-                    key={`${relation.kind}-${relation.sourceNodeId}-${relation.path.join('.')}-${position}`}
-                    className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 py-0.5 text-left text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]"
-                    type="button"
-                    onClick={() => navigateTanaReferenceRelation(editor, relation)}
-                  >
-                    <span className="grid size-6 shrink-0 place-items-center text-[var(--tana-node-bullet)]">
-                      <TanaNodeBullet semanticType={source?.semanticType ?? 'content'} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-[var(--tana-text)]">
+                  return (
+                    <button
+                      key={`${relation.kind}-${relation.sourceNodeId}-${relation.path.join('.')}-${position}`}
+                      className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 py-0.5 text-left text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]"
+                      type="button"
+                      onClick={() => navigateTanaReferenceRelation(editor, relation)}
+                    >
+                      <span className="grid size-6 shrink-0 place-items-center text-[var(--tana-node-bullet)]">
+                        <TanaNodeBullet semanticType={source?.semanticType ?? 'content'} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-[var(--tana-text)]">
+                          {title || '未命名节点'}
+                        </span>
+                        <span className="block truncate text-[11px] leading-4 text-[var(--tana-text-tertiary)]">
+                          {getReferenceBreadcrumb(index, relation.sourceNodeId)}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+
+          {unlinkedMentions.length > 0 && (
+            <section aria-label="未链接提及">
+              <h3 className="mb-1 px-1.5 font-medium text-[10px] text-[var(--tana-text-tertiary)] uppercase tracking-[0.1em]">
+                未链接提及
+              </h3>
+              <div className="space-y-0.5">
+                {unlinkedMentions.map((mention) => {
+                  const source = index.nodesById.get(mention.sourceNodeId);
+                  const title = source ? resolveTanaNodeTitle(index, source.id) : '已删除的节点';
+
+                  return (
+                    <div
+                      key={`${mention.sourceNodeId}-${mention.path.join('.')}-${mention.start}`}
+                      className="flex min-h-8 items-center gap-2 rounded px-1.5 py-0.5 text-[13px] leading-5 text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]"
+                    >
+                      <button
+                        className="min-w-0 flex-1 truncate text-left font-medium text-[var(--tana-text)]"
+                        type="button"
+                        onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(mention.sourceNodeId)}
+                      >
                         {title || '未命名节点'}
-                      </span>
-                      <span className="block truncate text-[11px] leading-4 text-[var(--tana-text-tertiary)]">
-                        {getReferenceBreadcrumb(index, relation.sourceNodeId)}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
+                      </button>
+                      <button
+                        className="shrink-0 rounded px-1.5 py-0.5 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent-soft)]"
+                        type="button"
+                        onClick={() =>
+                          editor
+                            .getTransforms(TanaReferencePlugin)
+                            .reference.linkUnlinkedMention(mention)}
+                      >
+                        关联
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </section>
   );
 }
