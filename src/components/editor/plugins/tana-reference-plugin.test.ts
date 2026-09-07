@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { KEYS, type Value } from 'platejs';
+import { TogglePlugin } from '@platejs/toggle/react';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
@@ -10,6 +11,7 @@ import { buildTanaIndex } from '@/lib/tana/index';
 import { runTanaQuery } from '@/lib/tana/query';
 import type { TanaQueryExpression } from '@/lib/tana/types';
 import { TanaReferencePlugin } from './tana-reference-plugin';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 function createEditor(value: Value) {
   return createPlateEditor({
@@ -206,5 +208,119 @@ describe('Tana Reference projection mutations', () => {
       'search',
     ]);
     assert.equal(editor.children.some((node) => node.id === 'project'), true);
+  });
+
+  test('brings a canonical subtree to its Reference occurrence with one undoable ownership swap', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Canonical child' }], id: 'project-child', indent: 3, type: KEYS.p },
+      { children: [{ text: 'Between' }], id: 'between', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Project occurrence' }], id: 'project-reference', indent: 2, tanaReferenceTargetId: 'project', type: KEYS.p },
+      { children: [{ text: 'Tail' }], id: 'tail', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+      { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+      { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+    ]);
+    editor.getApi(TogglePlugin).toggle.toggleIds(['workspace', 'home'], true);
+    const before = structuredClone(editor.children);
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+    assert.equal(reference.bringHere('project-reference'), true);
+    const after = structuredClone(editor.children);
+    assert.deepEqual(
+      editor.children.slice(2, 7).map((node) => node.id),
+      ['project-reference', 'between', 'project', 'project-child', 'tail']
+    );
+    assert.equal(editor.children[2].tanaReferenceTargetId, 'project');
+    assert.equal(editor.children[4].id, 'project');
+    assert.equal(editor.children[5].id, 'project-child');
+    const index = buildTanaIndex(editor.children);
+    assert.equal(index.parentNodeIds.get('project'), 'home');
+    assert.equal(index.parentNodeIds.get('project-child'), 'project');
+    assert.deepEqual(index.backlinks.get('project')?.map(({ sourceNodeId }) => sourceNodeId), ['project-reference']);
+    editor.tf.undo();
+    assert.deepEqual(editor.children, before);
+    editor.tf.redo();
+    assert.deepEqual(editor.children, after);
+  });
+
+  test('rejects Bring here through an owner descendant, Trash, or a system target', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Owner' }], id: 'owner', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Descendant occurrence' }], id: 'descendant-reference', indent: 3, tanaReferenceTargetId: 'owner', type: KEYS.p },
+      { children: [{ text: 'Live occurrence' }], id: 'trash-reference', indent: 2, tanaReferenceTargetId: 'trashed-target', type: KEYS.p },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+      { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+      { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+      { children: [{ text: 'Trashed target' }], id: 'trashed-target', indent: 2, type: KEYS.p },
+      { children: [{ text: 'System occurrence' }], id: 'system-reference', indent: 2, tanaReferenceTargetId: 'home', type: KEYS.p },
+    ]);
+    const before = structuredClone(editor.children);
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+    assert.equal(reference.bringHere('descendant-reference'), false);
+    assert.equal(reference.bringHere('trash-reference'), false);
+    assert.equal(reference.bringHere('system-reference'), false);
+    assert.deepEqual(editor.children, before);
+  });
+
+  test('keeps the complete subtree when the Reference precedes its canonical owner', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Occurrence' }], id: 'reference', indent: 2, tanaReferenceTargetId: 'target', type: KEYS.p },
+      { children: [{ text: 'Between' }], id: 'between', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Target' }], id: 'target', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', indent: 3, type: KEYS.p },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+      { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+      { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+    ]);
+    editor.getApi(TogglePlugin).toggle.toggleIds(['workspace', 'home'], true);
+
+    assert.equal(editor.getTransforms(TanaReferencePlugin).reference.bringHere('reference'), true);
+    assert.deepEqual(
+      editor.children.slice(2, 6).map((node) => node.id),
+      ['target', 'child', 'between', 'reference']
+    );
+    assert.equal(editor.children[2].indent, 2);
+    assert.equal(editor.children[3].indent, 3);
+    assert.equal(editor.children[5].tanaReferenceTargetId, 'target');
+  });
+
+  test('edits a Reference projection by focusing its complete canonical rich title', () => {
+    const editor = createEditor([
+      {
+        children: [
+          { bold: true, text: 'Project' },
+          { text: ' with ' },
+          { children: [{ text: '' }], key: 'related', type: KEYS.mention },
+        ],
+        id: 'project',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Related' }], id: 'related', type: KEYS.p },
+      { children: [{ text: '' }], id: 'project-reference', tanaReferenceTargetId: 'project', type: KEYS.p },
+    ]);
+
+    assert.equal(editor.getTransforms(TanaReferencePlugin).reference.editTarget('project-reference'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'project');
+    assert.equal(editor.selection?.anchor.path[0], 0);
+    assert.deepEqual(editor.children[0].children, [
+      { bold: true, text: 'Project' },
+      { text: ' with ' },
+      { children: [{ text: '' }], key: 'related', type: KEYS.mention },
+    ]);
+    assert.equal(editor.children[2].tanaReferenceTargetId, 'project');
   });
 });

@@ -300,8 +300,8 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
   assert.equal(getReferenceSubtreeRows(buildTanaIndex(editor.children), 'project-node').length, 4);
   const liveMarkup = renderToStaticMarkup(createElement(Plate, { editor,
     children: createElement(NodeProjection, { index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference' }) }));
-  assert.match(liveMarkup, /<input/);
-  assert.match(liveMarkup, /value="Project"/);
+  assert.match(liveMarkup, />Project</);
+  assert.doesNotMatch(liveMarkup, /<input/);
   assert.doesNotMatch(liveMarkup, /目标已删除/);
   assert.deepEqual(editor.children.find((node) => node.id === 'project-reference'), occurrence);
 

@@ -1,11 +1,13 @@
 'use client';
 
 import { Link2Icon } from 'lucide-react';
+import type { PlateEditor } from 'platejs/react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   isTanaNodeActive,
+  getTanaProjectionTarget,
   resolveTanaNodeTitle,
   type NodeId,
   type ReferenceRelation,
@@ -58,6 +60,39 @@ export function getTanaReferenceGroups(
   });
 }
 
+/** Block backlinks borrow the target title; inline backlinks name their host Node. */
+export function getTanaReferenceBacklinkTitle(
+  index: TanaIndex,
+  relation: ReferenceRelation
+): string {
+  const source = index.nodesById.get(relation.sourceNodeId);
+
+  if (!source) return '已删除的节点';
+
+  const owner = relation.kind === 'node'
+    ? getTanaProjectionTarget(index, source.id)
+    : source;
+
+  return owner ? resolveTanaNodeTitle(index, owner.id) || '未命名节点' : '目标已删除';
+}
+
+/** Inline backlinks select the exact mention occurrence after revealing its host. */
+export function navigateTanaReferenceRelation(
+  editor: PlateEditor,
+  relation: ReferenceRelation
+): boolean {
+  if (!editor.getTransforms(TanaZoomPlugin).zoom.to(relation.sourceNodeId)) return false;
+
+  if (relation.kind === 'inline') {
+    const point = editor.api.start(relation.path);
+    if (!point) return false;
+    editor.tf.select(point);
+    editor.tf.focus();
+  }
+
+  return true;
+}
+
 /** A derived navigation surface; backlink relations remain owned by TanaIndex. */
 export function TanaReferencesSection({
   index,
@@ -88,18 +123,14 @@ export function TanaReferencesSection({
             <div className="space-y-0.5">
               {group.relations.map((relation, position) => {
                 const source = index.nodesById.get(relation.sourceNodeId);
-                const title = source
-                  ? resolveTanaNodeTitle(index, source.id)
-                  : '已删除的节点';
+                const title = getTanaReferenceBacklinkTitle(index, relation);
 
                 return (
                   <button
                     key={`${relation.kind}-${relation.sourceNodeId}-${relation.path.join('.')}-${position}`}
                     className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 py-0.5 text-left text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]"
                     type="button"
-                    onClick={() =>
-                      editor.getTransforms(TanaZoomPlugin).zoom.to(relation.sourceNodeId)
-                    }
+                    onClick={() => navigateTanaReferenceRelation(editor, relation)}
                   >
                     <span className="grid size-6 shrink-0 place-items-center text-[var(--tana-node-bullet)]">
                       <TanaNodeBullet semanticType={source?.semanticType ?? 'content'} />

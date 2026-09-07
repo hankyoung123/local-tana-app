@@ -2,12 +2,18 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { KEYS, type Value } from 'platejs';
+import { createPlateEditor } from 'platejs/react';
 
+import { EditorKit } from '@/components/editor/editor-kit';
+import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana';
 
 import {
   getReferenceBreadcrumb,
+  getTanaReferenceBacklinkTitle,
   getTanaReferenceGroups,
+  navigateTanaReferenceRelation,
 } from './tana-references-section';
 
 describe('Tana References section', () => {
@@ -71,5 +77,35 @@ describe('Tana References section', () => {
       getReferenceBreadcrumb(buildTanaIndex(value), 'source'),
       '工作区 / Home / Notes'
     );
+  });
+
+  test('uses canonical titles for block backlinks and focuses the exact inline occurrence', () => {
+    const value: Value = [
+      { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+      {
+        children: [
+          { text: 'See ' },
+          { children: [{ text: '' }], key: 'target', type: KEYS.mention },
+        ],
+        id: 'inline-source',
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Stale occurrence title' }], id: 'node-source', tanaReferenceTargetId: 'target', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(value);
+    const inline = index.references.find((relation) => relation.kind === 'inline');
+    const block = index.references.find((relation) => relation.kind === 'node');
+    const editor = createPlateEditor({
+      nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+      plugins: EditorKit,
+      value,
+    });
+
+    assert.ok(inline);
+    assert.ok(block);
+    assert.equal(getTanaReferenceBacklinkTitle(index, block), 'Target');
+    assert.equal(navigateTanaReferenceRelation(editor, inline), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'inline-source');
+    assert.deepEqual(editor.selection?.anchor.path, [1, 1, 0]);
   });
 });

@@ -12,6 +12,7 @@ import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
+import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -96,15 +97,46 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const indent = typeof element.indent === 'number' ? element.indent : 0;
   const children = targetNodeId ? index.childrenByParent.get(targetNodeId) ?? [] : [];
   const rows = open && targetNodeId ? getReferenceSubtreeRows(index, targetNodeId) : [];
+  const reference = editor.getTransforms(TanaReferencePlugin).reference;
   return (
-    <div className="relative z-20 bg-[var(--tana-canvas)]" contentEditable={false}
-      style={{ marginLeft: `${getTanaDisplayIndentPx(indent, baseIndent)}px` }}>
+    <div
+      aria-label="节点引用"
+      className="relative z-20 bg-[var(--tana-canvas)]"
+      contentEditable={false}
+      style={{ marginLeft: `${getTanaDisplayIndentPx(indent, baseIndent)}px` }}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (!occurrenceId || event.currentTarget !== event.target) return;
+        if (event.key === ' ') {
+          event.preventDefault();
+          if (targetNodeId) editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          reference.editTarget(occurrenceId);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          reference.focusOccurrence(occurrenceId);
+        }
+      }}
+      onDoubleClick={() => occurrenceId && reference.editTarget(occurrenceId)}
+    >
       <div className="flex items-center">
         {children.length > 0 && <button aria-label="展开引用子节点" aria-expanded={!!open}
-          onClick={() => editor.getApi(TogglePlugin).toggle.toggleIds([String(element.id)], !open)}>
+          onClick={() => editor.getApi(TogglePlugin).toggle.toggleIds([String(element.id)], !open)}
+          onKeyDown={(event) => event.stopPropagation()}>
           {open ? '▾' : '▸'}
         </button>}
         <div className="min-w-0 flex-1"><NodeProjection index={index} targetNodeId={occurrenceId} variant="block-reference" /></div>
+        {targetNodeId && occurrenceId && <button
+          aria-label="将引用节点移到这里"
+          className="shrink-0 px-1 text-xs text-[var(--tana-text-tertiary)] hover:text-[var(--tana-link)]"
+          title="将引用节点移到这里"
+          type="button"
+          onClick={() => reference.bringHere(occurrenceId)}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          ⇄
+        </button>}
       </div>
       {rows.map(({ id, depth }) => <div key={id} style={{ marginLeft: depth * 20 }}>
         <NodeProjection index={index} targetNodeId={id} variant="block-reference" />

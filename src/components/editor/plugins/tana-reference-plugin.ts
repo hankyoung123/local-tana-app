@@ -7,11 +7,15 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   buildTanaIndex,
   getNodeReferenceCandidatesFromIndex,
+  getTanaProjectionTarget,
+  getTanaReferenceTargetResolution,
   isTanaNodeActive,
 } from '@/lib/tana/index';
-import { canUseSlashCommand } from '@/lib/tana/node-behavior';
+import { canDrag, canUseSlashCommand } from '@/lib/tana/node-behavior';
 import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_REFERENCE_PLUGIN_KEY = 'tanaReference' as const;
 
@@ -91,6 +95,111 @@ function createFromEmptyNode(
   return true;
 }
 
+function getIndent(node: TanaBlockElement): number {
+  return typeof node.indent === 'number' ? node.indent : 0;
+}
+
+function rebaseSubtree(
+  nodes: readonly TanaBlockElement[],
+  sourceIndent: number,
+  destinationIndent: number
+): TanaBlockElement[] {
+  return nodes.map((node) => ({
+    ...node,
+    indent: destinationIndent + getIndent(node) - sourceIndent,
+  }));
+}
+
+/** Swaps a live occurrence with its canonical owner without following Reference edges. */
+function bringHere(editor: PlateEditor, referenceNodeId: NodeId): boolean {
+  const reference = getTanaNodeEntry(editor, referenceNodeId);
+  const index = buildTanaIndex(editor.children);
+  const targetResolution = reference?.[0].tanaReferenceTargetId
+    ? getTanaReferenceTargetResolution(index, reference[0].tanaReferenceTargetId)
+    : { status: 'missing' as const };
+
+  if (
+    !reference ||
+    targetResolution.status !== 'live' ||
+    !canMutateTanaNode(editor, reference[1], canDrag) ||
+    getTanaNodeDescendantPaths(editor.children, reference[1]).length > 0
+  ) {
+    return false;
+  }
+
+  const target = getTanaNodeEntry(editor, targetResolution.target.id);
+
+  if (!target || !canMutateTanaNode(editor, target[1], canDrag)) return false;
+
+  const targetPaths = [target[1], ...getTanaNodeDescendantPaths(editor.children, target[1])];
+
+  // Moving an owner into a descendant would create a physical hierarchy loop.
+  if (targetPaths.some((path) => path[0] === reference[1][0])) return false;
+
+  const targetNodes = targetPaths.map((path) => editor.api.node<TanaBlockElement>(path)?.[0]);
+
+  if (targetNodes.some((node) => !node)) return false;
+
+  const targetStart = target[1][0];
+  const referenceStart = reference[1][0];
+  const targetLength = targetPaths.length;
+  const targetAtReference = rebaseSubtree(
+    targetNodes as TanaBlockElement[],
+    getIndent(target[0]),
+    getIndent(reference[0])
+  );
+  const referenceAtTarget: TanaBlockElement = {
+    ...reference[0],
+    indent: getIndent(target[0]),
+  };
+  const insertions = targetStart < referenceStart
+    ? [
+      { at: [targetStart] as Path, nodes: [referenceAtTarget] },
+      { at: [referenceStart - targetLength + 1] as Path, nodes: targetAtReference },
+    ]
+    : [
+      { at: [referenceStart] as Path, nodes: targetAtReference },
+      { at: [targetStart - 1 + targetLength] as Path, nodes: [referenceAtTarget] },
+    ];
+
+  let swapped = false;
+
+  editor.tf.withNewBatch(() => {
+    swapped = editor.getTransforms(TanaNodeLifecyclePlugin).node.replaceSubtreesRaw(
+      [...targetPaths, reference[1]],
+      insertions
+    );
+  });
+
+  return swapped;
+}
+
+/** Editing a projection always focuses the real canonical rich title. */
+function editTarget(editor: PlateEditor, referenceNodeId: NodeId): boolean {
+  const index = buildTanaIndex(editor.children);
+  const target = getTanaProjectionTarget(index, referenceNodeId);
+  const targetEntry = target && getTanaNodeEntry(editor, target.id);
+
+  if (!target || !targetEntry || !editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)) {
+    return false;
+  }
+
+  editor.tf.select(editor.api.end(targetEntry[1])!);
+  editor.tf.focus();
+  return true;
+}
+
+/** Returns focus to the occurrence after projection interaction. */
+function focusOccurrence(editor: PlateEditor, referenceNodeId: NodeId): boolean {
+  const reference = getTanaNodeEntry(editor, referenceNodeId);
+
+  if (!reference) return false;
+
+  editor.tf.select(editor.api.start(reference[1])!);
+  editor.tf.focus();
+  return true;
+}
+
 /**
  * The first direct text leaf is the canonical editable title segment. Inline
  * references, Supertag tokens, links, and other rich children stay untouched.
@@ -164,6 +273,18 @@ export const TanaReferencePlugin = createPlatePlugin({
         void targetNodeId;
         return false;
       },
+      bringHere: (referenceNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        return false;
+      },
+      editTarget: (referenceNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        return false;
+      },
+      focusOccurrence: (referenceNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        return false;
+      },
     },
   }))
   .overrideEditor(({ editor }) => ({
@@ -175,6 +296,9 @@ export const TanaReferencePlugin = createPlatePlugin({
           setTargetTitle(editor, targetNodeId, title),
         createFromEmptyNode: (referenceNodeId: NodeId, targetNodeId: NodeId) =>
           createFromEmptyNode(editor, referenceNodeId, targetNodeId),
+        bringHere: (referenceNodeId: NodeId) => bringHere(editor, referenceNodeId),
+        editTarget: (referenceNodeId: NodeId) => editTarget(editor, referenceNodeId),
+        focusOccurrence: (referenceNodeId: NodeId) => focusOccurrence(editor, referenceNodeId),
       },
     },
   }));

@@ -13,6 +13,10 @@ export const TANA_NODE_LIFECYCLE_PLUGIN_KEY = 'tanaNodeLifecycle' as const;
 
 type TanaNodeEntry = [TanaBlockElement, Path];
 type TanaRestoreDestination = 'daily-notes' | 'home';
+type RawSubtreeInsertion = {
+  at: Path;
+  nodes: readonly TElement[];
+};
 
 function getIndent(node: TElement): number {
   return typeof node.indent === 'number' ? node.indent : 0;
@@ -276,6 +280,42 @@ function relocateSubtreesRaw(
 }
 
 /**
+ * Applies a precomputed structural replacement under the captured raw remove
+ * transform. Semantic relocations use this instead of `editor.tf.removeNodes`
+ * so they can never enter the Trash lifecycle.
+ */
+function replaceSubtreesRaw(
+  editor: PlateEditor,
+  removeNodes: PlateEditor['tf']['removeNodes'],
+  paths: readonly Path[],
+  insertions: readonly RawSubtreeInsertion[]
+): boolean {
+  if (
+    paths.length === 0 ||
+    new Set(paths.map((path) => path.join('.'))).size !== paths.length ||
+    paths.some((path) => path.length !== 1) ||
+    insertions.some(
+      ({ at, nodes }) =>
+        at.length !== 1 ||
+        !Number.isInteger(at[0]) ||
+        at[0] < 0 ||
+        nodes.length === 0
+    )
+  ) {
+    return false;
+  }
+
+  editor.tf.withoutNormalizing(() => {
+    paths
+      .toSorted((left, right) => right[0] - left[0])
+      .forEach((path) => removeNodes({ at: path }));
+    insertions.forEach(({ at, nodes }) => editor.tf.insertNodes(nodes.slice(), { at }));
+  });
+
+  return true;
+}
+
+/**
  * Owns the ordinary Node lifecycle without adding placement/history state:
  * removal moves canonical subtrees to the existing Trash Node, restore appends
  * them to Home by default, and permanent deletion is restricted to Trash
@@ -317,6 +357,14 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
         void at;
         return false;
       },
+      replaceSubtreesRaw: (
+        paths: readonly Path[],
+        insertions: readonly RawSubtreeInsertion[]
+      ): boolean => {
+        void paths;
+        void insertions;
+        return false;
+      },
     },
   }))
   .overrideEditor(({ editor, tf: { removeNodes } }) => ({
@@ -331,6 +379,10 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
         paths: readonly Path[],
         at: Path
       ) => relocateSubtreesRaw(editor, removeNodes, nodes, paths, at),
+      replaceSubtreesRaw: (
+        paths: readonly Path[],
+        insertions: readonly RawSubtreeInsertion[]
+      ) => replaceSubtreesRaw(editor, removeNodes, paths, insertions),
     },
     removeNodes(options = {}) {
       const at = Array.isArray(options.at) ? options.at : undefined;

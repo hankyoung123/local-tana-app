@@ -1,11 +1,15 @@
 'use client';
 
-import { TextApi } from 'platejs';
+import { ElementApi, KEYS, TextApi } from 'platejs';
+import type { Descendant, TElement, TText } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
 import {
+  getNodeDisplayNameFromIndex,
+  getTanaReferenceTargetResolution,
   resolveTanaNodeTitle,
   getTanaProjectionTarget,
   type NodeId,
@@ -23,6 +27,77 @@ const projectionRowClassName =
   'tana-projectionRow flex min-h-8 items-center gap-2 rounded px-1.5 py-0.5 text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]';
 const projectionTitleClassName =
   'min-w-0 flex-1 truncate px-1 py-0.5 font-medium text-[13px] leading-5 text-[var(--tana-text)]';
+
+/** Renders canonical rich title content without constructing a second Plate document. */
+function RichTitleProjection({
+  index,
+  nodes,
+}: {
+  index: TanaIndex;
+  nodes: readonly Descendant[];
+}) {
+  return (
+    <span className={`${projectionTitleClassName} block overflow-hidden text-ellipsis whitespace-nowrap`}>
+      {nodes.map((node, position) => (
+        <ProjectedTitleNode index={index} key={position} node={node} />
+      ))}
+    </span>
+  );
+}
+
+function ProjectedTitleNode({
+  index,
+  node,
+}: {
+  index: TanaIndex;
+  node: Descendant;
+}): React.ReactNode {
+  if (TextApi.isText(node)) {
+    const leaf = node as TText & {
+      bold?: boolean;
+      code?: boolean;
+      italic?: boolean;
+      strikethrough?: boolean;
+      underline?: boolean;
+    };
+    let content: React.ReactNode = leaf.text;
+
+    if (leaf.bold) content = <strong>{content}</strong>;
+    if (leaf.italic) content = <em>{content}</em>;
+    if (leaf.underline) content = <u>{content}</u>;
+    if (leaf.strikethrough) content = <s>{content}</s>;
+    if (leaf.code) content = <code>{content}</code>;
+
+    return content;
+  }
+
+  if (!ElementApi.isElement(node)) return null;
+
+  const element = node as TElement & { key?: unknown; url?: unknown };
+
+  if (element.type === KEYS.mention && typeof element.key === 'string') {
+    const target = getTanaReferenceTargetResolution(index, element.key);
+    const label = target.status === 'live'
+      ? getNodeDisplayNameFromIndex(index, target.target.id)
+      : target.status === 'missing' ? '目标已删除' : '目标不可用';
+
+    return <span className="rounded bg-muted px-1 text-[var(--tana-reference)]">@{label}</span>;
+  }
+
+  if (element.type === TANA_SUPERTAG_KEY && typeof element.key === 'string') {
+    return <span className="rounded bg-muted px-1 text-[var(--tana-accent)]">#{getNodeDisplayNameFromIndex(index, element.key)}</span>;
+  }
+
+  const children = element.children.map((child, position) => (
+    <ProjectedTitleNode index={index} key={position} node={child} />
+  ));
+
+  if (element.type === KEYS.link && typeof element.url === 'string') {
+    return <a className="text-[var(--tana-link)] underline" href={element.url} rel="noreferrer" target="_blank">{children}</a>;
+  }
+
+  return <span>{children}</span>;
+}
 
 function getFieldValueLabel(index: TanaIndex, field: TanaFieldNode): string | undefined {
   const labels = field.values.map((value) => {
@@ -88,12 +163,14 @@ export function getProjectionEditableTitle(target: TanaNode): string {
 export function TanaNodeRowChrome({
   fieldIds,
   index,
+  onEdit,
   target,
   variant,
 }: {
   /** Optional presentation-only Field selection used by Cards. */
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
+  onEdit?: () => void;
   target: TanaNode;
   variant: ProjectionVariant | 'trash';
 }) {
@@ -123,9 +200,20 @@ export function TanaNodeRowChrome({
     ? target.semanticType
     : isBlockReference ? 'reference' : 'search';
   const navigate = () => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
+  const edit = onEdit ?? (() => {
+    if (!editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)) return;
+    const entry = editor.api.node({ at: [], id: target.id });
+    if (!entry) return;
+    editor.tf.select(editor.api.end(entry[1])!);
+    editor.tf.focus();
+  });
 
   return (
-    <div className={projectionRowClassName} contentEditable={false}>
+    <div
+      className={projectionRowClassName}
+      contentEditable={false}
+      onDoubleClick={isBlockReference ? edit : undefined}
+    >
       <button
         aria-label={`打开 ${displayTitle || '未命名节点'}`}
         className={
@@ -142,6 +230,8 @@ export function TanaNodeRowChrome({
       <div className="min-w-0 flex-1">
         {target.systemNode ? (
           <p className={projectionTitleClassName}>{displayTitle}</p>
+        ) : isBlockReference ? (
+          <RichTitleProjection index={index} nodes={target.node.children} />
         ) : (
           <ProjectionTitleInput
             displayTitle={displayTitle}
@@ -182,11 +272,13 @@ export function TanaNodeRowChrome({
 export function NodeProjection({
   fieldIds,
   index,
+  onEdit,
   targetNodeId,
   variant,
 }: {
   fieldIds?: readonly NodeId[];
   index: TanaIndex;
+  onEdit?: () => void;
   targetNodeId: NodeId | undefined;
   variant: ProjectionVariant;
 }) {
@@ -209,5 +301,5 @@ export function NodeProjection({
     );
   }
 
-  return <TanaNodeRowChrome fieldIds={fieldIds} index={index} target={target} variant={variant} />;
+  return <TanaNodeRowChrome fieldIds={fieldIds} index={index} onEdit={onEdit} target={target} variant={variant} />;
 }
