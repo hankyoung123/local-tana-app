@@ -29,6 +29,7 @@ function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: N
     !reference ||
     !target ||
     referenceNodeId === targetNodeId ||
+    target[0].tanaReferenceTargetId !== undefined ||
     !isTanaNodeActive(index, referenceNodeId) ||
     !getNodeReferenceCandidatesFromIndex(index).some(
       (candidate) => candidate.id === targetNodeId

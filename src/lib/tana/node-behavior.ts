@@ -46,6 +46,11 @@ function isSystemNode(node: TElement): boolean {
   return (node as TElement & { tanaSystemNode?: unknown }).tanaSystemNode !== undefined;
 }
 
+/** A Reference occurrence may be moved, but never becomes a canonical parent. */
+export function canOwnTanaCanonicalChildren(node: TElement): boolean {
+  return (node as TElement & { tanaReferenceTargetId?: unknown }).tanaReferenceTargetId === undefined;
+}
+
 function hasGenericStructuralProtection(
   node: TElement,
   context: TanaNodeSemanticContext
@@ -158,6 +163,8 @@ export function canDrop(
   // A Value Node is inseparable from its Field occurrence. The DnD adapter
   // separately verifies that a Field drag carries its complete subtree.
   if (sourceTypes.includes('value')) return false;
+
+  if (!canOwnTanaCanonicalChildren(target)) return false;
 
   // Nothing may be dropped into an existing Field/Value structure or a
   // Field Definition Node. Field candidates are direct children of their

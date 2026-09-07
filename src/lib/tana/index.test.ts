@@ -6,6 +6,7 @@ import type { Value } from 'platejs';
 import {
   buildTanaIndex,
   getNodeReferenceCandidatesFromIndex,
+  getTanaReferenceTargetResolution,
   searchTanaNodes,
 } from './index';
 
@@ -70,6 +71,30 @@ describe('buildTanaIndex', () => {
       { id: 'project', text: 'Project' },
       { id: 'task', text: 'Ship @Project #Project' },
     ]);
+  });
+
+  test('offers only direct live canonical Nodes as new Reference targets', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'A' }], id: 'a', type: 'p' },
+      {
+        children: [{ text: 'B occurrence' }],
+        id: 'b',
+        tanaReferenceTargetId: 'a',
+        type: 'p',
+      },
+      { children: [{ text: 'C' }], id: 'c', type: 'p' },
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: 'p' },
+      { children: [{ text: 'Archived' }], id: 'archived', indent: 1, type: 'p' },
+    ]);
+
+    assert.deepEqual(getNodeReferenceCandidatesFromIndex(index).map(({ id }) => id), ['a', 'c']);
+    assert.deepEqual(getTanaReferenceTargetResolution(index, 'a'), {
+      status: 'live',
+      target: index.nodesById.get('a'),
+    });
+    assert.deepEqual(getTanaReferenceTargetResolution(index, 'b'), {
+      status: 'trashed-or-unavailable',
+    });
   });
 
   test('derives Supertag membership only from Node metadata, not inline presentation', () => {

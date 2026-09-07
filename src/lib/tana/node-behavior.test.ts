@@ -8,6 +8,7 @@ import {
   canDrag,
   canDrop,
   canIndent,
+  canOwnTanaCanonicalChildren,
   canOutdent,
   canSelect,
   canTrash,
@@ -122,6 +123,8 @@ describe('Node behavior runtime', () => {
     assert.equal(canOutdent(nodeAt([0]), { document, path: [0] }), true);
     assert.equal(canIndent(nodeAt([2]), { document, path: [2] }), false);
     assert.equal(canOutdent(system), false);
+    assert.equal(canOwnTanaCanonicalChildren(reference), false);
+    assert.equal(canDrop(nodeAt([0]), reference), false);
 
     assert.equal(canTurnInto(nodeAt([0]), { document, path: [0] }), true);
     assert.equal(canTurnInto(nodeAt([2]), { document, path: [2] }), false);

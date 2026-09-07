@@ -80,6 +80,26 @@ function indents(
   });
 }
 
+function referenceParentFixture() {
+  const editor = createPlateEditor({
+    nodeId: { filter: isTanaNodeElement },
+    plugins: EditorKit,
+    value: [
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'A' }], id: 'a', indent: 1, type: KEYS.p },
+      { children: [{ text: 'A child' }], id: 'a-child', indent: 2, type: KEYS.p },
+      { children: [{ text: 'A occurrence' }], id: 'reference', indent: 1, tanaReferenceTargetId: 'a', type: KEYS.p },
+      { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Tail' }], id: 'tail', indent: 1, type: KEYS.p },
+    ] as Value,
+  });
+  editor.getApi(TogglePlugin).toggle.toggleIds(
+    editor.children.map((node) => node.id as string),
+    true
+  );
+  return editor;
+}
+
 test('DnD adapter rebases a leaf and a deep subtree without splitting history', () => {
   const leaf = fixture();
   assert.equal(completeTanaDndDrop(leaf, ['a'], [9], 3), true);
@@ -177,4 +197,25 @@ test('DnD adapter rejects protected targets and Zoom-external sources before mov
     dropEntry: target,
     editor,
   }), false);
+});
+
+test('DnD cannot place canonical Nodes under a Reference occurrence while the occurrence can move normally', async () => {
+  const { buildTanaIndex } = await import('@/lib/tana/index');
+  const editor = referenceParentFixture();
+  const reference = editor.api.node({ at: [], id: 'reference' }) as NodeEntry<TElement>;
+  const b = editor.api.node({ at: [], id: 'b' }) as NodeEntry<TElement>;
+
+  assert.equal(canDropOnInteractableTanaNode({
+    dragEntry: b,
+    dragItem: { editorId: editor.id, element: b[0], id: 'b' },
+    dropEntry: reference,
+    editor,
+  }), false);
+  assert.equal(completeTanaDndDrop(editor, ['b'], [5], 2), false);
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('b'), 'workspace');
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('a-child'), 'a');
+
+  assert.equal(completeTanaDndDrop(editor, ['reference'], [5], 2), true);
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('reference'), 'b');
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('a-child'), 'a');
 });

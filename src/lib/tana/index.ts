@@ -34,6 +34,15 @@ export type SupertagCandidate = NodeReferenceCandidate & {
   definition: SupertagDefinition;
 };
 
+/**
+ * Inline references own only a direct canonical NodeId. Their target is never
+ * followed through a Reference occurrence, so historical chains stay visible
+ * as unavailable rather than becoming an implicit second hop.
+ */
+export type TanaReferenceTargetResolution =
+  | { status: 'live'; target: TanaNode }
+  | { status: 'missing' | 'trashed-or-unavailable' };
+
 /** Resolves a definition's ancestors in parent-first order without recursion loops. */
 export function getSupertagInheritance(
   index: Pick<TanaIndex, 'nodesById'>,
@@ -559,6 +568,7 @@ export function getNodeReferenceCandidatesFromIndex(
     .filter(
       (node) =>
         isTanaNodeActive(index, node.id) &&
+        node.referenceTargetId === undefined &&
         !node.semanticTypes.includes('field') &&
         !node.semanticTypes.includes('value') &&
         node.text.length > 0
@@ -599,6 +609,24 @@ export function isTanaNodeActive(index: TanaIndex, nodeId: NodeId): boolean {
   return (
     !!node && node.systemNode === undefined && !isTanaNodeInTrash(index, nodeId)
   );
+}
+
+/**
+ * Resolves an inline mention's one direct target without following Reference
+ * edges. Missing targets stay distinguishable from targets that still exist
+ * but are in Trash, a system scope, or an invalid Reference chain.
+ */
+export function getTanaReferenceTargetResolution(
+  index: TanaIndex,
+  targetNodeId: NodeId | undefined
+): TanaReferenceTargetResolution {
+  const target = targetNodeId ? index.nodesById.get(targetNodeId) : undefined;
+
+  if (!target) return { status: 'missing' };
+
+  return target.referenceTargetId === undefined && isTanaNodeActive(index, target.id)
+    ? { status: 'live', target }
+    : { status: 'trashed-or-unavailable' };
 }
 
 /** Resolve a projection to one live canonical Node, never follow Reference chains. */

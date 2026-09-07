@@ -21,6 +21,7 @@ import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
 import {
   getNodeDisplayNameFromIndex,
   getNodeReferenceCandidatesFromIndex,
+  getTanaReferenceTargetResolution,
 } from '@/lib/tana/index';
 
 import {
@@ -44,25 +45,23 @@ export function MentionElement(
   const readOnly = useReadOnly();
   const index = useTanaIndex();
   const targetNodeId = typeof element.key === 'string' ? element.key : '';
-  const displayName = getNodeDisplayNameFromIndex(index, targetNodeId);
+  const target = getTanaReferenceTargetResolution(index, targetNodeId);
+  const navigable = target.status === 'live' && canNavigateNode(element);
+  const displayName = target.status === 'live'
+    ? getNodeDisplayNameFromIndex(index, target.target.id)
+    : target.status === 'missing' ? '目标已删除' : '目标不可用';
 
   const navigateToTarget = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
-      if (!canNavigateNode(element)) return;
-
-      const targetNodeId = element.key;
-
-      if (typeof targetNodeId !== 'string') {
-        return;
-      }
+      if (!navigable || target.status !== 'live') return;
 
       event.preventDefault();
       event.stopPropagation();
 
-      props.editor.getTransforms(TanaZoomPlugin).zoom.to(targetNodeId);
+      props.editor.getTransforms(TanaZoomPlugin).zoom.to(target.target.id);
     },
-    [element, props.editor]
+    [navigable, props.editor, target]
   );
 
   return (
@@ -70,7 +69,8 @@ export function MentionElement(
       {...props}
       className={cn(
         'inline-block rounded-md bg-muted px-1.5 py-0.5 align-baseline font-medium text-sm',
-        !readOnly && 'cursor-pointer',
+        navigable && !readOnly && 'cursor-pointer',
+        !navigable && 'text-muted-foreground',
         selected && focused && 'ring-2 ring-ring',
         element.children[0][KEYS.bold] === true && 'font-bold',
         element.children[0][KEYS.italic] === true && 'italic',
@@ -79,12 +79,15 @@ export function MentionElement(
       attributes={{
         ...props.attributes,
         contentEditable: false,
+        'aria-label': navigable ? `打开引用 ${displayName}` : `引用：${displayName}`,
+        'aria-disabled': navigable ? undefined : true,
+        'data-reference-status': target.status,
         'data-target-node-id': targetNodeId,
-        draggable: true,
-        onClick: navigateToTarget,
-        onKeyDown: navigateToTarget,
-        role: 'link',
-        tabIndex: 0,
+        draggable: navigable,
+        onClick: navigable ? navigateToTarget : undefined,
+        onKeyDown: navigable ? navigateToTarget : undefined,
+        role: navigable ? 'link' : undefined,
+        tabIndex: navigable ? 0 : undefined,
       }}
     >
       {mounted && IS_APPLE ? (

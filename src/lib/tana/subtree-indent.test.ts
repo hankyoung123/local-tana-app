@@ -8,6 +8,7 @@ import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { isTanaNodeElement } from './constants';
 import { shiftTanaSubtreeIndent } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { buildTanaIndex } from './index';
 
 globalThis.requestAnimationFrame ??= () => 0;
 function fixture(depths: number[]) {
@@ -112,4 +113,38 @@ test('outdenting multiple siblings keeps their order and remaining sibling owner
   assert.deepEqual(editor.children.slice(1).map(n => [n.id, n.indent]), [
     ['n0', 1], ['n4', 2], ['n1', 1], ['n2', 2], ['n3', 1], ['n5', 1],
   ]);
+});
+
+test('Tab and generic structural moves cannot make a Reference occurrence a canonical parent', () => {
+  const editor = createPlateEditor({
+    plugins: EditorKit,
+    nodeId: { filter: isTanaNodeElement },
+    value: [
+      { id: 'workspace', type: KEYS.p, tanaSystemNode: 'workspace', children: [{ text: 'Workspace' }] },
+      { id: 'a', type: KEYS.p, indent: 1, children: [{ text: 'A' }] },
+      { id: 'reference', type: KEYS.p, indent: 1, tanaReferenceTargetId: 'a', children: [{ text: '' }] },
+      { id: 'b', type: KEYS.p, indent: 1, children: [{ text: 'B' }] },
+      { id: 'sibling', type: KEYS.p, indent: 1, children: [{ text: 'Sibling' }] },
+    ] as Value,
+  });
+  editor.getApi(TogglePlugin).toggle.toggleIds(editor.children.map((node) => String(node.id)), true);
+
+  editor.tf.select({ path: [3, 0], offset: 0 });
+  assert.equal(editor.tf.tab({ reverse: false }), true);
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('b'), 'workspace');
+
+  const generic = createPlateEditor({
+    plugins: EditorKit,
+    nodeId: { filter: isTanaNodeElement },
+    value: [
+      { id: 'workspace', type: KEYS.p, tanaSystemNode: 'workspace', children: [{ text: 'Workspace' }] },
+      { id: 'a', type: KEYS.p, indent: 1, children: [{ text: 'A' }] },
+      { id: 'b', type: KEYS.p, indent: 2, children: [{ text: 'B' }] },
+      { id: 'reference', type: KEYS.p, indent: 1, tanaReferenceTargetId: 'a', children: [{ text: '' }] },
+      { id: 'sibling', type: KEYS.p, indent: 1, children: [{ text: 'Sibling' }] },
+    ] as Value,
+  });
+  generic.getApi(TogglePlugin).toggle.toggleIds(generic.children.map((node) => String(node.id)), true);
+  assert.equal(generic.tf.moveNodes({ at: [2], to: [4] }), false);
+  assert.equal(buildTanaIndex(generic.children).parentNodeIds.get('b'), 'a');
 });

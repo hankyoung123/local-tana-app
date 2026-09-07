@@ -130,6 +130,20 @@ describe('Tana Reference projection mutations', () => {
     assert.equal(editor.children[1].tanaReferenceTargetId, 'target');
   });
 
+  test('rejects a Reference occurrence as a new block Reference target', () => {
+    const editor = createEditor([
+      { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+      { children: [{ text: 'B occurrence' }], id: 'b', tanaReferenceTargetId: 'a', type: KEYS.p },
+      { children: [{ text: 'C' }], id: 'c', type: KEYS.p },
+    ]);
+    const reference = editor.getTransforms(TanaReferencePlugin).reference;
+
+    assert.equal(reference.setTarget('c', 'b'), false);
+    assert.equal(editor.children[2].tanaReferenceTargetId, undefined);
+    assert.equal(reference.setTarget('c', 'a'), true);
+    assert.equal(editor.children[2].tanaReferenceTargetId, 'a');
+  });
+
   test('edits a canonical target in a Workspace without routing that editor write through Trash', () => {
     const editor = createEditor([
       { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },

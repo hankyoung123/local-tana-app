@@ -1,6 +1,13 @@
 import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { canMutateTanaNode } from '../mutation-policy';
-import { canDrag, canDuplicate, canIndent, canOutdent, canUseSlashCommand } from '@/lib/tana/node-behavior';
+import {
+  canDrag,
+  canDuplicate,
+  canIndent,
+  canOutdent,
+  canOwnTanaCanonicalChildren,
+  canUseSlashCommand,
+} from '@/lib/tana/node-behavior';
 import { ElementApi, KEYS, NodeApi, RangeApi, TextApi, nanoid } from 'platejs';
 import type { Path, TElement, TText } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -176,6 +183,36 @@ export function shiftTanaSubtreeIndent(editor: PlateEditor, rootPath: Path, delt
   }
 }
 
+/**
+ * Flat-indent moves determine ownership from the closest preceding shallower
+ * Node after the selected ranges are removed. Reference edges are never part
+ * of this scan: it considers only physical Plate hierarchy.
+ */
+function wouldCreateReferenceParent(
+  editor: PlateEditor,
+  removedPaths: readonly Path[],
+  insertAt: number,
+  targetIndent: number
+): boolean {
+  if (targetIndent <= 0) return false;
+
+  const removedIndexes = new Set(removedPaths.map((path) => path[0]));
+  const remaining = editor.children.filter((_, index) => !removedIndexes.has(index));
+
+  for (let index = Math.min(insertAt, remaining.length) - 1; index >= 0; index -= 1) {
+    const candidate = remaining[index];
+
+    if (!ElementApi.isElement(candidate) || !isTanaNodeElement(candidate, [index])) continue;
+    const candidateIndent = typeof candidate.indent === 'number' ? candidate.indent : 0;
+
+    if (candidateIndent < targetIndent) {
+      return !canOwnTanaCanonicalChildren(candidate);
+    }
+  }
+
+  return false;
+}
+
 function getTanaDndRootPaths(editor: PlateEditor, draggedIds: readonly string[]): Path[] {
   const selected = draggedIds.flatMap((id) => {
     const entry = editor.api.node<TElement>({ at: [], id });
@@ -232,6 +269,9 @@ export function moveTanaDndSubtrees(
     return { id: node.id as string, indent: typeof node.indent === 'number' ? node.indent : 0 };
   });
   const insertAt = to[0] - paths.filter((path) => path[0] < to[0]).length;
+
+  if (wouldCreateReferenceParent(editor, paths, insertAt, targetIndent)) return false;
+
   let relocated = false;
 
   editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
@@ -363,7 +403,10 @@ export function indentTanaSelection(editor: PlateEditor, delta: number): boolean
     for (let index = path[0] - 1; index > (parent?.[0] ?? -1); index--) {
       const previous = editor.api.node<TElement>([index])?.[0];
       if (previous?.indent === indent) {
-        return !canMutateTanaNode(editor, [index], canIndent);
+        return (
+          !canMutateTanaNode(editor, [index], canIndent) ||
+          !canOwnTanaCanonicalChildren(previous)
+        );
       }
     }
     return true;
@@ -438,12 +481,20 @@ function moveTanaSubtree(
   }
 
   const subtreePaths = [sourcePath, ...getTanaNodeDescendantPaths(editor.children, sourcePath)];
-
-  if (subtreePaths.length === 1) return;
-
   const sourceStart = sourcePath[0];
   const sourceEnd = subtreePaths.at(-1)![0];
   const destination = options.to[0];
+  const sourceIndent = typeof source[0].indent === 'number' ? source[0].indent : 0;
+  const insertAt = destination > sourceEnd
+    ? destination - subtreePaths.length
+    : destination;
+
+  if (wouldCreateReferenceParent(editor, subtreePaths, insertAt, sourceIndent)) {
+    return false;
+  }
+
+  // Let Plate retain its leaf move lifecycle after the ownership check above.
+  if (subtreePaths.length === 1) return;
 
   // Moving a subtree onto itself or directly before/after it is a no-op.
   if (destination >= sourceStart && destination <= sourceEnd + 1) return false;
@@ -453,8 +504,6 @@ function moveTanaSubtree(
   );
 
   if (nodes.length !== subtreePaths.length) return moveNodes(options as never);
-
-  const insertAt = destination > sourceEnd ? destination - nodes.length : destination;
 
   editor.tf.withoutNormalizing(() => {
     subtreePaths
