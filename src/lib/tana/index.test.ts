@@ -69,7 +69,7 @@ describe('buildTanaIndex', () => {
   test('uses Plate node IDs as mention candidate keys', () => {
     assert.deepEqual(getNodeReferenceCandidatesFromIndex(buildTanaIndex(document)), [
       { id: 'project', text: 'Project' },
-      { id: 'task', text: 'Ship @Project #Project' },
+      { id: 'task', text: 'Ship @Project' },
     ]);
   });
 
@@ -244,13 +244,13 @@ describe('buildTanaIndex', () => {
     assert.equal(index.nodesById.get('final-estimate-value')?.text, '1.20');
   });
 
-  test('derives reference and supertag names from the current target node', () => {
+  test('derives reference names while keeping SuperTag tokens out of canonical text', () => {
     const renamed = structuredClone(document);
     renamed[0].children = [{ text: 'Renamed Project' }];
 
     assert.equal(
       buildTanaIndex(renamed).nodesById.get('task')?.text,
-      'Ship @Renamed Project #Renamed Project'
+      'Ship @Renamed Project'
     );
     assert.equal('value' in (renamed[1].children[1] as object), false);
     assert.equal('value' in (renamed[1].children[3] as object), false);

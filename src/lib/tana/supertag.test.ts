@@ -311,7 +311,7 @@ describe('Tana Supertag operations', () => {
       ['title', 'effort']
     );
     assert.deepEqual(index.nodesBySupertag.get('task-tag'), ['ship-it']);
-    assert.deepEqual(index.nodesBySupertag.get('base'), ['ship-it']);
+    assert.equal(index.nodesBySupertag.has('base'), false);
     assert.equal(index.nodesById.get('title')?.fieldDefinition?.type, 'plain');
   });
 
@@ -394,4 +394,53 @@ describe('Tana Supertag operations', () => {
     assert.equal(index.nodesById.get('task')?.text, 'Ship today');
     assert.equal(resolveTanaNodeTitle(index, 'task'), 'Doing · Ship…');
   });
+});
+
+test('keeps SuperTag presentation out of canonical text and writes Reference membership through', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Project' }], id: 'project-tag', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Canonical' }], id: 'canonical', type: KEYS.p },
+    {
+      children: [{ text: 'Stale occurrence title' }],
+      id: 'reference',
+      tanaReferenceTargetId: 'canonical',
+      type: KEYS.p,
+    },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+  const before = structuredClone(editor.children);
+
+  assert.equal(supertag.define('reference'), false);
+  assert.equal(supertag.apply('reference', 'project-tag'), true);
+  assert.deepEqual(editor.children[1].tanaSupertagIds, ['project-tag']);
+  assert.equal(editor.children[2].tanaSupertagIds, undefined);
+  assert.equal(buildTanaIndex(editor.children).nodesById.get('canonical')?.rawText, 'Canonical');
+  assert.deepEqual(buildTanaIndex(editor.children).nodesBySupertag.get('project-tag'), ['canonical']);
+
+  editor.tf.undo();
+  assert.deepEqual(editor.children, before);
+  editor.tf.redo();
+  assert.deepEqual(editor.children[1].tanaSupertagIds, ['project-tag']);
+
+  assert.equal(supertag.remove('reference', 'project-tag'), true);
+  assert.equal(editor.children[1].tanaSupertagIds, undefined);
+  assert.equal(editor.children[2].tanaSupertagIds, undefined);
+});
+
+test('batches create-and-apply into one undoable canonical mutation', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    { children: [{ text: 'Schema' }], id: 'schema', tanaSystemNode: 'schema', type: KEYS.p },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+  const before = structuredClone(editor.children);
+
+  const createdId = supertag.createAndApply('task', 'Project');
+  assert.ok(createdId);
+  assert.deepEqual(editor.children[0].tanaSupertagIds, [createdId]);
+
+  editor.tf.undo();
+  assert.deepEqual(editor.children, before);
+  editor.tf.redo();
+  assert.deepEqual(editor.children[0].tanaSupertagIds, [createdId]);
 });

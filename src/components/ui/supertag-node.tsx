@@ -119,9 +119,7 @@ export function SupertagInputElement(
     if (!targetNodeId) return;
 
     const transforms = editor.getTransforms(TanaSupertagPlugin).supertag;
-    const supertagId = transforms.create(normalizedSearch);
-
-    if (supertagId) transforms.apply(targetNodeId, supertagId);
+    transforms.createAndApply(targetNodeId, normalizedSearch);
   };
 
   return (

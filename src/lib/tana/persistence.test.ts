@@ -457,3 +457,78 @@ test('rejects soft line breaks and impossible Done adapter states at the persist
   assert.equal(isValidTanaDocument(doneUnchecked), false);
   assert.equal(isValidTanaDocument(uncheckedTaskList), false);
 });
+
+test('enforces every persisted SuperTag relation without repairing historical content', () => {
+  const valid = withHomeNodes([
+    {
+      children: [{ text: 'Project' }],
+      id: 'project-tag',
+      indent: 2,
+      tanaSupertagDefinition: {},
+      type: 'p',
+    },
+    {
+      children: [
+        { text: 'Task ' },
+        { children: [{ text: '' }], key: 'project-tag', type: 'tana_supertag' },
+      ],
+      id: 'task',
+      indent: 2,
+      tanaSupertagIds: ['project-tag'],
+      type: 'p',
+    },
+  ]);
+
+  assert.equal(isValidTanaDocument(valid), true);
+
+  const missingMembership = structuredClone(valid);
+  missingMembership[3].tanaSupertagIds = ['missing-tag'];
+  assert.equal(isValidTanaDocument(missingMembership), false);
+
+  const missingInheritance = structuredClone(valid);
+  missingInheritance[2].tanaSupertagDefinition = { extends: ['missing-tag'] };
+  assert.equal(isValidTanaDocument(missingInheritance), false);
+
+  const cyclicInheritance = structuredClone(valid);
+  cyclicInheritance[2].tanaSupertagDefinition = { extends: ['second-tag'] };
+  cyclicInheritance.splice(3, 0, {
+    children: [{ text: 'Second' }],
+    id: 'second-tag',
+    indent: 2,
+    tanaSupertagDefinition: { extends: ['project-tag'] },
+    type: 'p',
+  });
+  assert.equal(isValidTanaDocument(cyclicInheritance), false);
+
+  const missingDefaultChild = structuredClone(valid);
+  missingDefaultChild[2].tanaSupertagDefinition = {
+    defaultChildSupertagId: 'missing-tag',
+  };
+  assert.equal(isValidTanaDocument(missingDefaultChild), false);
+
+  const tokenConflict = structuredClone(valid);
+  tokenConflict[3].tanaSupertagIds = [];
+  assert.equal(isValidTanaDocument(tokenConflict), false);
+
+  const tokenMissingTarget = structuredClone(valid);
+  tokenMissingTarget[3].children[1].key = 'missing-tag';
+  assert.equal(isValidTanaDocument(tokenMissingTarget), false);
+
+  // A Definition in Trash remains a valid historical membership target.
+  const trashedDefinition = minimalWorkspace();
+  trashedDefinition.splice(2, 0, {
+    children: [{ text: 'Historical task' }],
+    id: 'historical-task',
+    indent: 2,
+    tanaSupertagIds: ['trashed-tag'],
+    type: 'p',
+  });
+  trashedDefinition.push({
+    children: [{ text: 'Archived tag' }],
+    id: 'trashed-tag',
+    indent: 2,
+    tanaSupertagDefinition: {},
+    type: 'p',
+  });
+  assert.equal(isValidTanaDocument(trashedDefinition), true);
+});

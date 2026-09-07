@@ -9,6 +9,7 @@ import {
 import { getSupertagTemplateFields } from '@/lib/tana/fields';
 import {
   buildTanaIndex,
+  getTanaProjectionTarget,
   getSupertagInheritance,
   isTanaNodeActive,
 } from '@/lib/tana/index';
@@ -188,6 +189,7 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 
   if (
     !entry ||
+    entry[0].tanaReferenceTargetId !== undefined ||
     hasNodeSemantic(entry[0], 'supertag-definition', {
       document: editor.children,
       path: entry[1],
@@ -373,16 +375,20 @@ function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression:
   return true;
 }
 
-function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
-  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
+  const initialIndex = buildTanaIndex(editor.children);
+  const canonicalTarget = getTanaProjectionTarget(initialIndex, nodeId);
+
+  if (!canonicalTarget) return false;
+
+  const nodeEntry = getTanaNodeEntry(editor, canonicalTarget.id);
   const definitionEntry = getDefinitionEntry(editor, supertagId);
-  const index = buildTanaIndex(editor.children);
 
   if (
     !nodeEntry ||
     !definitionEntry ||
-    !isTanaNodeActive(index, nodeId) ||
-    !isTanaNodeActive(index, supertagId)
+    !isTanaNodeActive(initialIndex, canonicalTarget.id) ||
+    !isTanaNodeActive(initialIndex, supertagId)
   ) {
     return false;
   }
@@ -404,11 +410,11 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
-    fieldTransforms.materialize(nodeId, template.fieldId);
+    fieldTransforms.materialize(canonicalTarget.id, template.fieldId);
     if (template.values.length > 0) {
-      if (fieldTransforms.applyDefault(nodeId, template.fieldId, template.values[0]!)) {
+      if (fieldTransforms.applyDefault(canonicalTarget.id, template.fieldId, template.values[0]!)) {
         template.values.slice(1).forEach((value) => {
-          fieldTransforms.addValue(nodeId, template.fieldId, value);
+          fieldTransforms.addValue(canonicalTarget.id, template.fieldId, value);
         });
       }
     }
@@ -467,8 +473,22 @@ function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   return true;
 }
 
+/** Applies through a Reference only to its direct canonical owner. */
+function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
+  let applied = false;
+
+  editor.tf.withNewBatch(() => {
+    applied = applyInBatch(editor, nodeId, supertagId);
+  });
+
+  return applied;
+}
+
 function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
-  const nodeEntry = getTanaNodeEntry(editor, nodeId);
+  const canonicalTarget = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+  const nodeEntry = canonicalTarget
+    ? getTanaNodeEntry(editor, canonicalTarget.id)
+    : undefined;
 
   if (!nodeEntry) return false;
 
@@ -476,27 +496,44 @@ function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const nextSupertagIds = currentSupertagIds.filter((id) => id !== supertagId);
   const removedMembership = nextSupertagIds.length !== currentSupertagIds.length;
 
-  if (removedMembership) {
-    if (nextSupertagIds.length === 0) {
-      editor.tf.unsetNodes('tanaSupertagIds', { at: nodeEntry[1] });
-    } else {
-      editor.tf.setNodes({ tanaSupertagIds: nextSupertagIds }, { at: nodeEntry[1] });
+  editor.tf.withNewBatch(() => {
+    if (removedMembership) {
+      if (nextSupertagIds.length === 0) {
+        editor.tf.unsetNodes('tanaSupertagIds', { at: nodeEntry[1] });
+      } else {
+        editor.tf.setNodes({ tanaSupertagIds: nextSupertagIds }, { at: nodeEntry[1] });
+      }
     }
-  }
 
-  const entries = Array.from(
-    editor.api.nodes({
-      at: nodeEntry[1],
-      match: (node) =>
-        ElementApi.isElement(node) &&
-        node.type === TANA_SUPERTAG_KEY &&
-        node.key === supertagId,
-    })
-  );
+    const entries = Array.from(
+      editor.api.nodes({
+        at: nodeEntry[1],
+        match: (node) =>
+          ElementApi.isElement(node) &&
+          node.type === TANA_SUPERTAG_KEY &&
+          node.key === supertagId,
+      })
+    );
 
-  entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
+    entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
+  });
 
   return removedMembership;
+}
+
+function createAndApply(editor: PlateEditor, nodeId: NodeId, name: string): NodeId | undefined {
+  if (!getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId)) return;
+
+  let supertagId: NodeId | undefined;
+
+  editor.tf.withNewBatch(() => {
+    supertagId = create(editor, name);
+    if (supertagId && !applyInBatch(editor, nodeId, supertagId)) {
+      supertagId = undefined;
+    }
+  });
+
+  return supertagId;
 }
 
 /** Owns all document mutations for the existing Plate `#` Combobox workflow. */
@@ -507,6 +544,8 @@ export const TanaSupertagPlugin = createPlatePlugin({
     apply: (nodeId: NodeId, supertagId: NodeId) =>
       apply(editor, nodeId, supertagId),
     create: (name: string) => create(editor, name),
+    createAndApply: (nodeId: NodeId, name: string) =>
+      createAndApply(editor, nodeId, name),
     define: (nodeId: NodeId) => define(editor, nodeId),
     applyDefaultChild: (childNodeId: NodeId) => applyDefaultChild(editor, childNodeId),
     setDefaultChildSupertag: (

@@ -43,6 +43,10 @@ test('SQLite loading fails closed without writes for invalid schema, JSON or inv
     );
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalidReferenceParent)}];
     await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
+    const invalidSupertagMembership = structuredClone(initialDocument);
+    invalidSupertagMembership.find(node => node.id === 'node-project-example').tanaSupertagIds = ['missing-supertag'];
+    rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalidSupertagMembership)}];
+    await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
     assert.equal(writes.some(([sql]) => /INSERT|UPDATE|ALTER|DROP/.test(sql)), false);
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(initialDocument)}];
     assert.deepEqual(await loadPlateDocument(initialDocument), initialDocument);

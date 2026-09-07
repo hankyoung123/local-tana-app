@@ -460,10 +460,66 @@ export function isValidTanaDocument(value: unknown): value is Value {
       typeof node.id === 'string' && node.tanaFieldDefinition
         ? [[node.id, node.tanaFieldDefinition] as const]
         : []
+      )
+  );
+  const entriesById = new Map(
+    entries.flatMap(([node]) =>
+      typeof node.id === 'string' ? [[node.id, node] as const] : []
+    )
+  );
+  const supertagDefinitionIds = new Set(
+    entries.flatMap(([node]) =>
+      typeof node.id === 'string' && node.tanaSupertagDefinition !== undefined
+        ? [node.id]
+        : []
     )
   );
   const systemNodes = new Set<string>();
   const timeValues = new Set<string>();
+
+  const hasSupertagInheritanceCycle = (supertagId: NodeId) => {
+    const visiting = new Set<NodeId>();
+    const visited = new Set<NodeId>();
+
+    const visit = (candidateId: NodeId): boolean => {
+      if (visiting.has(candidateId)) return true;
+      if (visited.has(candidateId)) return false;
+
+      const candidate = entriesById.get(candidateId);
+
+      if (!candidate?.tanaSupertagDefinition) return false;
+
+      visiting.add(candidateId);
+      const cyclic = (candidate.tanaSupertagDefinition.extends ?? []).some(
+        (parentId) => visit(parentId)
+      );
+      visiting.delete(candidateId);
+      visited.add(candidateId);
+
+      return cyclic;
+    };
+
+    return visit(supertagId);
+  };
+
+  const getPresentationSupertagIds = (element: TElement): NodeId[] => {
+    const ids: NodeId[] = [];
+
+    const visit = (candidate: Descendant) => {
+      if (!isElement(candidate)) return;
+
+      if (candidate.type === TANA_SUPERTAG_KEY) {
+        const targetId = (candidate as TElement & { key?: unknown }).key;
+
+        if (typeof targetId === 'string') ids.push(targetId);
+      }
+
+      candidate.children.forEach(visit);
+    };
+
+    element.children.forEach(visit);
+    return ids;
+  };
 
   for (const [node, path] of entries) {
     if (node.tanaSystemNode) {
@@ -481,6 +537,45 @@ export function isValidTanaDocument(value: unknown): value is Value {
     }
 
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;
+
+    const supertagIds = node.tanaSupertagIds ?? [];
+
+    if (supertagIds.some((supertagId) => !supertagDefinitionIds.has(supertagId))) {
+      return false;
+    }
+
+    const defaultChildSupertagId =
+      node.tanaDefaultChildSupertagId ??
+      node.tanaSupertagDefinition?.defaultChildSupertagId;
+
+    if (
+      defaultChildSupertagId !== undefined &&
+      !supertagDefinitionIds.has(defaultChildSupertagId)
+    ) {
+      return false;
+    }
+
+    if (node.tanaSupertagDefinition) {
+      const extendsIds = node.tanaSupertagDefinition.extends ?? [];
+
+      if (
+        extendsIds.some((parentId) => !supertagDefinitionIds.has(parentId)) ||
+        (typeof node.id === 'string' && hasSupertagInheritanceCycle(node.id))
+      ) {
+        return false;
+      }
+    }
+
+    // A final `#` token mirrors membership. It may be absent, but it must
+    // never name a missing/non-Definition target or contradict membership.
+    if (
+      getPresentationSupertagIds(node).some(
+        (supertagId) =>
+          !supertagDefinitionIds.has(supertagId) || !supertagIds.includes(supertagId)
+      )
+    ) {
+      return false;
+    }
 
     if (node.tanaFieldId) {
       const definition = fieldDefinitions.get(node.tanaFieldId);

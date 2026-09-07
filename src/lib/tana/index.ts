@@ -301,13 +301,19 @@ export function buildTanaIndex(document: Value): TanaIndex {
       .map((child) => {
         if (TextApi.isText(child)) return child.text;
 
-        if (child.type === KEYS.mention || child.type === TANA_SUPERTAG_KEY) {
+        if (child.type === TANA_SUPERTAG_KEY) {
+          // `#` is presentation for semantic membership. It never belongs in
+          // canonical title/search text; `tanaSupertagIds` is the only truth.
+          return '';
+        }
+
+        if (child.type === KEYS.mention) {
           const targetNodeId = getReferenceTargetByKey(child);
           const targetName = targetNodeId
             ? resolveNodeName(targetNodeId, resolving)
             : '';
 
-          return `${child.type === KEYS.mention ? '@' : '#'}${targetName}`;
+          return `@${targetName}`;
         }
 
         return getElementText(child, resolving);
@@ -375,14 +381,12 @@ export function buildTanaIndex(document: Value): TanaIndex {
     if (node.time) timeNodeIds.set(getTanaTimeKey(node.time), node.id);
 
     node.supertagIds.forEach((supertagId) => {
-      const relationIds = [supertagId, ...getSupertagInheritance({ nodesById }, supertagId)];
+      // This is a direct projection of membership only. Definition
+      // inheritance is resolved separately and never fabricates instances.
+      const taggedNodes = nodesBySupertag.get(supertagId) ?? [];
 
-      relationIds.forEach((relationId) => {
-        const taggedNodes = nodesBySupertag.get(relationId) ?? [];
-
-        if (!taggedNodes.includes(node.id)) taggedNodes.push(node.id);
-        nodesBySupertag.set(relationId, taggedNodes);
-      });
+      if (!taggedNodes.includes(node.id)) taggedNodes.push(node.id);
+      nodesBySupertag.set(supertagId, taggedNodes);
     });
   });
 
