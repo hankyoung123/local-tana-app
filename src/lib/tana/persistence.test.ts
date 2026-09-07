@@ -32,6 +32,14 @@ const withWorkspace = (extra: Value): Value => [
   })),
 ];
 
+const withHomeNodes = (nodes: Value): Value => {
+  const document = minimalWorkspace();
+
+  document.splice(2, 0, ...nodes);
+
+  return document;
+};
+
 describe('Plate document persistence', () => {
   test('validates Plate structure and Tana node invariants', () => {
     assert.equal(isPlateDocument(value('A')), true);
@@ -358,6 +366,73 @@ test('rejects malformed Query AST and illegal flat indent at the persistence bou
   document[1].indent = -1;
   assert.equal(isValidTanaDocument(document), false);
   assert.equal(isPlateDocument([{ text: 'top-level text' }]), false);
+});
+
+test('rejects canonical children beneath Reference occurrences at the persistence boundary', () => {
+  const target = {
+    children: [{ text: 'Canonical target' }],
+    id: 'canonical-target',
+    indent: 2,
+    type: 'p',
+  };
+  const reference = {
+    children: [{ text: 'Reference occurrence' }],
+    id: 'reference-occurrence',
+    indent: 2,
+    tanaReferenceTargetId: 'canonical-target',
+    type: 'p',
+  };
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        target,
+        reference,
+        { children: [{ text: 'Invalid direct child' }], id: 'reference-child', indent: 3, type: 'p' },
+      ])
+    ),
+    false
+  );
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        target,
+        reference,
+        { children: [{ text: 'Invalid subtree root' }], id: 'reference-subtree-root', indent: 3, type: 'p' },
+        { children: [{ text: 'Invalid deep child' }], id: 'reference-deep-child', indent: 4, type: 'p' },
+      ])
+    ),
+    false
+  );
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        target,
+        { children: [{ text: 'Canonical child' }], id: 'canonical-child', indent: 3, type: 'p' },
+        reference,
+      ])
+    ),
+    true
+  );
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        target,
+        { children: [{ text: 'Canonical parent' }], id: 'canonical-parent', indent: 2, type: 'p' },
+        {
+          children: [{ text: 'Reference child' }],
+          id: 'reference-child-of-canonical-parent',
+          indent: 3,
+          tanaReferenceTargetId: 'canonical-target',
+          type: 'p',
+        },
+      ])
+    ),
+    true
+  );
 });
 
 test('rejects soft line breaks and impossible Done adapter states at the persistence boundary', () => {

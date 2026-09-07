@@ -528,6 +528,12 @@ export function isValidTanaDocument(value: unknown): value is Value {
   for (const [node, path] of entries) {
     const parentPath = getTanaParentPath(value, path);
     const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
+
+    // Reference occurrences project a canonical target and cannot own a
+    // canonical subtree of their own. The parent is derived from the flat
+    // indent document here; no parent relation is persisted.
+    if (parent?.tanaReferenceTargetId !== undefined) return false;
+
     const parentId =
       parent && typeof parent.id === 'string' ? parent.id : undefined;
 

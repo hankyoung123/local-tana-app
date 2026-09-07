@@ -35,6 +35,14 @@ test('SQLite loading fails closed without writes for invalid schema, JSON or inv
       rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalid)}];
       await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
     }
+    const invalidReferenceParent = structuredClone(initialDocument);
+    invalidReferenceParent.splice(2, 0,
+      {children: [{text: 'Canonical target'}], id: 'persistence-reference-target', indent: 2, type: 'p'},
+      {children: [{text: 'Reference occurrence'}], id: 'persistence-reference-occurrence', indent: 2, tanaReferenceTargetId: 'persistence-reference-target', type: 'p'},
+      {children: [{text: 'Invalid canonical child'}], id: 'persistence-reference-child', indent: 3, type: 'p'},
+    );
+    rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalidReferenceParent)}];
+    await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
     assert.equal(writes.some(([sql]) => /INSERT|UPDATE|ALTER|DROP/.test(sql)), false);
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(initialDocument)}];
     assert.deepEqual(await loadPlateDocument(initialDocument), initialDocument);
