@@ -1,13 +1,16 @@
-import { ElementApi, TextApi } from 'platejs';
+import { ElementApi, NodeApi, TextApi } from 'platejs';
 import type { Path } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
+import { canMutateTanaNode } from '@/components/editor/mutation-policy';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   buildTanaIndex,
   getNodeReferenceCandidatesFromIndex,
   isTanaNodeActive,
 } from '@/lib/tana/index';
+import { canUseSlashCommand } from '@/lib/tana/node-behavior';
+import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 export const TANA_REFERENCE_PLUGIN_KEY = 'tanaReference' as const;
@@ -20,7 +23,11 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
     : undefined;
 }
 
-function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: NodeId): boolean {
+function canSetTarget(
+  editor: PlateEditor,
+  referenceNodeId: NodeId,
+  targetNodeId: NodeId
+): [TanaBlockElement, Path] | undefined {
   const reference = getTanaNodeEntry(editor, referenceNodeId);
   const target = getTanaNodeEntry(editor, targetNodeId);
   const index = buildTanaIndex(editor.children);
@@ -37,10 +44,49 @@ function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: N
     reference[0].tanaSystemNode !== undefined ||
     reference[0].tanaReferenceTargetId !== undefined
   ) {
+    return;
+  }
+
+  return reference;
+}
+
+function setTarget(editor: PlateEditor, referenceNodeId: NodeId, targetNodeId: NodeId): boolean {
+  const reference = canSetTarget(editor, referenceNodeId, targetNodeId);
+
+  if (!reference) return false;
+
+  editor.tf.setNodes({ tanaReferenceTargetId: targetNodeId }, { at: reference[1] });
+
+  return true;
+}
+
+/** Turns only a blank ordinary Node into a block Reference without changing its NodeId. */
+function createFromEmptyNode(
+  editor: PlateEditor,
+  referenceNodeId: NodeId,
+  targetNodeId: NodeId
+): boolean {
+  const reference = canSetTarget(editor, referenceNodeId, targetNodeId);
+
+  if (
+    !reference ||
+    NodeApi.string(reference[0]) !== '' ||
+    getTanaNodeDescendantPaths(editor.children, reference[1]).length > 0 ||
+    !canMutateTanaNode(editor, reference[1], canUseSlashCommand)
+  ) {
     return false;
   }
 
-  editor.tf.setNodes({ tanaReferenceTargetId: targetNodeId }, { at: reference[1] });
+  editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
+    // The MentionInput void that captured `@` is presentation-only. Replace
+    // it with one ordinary empty leaf before assigning reference semantics.
+    reference[0].children
+      .map((_, index) => [...reference[1], index])
+      .toReversed()
+      .forEach((path) => editor.tf.removeNodes({ at: path }));
+    editor.tf.insertNodes({ text: '' }, { at: [...reference[1], 0] });
+    editor.tf.setNodes({ tanaReferenceTargetId: targetNodeId }, { at: reference[1] });
+  }));
 
   return true;
 }
@@ -113,6 +159,11 @@ export const TanaReferencePlugin = createPlatePlugin({
         void title;
         return false;
       },
+      createFromEmptyNode: (referenceNodeId: NodeId, targetNodeId: NodeId): boolean => {
+        void referenceNodeId;
+        void targetNodeId;
+        return false;
+      },
     },
   }))
   .overrideEditor(({ editor }) => ({
@@ -122,6 +173,8 @@ export const TanaReferencePlugin = createPlatePlugin({
           setTarget(editor, referenceNodeId, targetNodeId),
         setTargetTitle: (targetNodeId: NodeId, title: string) =>
           setTargetTitle(editor, targetNodeId, title),
+        createFromEmptyNode: (referenceNodeId: NodeId, targetNodeId: NodeId) =>
+          createFromEmptyNode(editor, referenceNodeId, targetNodeId),
       },
     },
   }));

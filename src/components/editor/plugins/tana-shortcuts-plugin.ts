@@ -61,6 +61,7 @@ export const TanaShortcutsPlugin = createPlatePlugin({
     [['ctrl+meta+down', 'ctrl+alt+down'], 'expandAll'],
     ['mod+shift+up', 'up'], ['mod+shift+down', 'down'],
     ['mod+shift+backspace', 'trash'], ['mod+shift+d', 'duplicate'],
+    ['mod+shift+v', 'plainPaste'],
   ].map(([keys, action]) => [action, {
     keys, priority: 100,
     handler: ({ editor, event }: { editor: PlateEditor; event: KeyboardEvent }) => {
@@ -70,6 +71,13 @@ export const TanaShortcutsPlugin = createPlatePlugin({
       const domSelection = event.view?.getSelection();
       const selection = domSelection && editor.api.toSlateRange(domSelection, { exactMatch: false, suppressThrow: true });
       if (selection) editor.tf.select(selection);
+      if (action === 'plainPaste') {
+        // The browser dispatches paste after this keydown. This short-lived
+        // event marker tells the clipboard adapter to ignore this app's MIME.
+        editor.meta.tanaReferencePlainPaste = true;
+        setTimeout(() => delete editor.meta.tanaReferencePlainPaste, 0);
+        return false;
+      }
       const entry = current(editor);
       if (!entry || typeof entry[0].id !== 'string') return false;
       const id = entry[0].id;

@@ -24,6 +24,7 @@ import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-id
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
+import { TanaReferenceClipboardPlugin } from '@/components/editor/plugins/tana-reference-clipboard-plugin';
 import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
 import { TanaShortcutsPlugin } from '@/components/editor/plugins/tana-shortcuts-plugin';
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
@@ -47,6 +48,7 @@ export const EditorKit = [
   ...SupertagKit,
   ...FieldKit,
   TanaReferencePlugin,
+  TanaReferenceClipboardPlugin,
   TanaSearchPlugin,
   TanaViewPlugin,
   TanaPresentationPlugin,

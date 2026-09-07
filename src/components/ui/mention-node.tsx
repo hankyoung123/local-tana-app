@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
+import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
 import {
@@ -116,6 +117,27 @@ export function MentionInputElement(
   const [search, setSearch] = React.useState('');
   const candidates = getNodeReferenceCandidatesFromIndex(useTanaIndex());
 
+  const insertReference = (targetNodeId: string) => {
+    const currentNodeId = editor.api.block()?.[0].id;
+
+    if (
+      typeof currentNodeId === 'string' &&
+      editor.getTransforms(TanaReferencePlugin).reference.createFromEmptyNode(
+        currentNodeId,
+        targetNodeId
+      )
+    ) {
+      return;
+    }
+
+    editor.getTransforms({ key: KEYS.mention }).insert.mention({
+      key: targetNodeId,
+      search,
+      value: undefined,
+    });
+    editor.tf.move({ unit: 'offset' });
+  };
+
   return (
     <PlateElement {...props} as="span">
       <InlineCombobox
@@ -141,12 +163,7 @@ export function MentionInputElement(
                   key={item.key}
                   value={item.text}
                   onClick={() => {
-                    editor.getTransforms({ key: KEYS.mention }).insert.mention({
-                      key: item.key,
-                      search,
-                      value: undefined,
-                    });
-                    editor.tf.move({ unit: 'offset' });
+                    insertReference(item.key);
                   }}
                 >
                   {item.text}
