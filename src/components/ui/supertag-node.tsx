@@ -83,7 +83,7 @@ export function SupertagElement(
   return (
     <PlateElement
       {...props}
-      className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200"
+      className="group inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200"
       attributes={{
         ...props.attributes,
         contentEditable: false,

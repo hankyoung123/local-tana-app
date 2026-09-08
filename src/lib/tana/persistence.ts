@@ -538,6 +538,13 @@ export function isValidTanaDocument(value: unknown): value is Value {
 
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;
 
+    // Reference occurrences are projections only. Their canonical target owns
+    // semantic Supertag membership; the occurrence cannot persist a second
+    // membership truth.
+    if (node.tanaReferenceTargetId !== undefined && node.tanaSupertagIds !== undefined) {
+      return false;
+    }
+
     const supertagIds = node.tanaSupertagIds ?? [];
 
     if (supertagIds.some((supertagId) => !supertagDefinitionIds.has(supertagId))) {

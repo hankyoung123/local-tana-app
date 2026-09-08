@@ -189,7 +189,7 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
 
   if (!schemaEntry) return;
 
-  const [, schemaPath] = schemaEntry;
+  const [schema, schemaPath] = schemaEntry;
   const schemaIndent = typeof schema.indent === 'number' ? schema.indent : 0;
   const descendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
   const path = [(descendants.at(-1)?.[0] ?? schemaPath[0]) + 1];
@@ -627,8 +627,8 @@ function convertToSupertag(editor: PlateEditor, nodeId: NodeId): boolean {
 
   if (subtreeNodes.some((candidate) => !candidate)) return false;
 
-  const [schema, schemaPath] = schemaEntry;
-  const schemaIndent = typeof schema.indent === 'number' ? schema.indent : 0;
+  const [, schemaPath] = schemaEntry;
+  const schemaIndent = typeof schemaEntry[0].indent === 'number' ? schemaEntry[0].indent : 0;
   const schemaDescendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
   const destinationBeforeRemoval = (schemaDescendants.at(-1) ?? schemaPath)[0] + 1;
   const removedBeforeDestination = subtreePaths.filter(

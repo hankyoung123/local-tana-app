@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { KEYS, type TElement, type Value } from 'platejs';
+import { TogglePlugin } from '@platejs/toggle/react';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 
@@ -571,4 +573,37 @@ test('creates a live Supertag instance in Home with membership derived from the 
   const created = editor.children.find((node) => node.id === id) as TElement;
   assert.deepEqual(created.tanaSupertagIds, ['project']);
   assert.equal(buildTanaIndex(editor.children).nodesBySupertag.get('project')?.includes(id!), true);
+  editor.tf.undo();
+  assert.equal(editor.children.some((node) => node.id === id), false);
+  editor.tf.redo();
+  assert.equal(editor.children.some((node) => node.id === id), true);
+});
+
+test('Supertag Definition trash and restore preserve membership without same-name rebinding', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+    { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+    { children: [{ text: 'Task' }], id: 'task', indent: 2, tanaSupertagIds: ['project'], type: KEYS.p },
+    { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+    { children: [{ text: 'Project' }], id: 'project', indent: 2, tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+    { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+    { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+  ]);
+  const lifecycle = editor.getTransforms(TanaNodeLifecyclePlugin).node;
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+  editor.getApi(TogglePlugin).toggle.toggleIds(editor.children.map((node) => String(node.id)), true);
+
+  assert.deepEqual(buildTanaIndex(editor.children).nodesBySupertag.get('project'), ['task']);
+  assert.equal(lifecycle.trash('project'), true);
+  assert.deepEqual(buildTanaIndex(editor.children).nodesBySupertag.get('project'), ['task']);
+  assert.equal(lifecycle.restore('project'), true);
+  assert.equal(buildTanaIndex(editor.children).nodesById.get('project')?.supertagDefinition !== undefined, true);
+  assert.equal(lifecycle.trash('project'), true);
+  assert.equal(lifecycle.deletePermanently('project'), true);
+
+  const replacement = supertag.create('Project');
+  assert.ok(replacement);
+  assert.notEqual(replacement, 'project');
+  assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.supertagIds, []);
 });

@@ -433,6 +433,26 @@ test('rejects canonical children beneath Reference occurrences at the persistenc
     ),
     true
   );
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        target,
+        {
+          ...reference,
+          tanaSupertagIds: ['project-tag'],
+        },
+        {
+          children: [{ text: 'Project' }],
+          id: 'project-tag',
+          indent: 2,
+          tanaSupertagDefinition: {},
+          type: 'p',
+        },
+      ])
+    ),
+    false
+  );
 });
 
 test('rejects soft line breaks and impossible Done adapter states at the persistence boundary', () => {

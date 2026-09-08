@@ -29,3 +29,19 @@ test('Supertag tokens expose named navigation only for active Supertag definitio
     }
   }
 });
+
+test('trashed Supertag definitions expose unavailable state and restore affordance', () => {
+  const value: Value = [
+    { id: 'host', type: 'p', children: [{ text: '' }, { type: 'tana_supertag', key: 'tag', children: [{ text: '' }] }, { text: '' }] },
+    { id: 'trash', type: 'p', tanaSystemNode: 'trash', children: [{ text: 'Trash' }] },
+    { id: 'tag', indent: 1, type: 'p', tanaSupertagDefinition: {}, children: [{ text: 'Archived' }] },
+  ];
+  const editor = createPlateEditor({ plugins: SupertagKit, value });
+  const html = renderToStaticMarkup(
+    <Plate editor={editor}><TanaIndexProvider><PlateContent /></TanaIndexProvider></Plate>
+  );
+
+  assert.match(html, /已移至回收站/);
+  assert.match(html, /恢复超级标签定义/);
+  assert.doesNotMatch(html, /role="link"/);
+});

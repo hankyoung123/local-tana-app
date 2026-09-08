@@ -1,5 +1,58 @@
 import type { FieldValue, NodeId, TanaIndex, TanaNode } from './types';
 
+export type TanaTitleExpressionToken =
+  | { kind: 'literal'; text: string }
+  | {
+      kind: 'expression';
+      name: string;
+      placeholder: boolean;
+      limit?: string;
+      raw: string;
+    };
+
+/** Parses display-only title expressions without changing canonical text. */
+export function parseTanaTitleExpression(
+  expression: string
+): readonly TanaTitleExpressionToken[] {
+  const tokens: TanaTitleExpressionToken[] = [];
+  const pattern = /\$\{([^}]+)\}/g;
+  let cursor = 0;
+
+  for (const match of expression.matchAll(pattern)) {
+    const start = match.index ?? 0;
+
+    if (start > cursor) tokens.push({ kind: 'literal', text: expression.slice(cursor, start) });
+
+    const descriptor = match[1] ?? '';
+    const [rawName, rawLimit] = descriptor.split('|', 2);
+    const nameWithPlaceholder = rawName.trim();
+    const limitWithPlaceholder = rawLimit?.trim();
+    const placeholder = nameWithPlaceholder.endsWith('?') ||
+      limitWithPlaceholder?.endsWith('?') === true;
+    const name = nameWithPlaceholder.endsWith('?')
+      ? nameWithPlaceholder.slice(0, -1).trim()
+      : nameWithPlaceholder;
+    const limit = limitWithPlaceholder?.endsWith('?')
+      ? limitWithPlaceholder.slice(0, -1)
+      : limitWithPlaceholder;
+
+    tokens.push({
+      kind: 'expression',
+      name,
+      placeholder,
+      ...(limit ? { limit } : {}),
+      raw: match[0],
+    });
+    cursor = start + match[0].length;
+  }
+
+  if (cursor < expression.length) {
+    tokens.push({ kind: 'literal', text: expression.slice(cursor) });
+  }
+
+  return tokens;
+}
+
 /**
  * A title expression is presentation derived from canonical Nodes. It never
  * writes computed text back into the Plate document or into the TanaIndex.
@@ -77,6 +130,13 @@ function getSystemAttribute(
   resolving: ReadonlySet<NodeId>
 ): string | undefined {
   const raw = node.node as TanaNode['node'] & Record<string, unknown>;
+  const readScalar = (...keys: string[]) => {
+    const value = keys.map((key) => raw[key]).find(
+      (candidate) => typeof candidate === 'string' || typeof candidate === 'number'
+    );
+
+    return value === undefined ? undefined : String(value);
+  };
 
   switch (name) {
     case 'owner': {
@@ -84,13 +144,13 @@ function getSystemAttribute(
       return ownerId ? resolveTanaNodeTitleInternal(index, ownerId, resolving) : undefined;
     }
     case 'doneTime':
-      return typeof raw.tanaDoneTime === 'string' ? raw.tanaDoneTime : undefined;
+      return readScalar('tanaDoneTime', 'doneTime');
     case 'created':
     case 'createdAt':
-      return typeof raw.tanaCreatedAt === 'string' ? raw.tanaCreatedAt : undefined;
+      return readScalar('tanaCreatedAt', 'createdAt', 'created');
     case 'modified':
     case 'modifiedAt':
-      return typeof raw.tanaModifiedAt === 'string' ? raw.tanaModifiedAt : undefined;
+      return readScalar('tanaModifiedAt', 'modifiedAt', 'modified');
     default:
       return undefined;
   }
@@ -115,15 +175,10 @@ function resolveTanaNodeTitleInternal(
 
   const nextResolving = new Set(resolving).add(nodeId);
 
-  return expression.replace(/\$\{([^}]+)\}/g, (token, descriptor: string) => {
-    const [rawFieldName, rawLimit] = descriptor.split('|', 2);
-    const fieldName = rawFieldName.trim();
-    const limitHasPlaceholder = rawLimit?.endsWith('?') ?? false;
-    const limit = limitHasPlaceholder ? rawLimit!.slice(0, -1) : rawLimit;
-    const showsPlaceholder = fieldName.endsWith('?') || limitHasPlaceholder;
-    const lookupName = fieldName.endsWith('?')
-      ? fieldName.slice(0, -1).trim()
-      : fieldName;
+  return parseTanaTitleExpression(expression).map((token) => {
+    if (token.kind === 'literal') return token.text;
+
+    const lookupName = token.name;
     const value = lookupName === 'name'
       ? node.rawText
       : lookupName.startsWith('sys:')
@@ -131,11 +186,11 @@ function resolveTanaNodeTitleInternal(
         : getFieldValueText(index, node.id, lookupName, nextResolving);
 
     if (value === undefined || value.length === 0) {
-      return showsPlaceholder ? token : '';
+      return token.placeholder ? token.raw : '';
     }
 
-    return applyLimit(value, limit);
-  });
+    return applyLimit(value, token.limit);
+  }).join('');
 }
 
 /** Used by renderers that need both the canonical Node and its derived title. */
