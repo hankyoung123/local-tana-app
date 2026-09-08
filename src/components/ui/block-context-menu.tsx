@@ -8,7 +8,7 @@ import {
   BlockMenuPlugin,
   BlockSelectionPlugin,
 } from '@platejs/selection/react';
-import { KEYS } from 'platejs';
+import { KEYS, type TElement } from 'platejs';
 import {
   useEditorPlugin,
   useEditorReadOnly,
@@ -28,6 +28,8 @@ import {
 import { setBlockType } from '@/components/editor/transforms';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { useIsTouchDevice } from '@/hooks/use-is-touch-device';
 import {
   canDuplicate,
@@ -38,6 +40,7 @@ import {
   canTurnInto,
   canUseSlashCommand,
 } from '@/lib/tana/node-behavior';
+import { isTanaNodeActive } from '@/lib/tana';
 
 export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const { api, editor } = useEditorPlugin(BlockMenuPlugin);
@@ -45,6 +48,7 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const readOnly = useEditorReadOnly();
   const openId = usePluginOption(BlockMenuPlugin, 'openId');
   const isOpen = openId === BLOCK_CONTEXT_MENU_ID;
+  const index = useTanaIndex();
   const selectedNodes = editor
     .getApi(BlockSelectionPlugin)
     .blockSelection.getNodes({ sort: true });
@@ -67,6 +71,17 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const canDecreaseIndent = canApplyToSelection(canOutdent);
   const selectedNode = selectedNodes.length === 1 ? selectedNodes[0] : undefined;
   const selectedNodeId = selectedNode?.[0].id;
+  const selectedNodeIds = selectedNodes.flatMap(([node]) =>
+    typeof node.id === 'string' ? [node.id] : []
+  );
+  const supertagDefinitions = Array.from(index.nodesById.values()).filter(
+    (node) => isTanaNodeActive(index, node.id) && node.semanticTypes.includes('supertag-definition')
+  );
+  const selectedSupertagIds = Array.from(new Set(
+    selectedNodes.flatMap(([node]) =>
+      (node as TElement & { tanaSupertagIds?: readonly string[] }).tanaSupertagIds ?? []
+    )
+  ));
   const canZoomToSelection =
     !!selectedNode &&
     typeof selectedNodeId === 'string' &&
@@ -81,6 +96,10 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
     !!selectedNode &&
     typeof selectedNodeId === 'string' &&
     canMutateTanaNode(editor, selectedNode[1], canIndent);
+  const canConvertToSupertag =
+    !!selectedNode &&
+    typeof selectedNodeId === 'string' &&
+    canMutateTanaNode(editor, selectedNode[1], canTurnInto);
 
   const handleTurnInto = React.useCallback(
     (type: string) => {
@@ -206,6 +225,46 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
               >
                 复制
                 {/* <ContextMenuShortcut>⌘ + D</ContextMenuShortcut> */}
+              </ContextMenuItem>
+            )}
+            {selectedNodeIds.length > 0 && supertagDefinitions.length > 0 && (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>添加超级标签</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  {supertagDefinitions.map((definition) => (
+                    <ContextMenuItem
+                      key={definition.id}
+                      onClick={() => editor.getTransforms(TanaSupertagPlugin).supertag.applyMany(selectedNodeIds, definition.id)}
+                    >
+                      #{definition.text || '未命名超级标签'}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
+            {selectedNodeIds.length > 0 && selectedSupertagIds.length > 0 && (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>移除超级标签</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  {selectedSupertagIds.map((supertagId) => (
+                    <ContextMenuItem
+                      key={supertagId}
+                      onClick={() => editor.getTransforms(TanaSupertagPlugin).supertag.removeMany(selectedNodeIds, supertagId)}
+                    >
+                      #{index.nodesById.get(supertagId)?.text || '未命名超级标签'}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            )}
+            {canConvertToSupertag && (
+              <ContextMenuItem
+                onClick={() =>
+                  selectedNodeId &&
+                  editor.getTransforms(TanaSupertagPlugin).supertag.convertToSupertag(selectedNodeId)
+                }
+              >
+                转换为超级标签定义
               </ContextMenuItem>
             )}
             {canTurnSelectionInto && (

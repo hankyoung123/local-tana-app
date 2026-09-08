@@ -3,6 +3,7 @@
 import { useEditorRef } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import {
   getActiveSupertagInstances,
   isTanaNodeActive,
@@ -83,6 +84,13 @@ export function TanaSupertagPage({ index, node }: { index: TanaIndex; node: Tana
             </button>
           ))}
         </nav>
+        <button
+          className="mt-3 rounded-md bg-[var(--tana-accent)] px-2.5 py-1.5 font-medium text-white text-xs hover:brightness-95"
+          type="button"
+          onClick={() => editor.getTransforms(TanaSupertagPlugin).supertag.createInstance(node.id)}
+        >
+          新建实例
+        </button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-10">
         {instances.length === 0 ? (

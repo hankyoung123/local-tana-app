@@ -533,6 +533,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
 }
 
 export * from './time';
+export * from './title';
 
 export function getNodeDisplayNameFromIndex(
   index: TanaIndex,

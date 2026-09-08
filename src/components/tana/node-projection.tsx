@@ -13,6 +13,7 @@ import {
   isTanaNodeInTrash,
   resolveTanaNodeTitle,
   getTanaProjectionTarget,
+  isTanaTitleExpressionNameEditable,
   type NodeId,
   type TanaFieldNode,
   type TanaIndex,
@@ -206,7 +207,9 @@ export function TanaNodeRowChrome({
   });
   const displayTitle = resolveTanaNodeTitle(index, target.id);
   const editableTitle = getProjectionEditableTitle(target);
-  const titleIsExpression = target.titleExpression !== undefined;
+  const titleIsExpression =
+    target.titleExpression !== undefined &&
+    !isTanaTitleExpressionNameEditable(target.titleExpression);
   const isBlockReference = variant === 'block-reference';
   // Projection identity is presentation-only: the canonical outline keeps the
   // target's own bullet, while a Reference or Search result declares why the

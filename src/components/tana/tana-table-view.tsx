@@ -32,6 +32,7 @@ import {
 import {
   getFieldValueCandidates,
   getSupertagTemplateFields,
+  isTanaTitleExpressionNameEditable,
   resolveTanaNodeTitle,
   type FieldDefinition,
   type FieldValue,
@@ -450,7 +451,10 @@ function TableRow({
           </button>
           <ProjectionTitleInput
             displayTitle={displayTitle}
-            readOnly={node.titleExpression !== undefined}
+            readOnly={
+              node.titleExpression !== undefined &&
+              !isTanaTitleExpressionNameEditable(node.titleExpression)
+            }
             targetNodeId={node.id}
             title={editableTitle}
           />

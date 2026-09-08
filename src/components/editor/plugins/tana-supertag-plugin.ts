@@ -13,14 +13,16 @@ import {
   getSupertagInheritance,
   isTanaNodeActive,
 } from '@/lib/tana/index';
-import { hasNodeSemantic } from '@/lib/tana/node-semantic';
+import { getNodeSemanticTypes, hasNodeSemantic } from '@/lib/tana/node-semantic';
 import {
   getTanaDirectChildPaths,
   getTanaNodeDescendantPaths,
+  getTanaParentPath,
 } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 import { TanaFieldPlugin } from './tana-field-plugin';
+import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 
 export const TANA_SUPERTAG_PLUGIN_KEY = 'tanaSupertag' as const;
 
@@ -62,43 +64,36 @@ function isSelectionInNode(editor: PlateEditor, nodePath: number[]) {
 }
 
 /**
- * Normal template children are copied as normal Plate Nodes only. Field
- * templates remain the FieldPlugin's responsibility, and no semantic data is
- * copied into a second entity model. Requiring an entirely plain subtree keeps
- * a malformed template from materializing Field/Value structure by accident.
+ * Fields and values have their existing materialization path. Every other
+ * direct template subtree stays a Plate subtree and is cloned structurally;
+ * Reference edges are never traversed while doing so.
  */
-function getPlainTemplateSubtreePaths(editor: PlateEditor, supertagPath: number[]) {
+function getTemplateSubtreePaths(editor: PlateEditor, supertagPath: number[]) {
   return getTanaDirectChildPaths(editor.children, supertagPath).flatMap((childPath) => {
+    const root = editor.api.node(childPath)?.[0] as TanaBlockElement | undefined;
+
+    if (
+      !root ||
+      root.tanaFieldDefinition !== undefined ||
+      root.tanaFieldId !== undefined ||
+      root.tanaFieldValueType !== undefined ||
+      root.tanaSystemNode !== undefined
+    ) {
+      return [];
+    }
+
     const subtreePaths = [
       childPath,
       ...getTanaNodeDescendantPaths(editor.children, childPath),
     ];
-    const isPlainSubtree = subtreePaths.every((path) => {
-      const entry = editor.api.node(path);
 
-      if (!entry || !ElementApi.isElement(entry[0])) return false;
-
-      const node = entry[0] as TanaBlockElement;
-
-      return (
-        node.tanaFieldDefinition === undefined &&
-        node.tanaFieldId === undefined &&
-        node.tanaFieldValueType === undefined &&
-        node.tanaReferenceTargetId === undefined &&
-        node.tanaSearchDefinition === undefined &&
-        node.tanaSupertagIds === undefined &&
-        node.tanaSupertagDefinition === undefined &&
-        node.tanaSystemNode === undefined &&
-        node.tanaTime === undefined &&
-        node.tanaViewDefinition === undefined
-      );
-    });
-
-    return isPlainSubtree ? [subtreePaths] : [];
+    return subtreePaths.every((path) => ElementApi.isElement(editor.api.node(path)?.[0]))
+      ? [subtreePaths]
+      : [];
   });
 }
 
-function materializePlainTemplateChildren(
+function materializeTemplateChildren(
   editor: PlateEditor,
   nodePath: number[],
   supertagPath: number[]
@@ -110,13 +105,21 @@ function materializePlainTemplateChildren(
 
   const targetIndent = typeof target.indent === 'number' ? target.indent : 0;
 
-  for (const subtreePaths of getPlainTemplateSubtreePaths(editor, supertagPath)) {
+  for (const subtreePaths of getTemplateSubtreePaths(editor, supertagPath)) {
     const root = editor.api.node(subtreePaths[0])?.[0] as TanaBlockElement | undefined;
     const rootIndent = typeof root?.indent === 'number' ? root.indent : 0;
     const insertionPath = [
       (getTanaNodeDescendantPaths(editor.children, nodePath).at(-1)?.[0] ?? nodePath[0]) +
         1,
     ];
+    const idMap = new Map<NodeId, NodeId>();
+    subtreePaths.forEach((path) => {
+      const source = editor.api.node(path)?.[0];
+
+      if (source && ElementApi.isElement(source) && typeof source.id === 'string') {
+        idMap.set(source.id, nanoid());
+      }
+    });
     const clonedNodes = subtreePaths.flatMap((path) => {
       const source = editor.api.node(path)?.[0];
 
@@ -125,10 +128,33 @@ function materializePlainTemplateChildren(
       const clone = structuredClone(source) as TanaBlockElement;
       const sourceIndent = typeof clone.indent === 'number' ? clone.indent : rootIndent;
 
+      // A template's Supertag Definition identity is never copied into an
+      // instance. Nested Field Definitions, occurrences, and Values remain
+      // real fresh Nodes with their existing Field markers.
+      delete clone.tanaSupertagDefinition;
+      delete clone.tanaSystemNode;
+      delete clone.tanaFieldOptional;
+      delete clone.tanaFieldPinned;
+
+      // Local Field Definition/occurrence relations follow the fresh cloned
+      // identity. Reference targets and Supertag/Search definitions remain
+      // direct canonical relations, so no Reference edge is traversed.
+      if (clone.tanaFieldId !== undefined) {
+        clone.tanaFieldId = idMap.get(clone.tanaFieldId) ?? clone.tanaFieldId;
+      }
+      if (clone.tanaPresentation?.hiddenFieldNodeIds) {
+        clone.tanaPresentation = {
+          ...clone.tanaPresentation,
+          hiddenFieldNodeIds: clone.tanaPresentation.hiddenFieldNodeIds.map(
+            (fieldNodeId) => idMap.get(fieldNodeId) ?? fieldNodeId
+          ),
+        };
+      }
+
       return [
         {
           ...clone,
-          id: nanoid(),
+          id: idMap.get(source.id as NodeId) ?? nanoid(),
           indent: targetIndent + 1 + (sourceIndent - rootIndent),
         },
       ];
@@ -145,8 +171,10 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
 
   if (!normalizedName) return;
 
-  const existing = Array.from(buildTanaIndex(editor.children).nodesById.values()).find(
+  const index = buildTanaIndex(editor.children);
+  const existing = Array.from(index.nodesById.values()).find(
     (node) =>
+      isTanaNodeActive(index, node.id) &&
       node.supertagDefinition &&
       node.text.trim().localeCompare(normalizedName, undefined, {
         sensitivity: 'accent',
@@ -161,7 +189,7 @@ function create(editor: PlateEditor, name: string): NodeId | undefined {
 
   if (!schemaEntry) return;
 
-  const [schema, schemaPath] = schemaEntry;
+  const [, schemaPath] = schemaEntry;
   const schemaIndent = typeof schema.indent === 'number' ? schema.indent : 0;
   const descendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
   const path = [(descendants.at(-1)?.[0] ?? schemaPath[0]) + 1];
@@ -427,7 +455,7 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     const templateEntry = getDefinitionEntry(editor, templateDefinitionId);
 
     if (templateEntry) {
-      materializePlainTemplateChildren(editor, nodePath, templateEntry[1]);
+      materializeTemplateChildren(editor, nodePath, templateEntry[1]);
     }
   });
 
@@ -536,6 +564,176 @@ function createAndApply(editor: PlateEditor, nodeId: NodeId, name: string): Node
   return supertagId;
 }
 
+function createInstance(editor: PlateEditor, supertagId: NodeId): NodeId | undefined {
+  const index = buildTanaIndex(editor.children);
+  const definition = getDefinitionEntry(editor, supertagId);
+  const homeId = index.systemNodeIds.get('home');
+  const homeEntry = homeId ? getTanaNodeEntry(editor, homeId) : undefined;
+
+  if (!definition || !homeEntry || !isTanaNodeActive(index, supertagId)) return;
+
+  const [home, homePath] = homeEntry;
+  const descendants = getTanaNodeDescendantPaths(editor.children, homePath);
+  const insertionPath = [(descendants.at(-1) ?? homePath)[0] + 1];
+  const indent = (typeof home.indent === 'number' ? home.indent : 0) + 1;
+  let instanceId: NodeId | undefined;
+
+  editor.tf.withNewBatch(() => {
+    editor.tf.insertNodes(
+      editor.api.create.block({ children: [{ text: '' }], indent }),
+      { at: insertionPath }
+    );
+    const entry = editor.api.node(insertionPath);
+
+    if (!entry || !isTanaNodeElement(entry)) return;
+    instanceId = typeof entry[0].id === 'string' ? entry[0].id : undefined;
+    if (!instanceId || !applyInBatch(editor, instanceId, supertagId)) {
+      instanceId = undefined;
+    }
+  });
+
+  return instanceId;
+}
+
+function convertToSupertag(editor: PlateEditor, nodeId: NodeId): boolean {
+  const entry = getTanaNodeEntry(editor, nodeId);
+  const index = buildTanaIndex(editor.children);
+  const schemaId = index.systemNodeIds.get('schema');
+  const schemaEntry = schemaId ? getTanaNodeEntry(editor, schemaId) : undefined;
+
+  if (
+    !entry ||
+    !schemaEntry ||
+    !isTanaNodeActive(index, nodeId)
+  ) return false;
+
+  const [node, nodePath] = entry;
+  const semanticTypes = getNodeSemanticTypes(node, {
+    document: editor.children,
+    path: nodePath,
+  });
+
+  // Conversion is intentionally limited to a plain canonical Node. Existing
+  // semantic owners (Reference, Search, View, Field, system, or tag
+  // Definition) must keep their current identity and writer boundary.
+  if (semanticTypes.length !== 1 || semanticTypes[0] !== 'content') return false;
+  if (node.tanaSystemNode !== undefined || node.tanaReferenceTargetId !== undefined) {
+    return false;
+  }
+
+  const descendants = getTanaNodeDescendantPaths(editor.children, nodePath);
+  const subtreePaths = [nodePath, ...descendants];
+  const subtreeNodes = subtreePaths.map((path) => editor.api.node<TanaBlockElement>(path)?.[0]);
+
+  if (subtreeNodes.some((candidate) => !candidate)) return false;
+
+  const [schema, schemaPath] = schemaEntry;
+  const schemaIndent = typeof schema.indent === 'number' ? schema.indent : 0;
+  const schemaDescendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
+  const destinationBeforeRemoval = (schemaDescendants.at(-1) ?? schemaPath)[0] + 1;
+  const removedBeforeDestination = subtreePaths.filter(
+    (path) => path[0] < destinationBeforeRemoval
+  ).length;
+  const destinationAfterRemoval = destinationBeforeRemoval - removedBeforeDestination;
+  const sourceIndent = typeof node.indent === 'number' ? node.indent : 0;
+  // Relocation preserves the existing Plate Nodes and their identities. The
+  // lifecycle transform only changes their flat indent while moving them.
+  const relocatedNodes = (subtreeNodes as TanaBlockElement[]).map((candidate, index) => ({
+    ...candidate,
+    indent: schemaIndent + 1 + ((typeof candidate.indent === 'number' ? candidate.indent : sourceIndent) - sourceIndent),
+    ...(index === 0 ? { tanaSupertagDefinition: {} } : {}),
+  }));
+
+  let converted = false;
+  editor.tf.withNewBatch(() => {
+    if (getTanaParentPath(editor.children, nodePath)?.[0] === schemaPath[0]) {
+      editor.tf.setNodes({ tanaSupertagDefinition: {} }, { at: nodePath });
+      converted = true;
+      return;
+    }
+
+    converted = editor
+      .getTransforms(TanaNodeLifecyclePlugin)
+      .node.relocateSubtreesRaw(relocatedNodes, subtreePaths, [destinationAfterRemoval]);
+  });
+
+  return converted;
+}
+
+function canonicalizeNodeIds(editor: PlateEditor, nodeIds: readonly NodeId[]) {
+  const canonicalIds: NodeId[] = [];
+  const seen = new Set<NodeId>();
+
+  for (const nodeId of nodeIds) {
+    const target = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+
+    if (target && !seen.has(target.id)) {
+      seen.add(target.id);
+      canonicalIds.push(target.id);
+    }
+  }
+
+  return canonicalIds;
+}
+
+function applyMany(editor: PlateEditor, nodeIds: readonly NodeId[], supertagId: NodeId) {
+  let changed = false;
+
+  editor.tf.withNewBatch(() => {
+    for (const nodeId of canonicalizeNodeIds(editor, nodeIds)) {
+      changed = applyInBatch(editor, nodeId, supertagId) || changed;
+    }
+  });
+
+  return changed;
+}
+
+function removeInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
+  const canonicalTarget = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+  const nodeEntry = canonicalTarget
+    ? getTanaNodeEntry(editor, canonicalTarget.id)
+    : undefined;
+
+  if (!nodeEntry) return false;
+
+  const currentSupertagIds = nodeEntry[0].tanaSupertagIds ?? [];
+  const nextSupertagIds = currentSupertagIds.filter((id) => id !== supertagId);
+  const removedMembership = nextSupertagIds.length !== currentSupertagIds.length;
+
+  if (removedMembership) {
+    if (nextSupertagIds.length === 0) {
+      editor.tf.unsetNodes('tanaSupertagIds', { at: nodeEntry[1] });
+    } else {
+      editor.tf.setNodes({ tanaSupertagIds: nextSupertagIds }, { at: nodeEntry[1] });
+    }
+  }
+
+  const entries = Array.from(
+    editor.api.nodes({
+      at: nodeEntry[1],
+      match: (candidate) =>
+        ElementApi.isElement(candidate) &&
+        candidate.type === TANA_SUPERTAG_KEY &&
+        candidate.key === supertagId,
+    })
+  );
+  entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
+
+  return removedMembership;
+}
+
+function removeMany(editor: PlateEditor, nodeIds: readonly NodeId[], supertagId: NodeId) {
+  let changed = false;
+
+  editor.tf.withNewBatch(() => {
+    for (const nodeId of canonicalizeNodeIds(editor, nodeIds)) {
+      changed = removeInBatch(editor, nodeId, supertagId) || changed;
+    }
+  });
+
+  return changed;
+}
+
 /** Owns all document mutations for the existing Plate `#` Combobox workflow. */
 export const TanaSupertagPlugin = createPlatePlugin({
   key: TANA_SUPERTAG_PLUGIN_KEY,
@@ -546,6 +744,7 @@ export const TanaSupertagPlugin = createPlatePlugin({
     create: (name: string) => create(editor, name),
     createAndApply: (nodeId: NodeId, name: string) =>
       createAndApply(editor, nodeId, name),
+    createInstance: (supertagId: NodeId) => createInstance(editor, supertagId),
     define: (nodeId: NodeId) => define(editor, nodeId),
     applyDefaultChild: (childNodeId: NodeId) => applyDefaultChild(editor, childNodeId),
     setDefaultChildSupertag: (
@@ -556,6 +755,11 @@ export const TanaSupertagPlugin = createPlatePlugin({
       setExtends(editor, supertagId, parentIds),
     setTitleExpression: (supertagId: NodeId, expression: string) =>
       setTitleExpression(editor, supertagId, expression),
+    convertToSupertag: (nodeId: NodeId) => convertToSupertag(editor, nodeId),
+    applyMany: (nodeIds: readonly NodeId[], supertagId: NodeId) =>
+      applyMany(editor, nodeIds, supertagId),
+    removeMany: (nodeIds: readonly NodeId[], supertagId: NodeId) =>
+      removeMany(editor, nodeIds, supertagId),
     remove: (nodeId: NodeId, supertagId: NodeId) =>
       remove(editor, nodeId, supertagId),
   },

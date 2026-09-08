@@ -5,7 +5,7 @@ import * as React from 'react';
 import type { TComboboxInputElement, TElement } from 'platejs';
 import type { PlateElementProps } from 'platejs/react';
 
-import { HashIcon, PlusIcon } from 'lucide-react';
+import { HashIcon, PlusIcon, RotateCcwIcon, XIcon } from 'lucide-react';
 import { PlateElement } from 'platejs/react';
 
 import { useTanaIndex } from '@/components/tana/tana-index-context';
@@ -13,8 +13,10 @@ import {
   canNavigate as canNavigateNode,
   isTanaNodeElement,
   isTanaNodeActive,
+  isTanaNodeInTrash,
 } from '@/lib/tana';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   getNodeDisplayNameFromIndex,
@@ -42,36 +44,95 @@ export function SupertagElement(
   const index = useTanaIndex();
   const displayName = getNodeDisplayNameFromIndex(index, element.key);
   const target = index.nodesById.get(element.key);
-  const navigable = !!target && isTanaNodeActive(index, target.id) &&
+  const live = !!target && isTanaNodeActive(index, target.id) &&
     target.semanticTypes.includes('supertag-definition') && canNavigateNode(element);
+  const trashed = !!target && isTanaNodeInTrash(index, target.id);
+  const targetLabel = target?.text || (trashed ? '已移至回收站' : '已删除的超级标签');
+  const inputPath = editor.api.findPath(element);
+  const hostId = inputPath ? (editor.children[inputPath[0]] as TElement | undefined)?.id : undefined;
+  const canRemove = typeof hostId === 'string' && typeof element.key === 'string';
 
   const navigateToDefinition = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
-      if (!navigable) return;
+      if (!live) return;
 
       event.preventDefault();
       event.stopPropagation();
       editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
     },
-    [editor, element, navigable]
+    [editor, element, live]
   );
+
+  const removeFromHost = React.useCallback((event: React.MouseEvent | React.KeyboardEvent) => {
+    if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
+    if (!canRemove) return;
+    event.preventDefault();
+    event.stopPropagation();
+    editor.getTransforms(TanaSupertagPlugin).supertag.remove(hostId, element.key);
+  }, [canRemove, editor, element.key, hostId]);
+
+  const restoreDefinition = React.useCallback((event: React.MouseEvent | React.KeyboardEvent) => {
+    if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
+    if (!trashed) return;
+    event.preventDefault();
+    event.stopPropagation();
+    editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(element.key);
+  }, [editor, element.key, trashed]);
 
   return (
     <PlateElement
       {...props}
-      className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 focus-visible:ring-2 dark:bg-emerald-950 dark:text-emerald-200"
+      className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200"
       attributes={{
         ...props.attributes,
         contentEditable: false,
-        'aria-label': navigable ? `打开超级标签 ${displayName}` : undefined,
-        onClick: navigable ? navigateToDefinition : undefined,
-        onKeyDown: navigable ? navigateToDefinition : undefined,
-        role: navigable ? 'link' : undefined,
-        tabIndex: navigable ? 0 : undefined,
       }}
     >
-      #{displayName}
+      {live ? (
+        <button
+          aria-label={`打开超级标签 ${displayName}`}
+          className="rounded-sm px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+          data-plate-prevent-deselect
+          role="link"
+          tabIndex={0}
+          type="button"
+          onClick={navigateToDefinition}
+          onKeyDown={navigateToDefinition}
+        >
+          #{displayName}
+        </button>
+      ) : (
+        <span aria-label={trashed ? `超级标签 ${targetLabel}（已移至回收站）` : `超级标签 ${targetLabel}（已删除）`}>
+          #{targetLabel}
+        </span>
+      )}
+      {trashed && (
+        <button
+          aria-label="恢复超级标签定义"
+          className="ml-0.5 rounded-sm p-0.5 text-emerald-700 hover:bg-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+          data-plate-prevent-deselect
+          title="恢复超级标签定义"
+          type="button"
+          onClick={restoreDefinition}
+          onKeyDown={restoreDefinition}
+        >
+          <RotateCcwIcon aria-hidden="true" className="size-3" />
+        </button>
+      )}
+      {canRemove && (
+        <button
+          aria-label={`移除超级标签 ${displayName}`}
+          className="ml-0.5 rounded-sm p-0.5 text-emerald-700 opacity-0 hover:bg-emerald-200 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 group-hover:opacity-100"
+          data-plate-prevent-deselect
+          title="移除超级标签"
+          type="button"
+          onClick={removeFromHost}
+          onKeyDown={removeFromHost}
+        >
+          <XIcon aria-hidden="true" className="size-3" />
+        </button>
+      )}
       {props.children}
     </PlateElement>
   );

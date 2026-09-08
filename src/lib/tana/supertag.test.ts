@@ -444,3 +444,131 @@ test('batches create-and-apply into one undoable canonical mutation', () => {
   editor.tf.redo();
   assert.deepEqual(editor.children[0].tanaSupertagIds, [createdId]);
 });
+
+test('clones semantic template children with fresh occurrence identities and preserved direct relations', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Template note' }], id: 'template-note', indent: 1, tanaSupertagIds: ['other-tag'], type: KEYS.p },
+    { children: [{ text: 'Template reference' }], id: 'template-ref', indent: 2, tanaReferenceTargetId: 'canonical', type: KEYS.p },
+    { children: [{ text: 'Template search' }], id: 'template-search', indent: 1, tanaSearchDefinition: { query: { children: [], type: 'and' } }, type: KEYS.p },
+    { children: [{ text: 'Canonical' }], id: 'canonical', type: KEYS.p },
+    { children: [{ text: 'Other' }], id: 'other-tag', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+  assert.equal(supertag.apply('task', 'project'), true);
+  const index = buildTanaIndex(editor.children);
+  const note = Array.from(index.nodesById.values()).find((node) => node.text === 'Template note' && node.id !== 'template-note');
+  const reference = Array.from(index.nodesById.values()).find((node) => node.text === 'Template reference' && node.id !== 'template-ref');
+  const search = Array.from(index.nodesById.values()).find((node) => node.text === 'Template search' && node.id !== 'template-search');
+
+  assert.ok(note);
+  assert.ok(reference);
+  assert.ok(search);
+  assert.deepEqual(note.supertagIds, ['other-tag']);
+  assert.equal(reference.referenceTargetId, 'canonical');
+  assert.deepEqual(search.searchDefinition, { query: { children: [], type: 'and' } });
+  assert.notEqual(note.id, 'template-note');
+  assert.notEqual(reference.id, 'template-ref');
+  assert.notEqual(search.id, 'template-search');
+  assert.equal(index.nodesById.has('project'), true);
+});
+
+test('clones nested Field structure with fresh local identities and direct canonical relations', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Template container' }], id: 'template-container', indent: 1, type: KEYS.p },
+    { children: [{ text: 'Local status' }], id: 'local-status', indent: 2, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    { children: [{ text: '' }], id: 'template-status', indent: 2, tanaFieldId: 'local-status', type: KEYS.p },
+    { children: [{ text: 'Draft' }], id: 'template-status-value', indent: 3, tanaFieldValueType: 'plain', type: KEYS.p },
+    { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+  assert.equal(supertag.apply('task', 'project'), true);
+
+  const index = buildTanaIndex(editor.children);
+  const container = Array.from(index.nodesById.values()).find(
+    (node) => node.text === 'Template container' && node.id !== 'template-container'
+  );
+  const localDefinition = container
+    ? Array.from(index.nodesById.values()).find(
+      (node) => node.text === 'Local status' && node.id !== 'local-status' && index.parentNodeIds.get(node.id) === container.id
+    )
+    : undefined;
+  const occurrence = container
+    ? Array.from(index.nodesById.values()).find(
+      (node) => node.id !== 'template-status' && index.parentNodeIds.get(node.id) === container.id && node.node.tanaFieldId === localDefinition?.id
+    )
+    : undefined;
+
+  assert.ok(container);
+  assert.ok(localDefinition);
+  assert.ok(occurrence);
+  assert.notEqual(container.id, 'template-container');
+  assert.notEqual(localDefinition.id, 'local-status');
+  assert.notEqual(occurrence.id, 'template-status');
+  assert.equal(index.fieldNodesByParent.get(container.id)?.[0]?.fieldId, localDefinition.id);
+  assert.deepEqual(index.fieldNodesByParent.get(container.id)?.[0]?.values, [
+    { type: 'plain', value: 'Draft' },
+  ]);
+});
+
+test('converts an ordinary Node to a Schema Supertag Definition without copying identities', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+    { children: [{ text: 'Task Definition' }], id: 'task', indent: 1, type: KEYS.p },
+    { children: [{ text: 'Template child' }], id: 'template-child', indent: 2, type: KEYS.p },
+    { children: [{ text: 'Schema' }], id: 'schema', tanaSystemNode: 'schema', type: KEYS.p },
+  ]);
+  const beforeIds = editor.children.map((node) => node.id);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+  assert.equal(supertag.convertToSupertag('task'), true);
+  assert.deepEqual(editor.children.map((node) => node.id).sort(), beforeIds.sort());
+  assert.equal((editor.children.find((node) => node.id === 'task') as TElement).tanaSupertagDefinition !== undefined, true);
+  assert.equal((editor.children.find((node) => node.id === 'template-child') as TElement).id, 'template-child');
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('task'), 'schema');
+  editor.tf.undo();
+  assert.equal((editor.children.find((node) => node.id === 'task') as TElement).tanaSupertagDefinition, undefined);
+  editor.tf.redo();
+  assert.equal((editor.children.find((node) => node.id === 'task') as TElement).tanaSupertagDefinition !== undefined, true);
+});
+
+test('bulk Add and Remove canonicalize References and use one history batch', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+    { children: [{ text: 'B' }], id: 'b', type: KEYS.p },
+    { children: [{ text: '' }], id: 'ref-a', tanaReferenceTargetId: 'a', type: KEYS.p },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+  const before = structuredClone(editor.children);
+
+  assert.equal(supertag.applyMany(['a', 'ref-a', 'b'], 'project'), true);
+  assert.deepEqual((editor.children.find((node) => node.id === 'a') as TElement).tanaSupertagIds, ['project']);
+  assert.deepEqual((editor.children.find((node) => node.id === 'b') as TElement).tanaSupertagIds, ['project']);
+  assert.equal((editor.children.find((node) => node.id === 'ref-a') as TElement).tanaSupertagIds, undefined);
+  editor.tf.undo();
+  assert.deepEqual(editor.children, before);
+  editor.tf.redo();
+  assert.deepEqual((editor.children.find((node) => node.id === 'a') as TElement).tanaSupertagIds, ['project']);
+  assert.equal(supertag.removeMany(['ref-a', 'b'], 'project'), true);
+  assert.equal((editor.children.find((node) => node.id === 'a') as TElement).tanaSupertagIds, undefined);
+  assert.equal((editor.children.find((node) => node.id === 'b') as TElement).tanaSupertagIds, undefined);
+});
+
+test('creates a live Supertag instance in Home with membership derived from the Definition', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Home' }], id: 'home', tanaSystemNode: 'home', type: KEYS.p },
+    { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+  ]);
+  const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+  const id = supertag.createInstance('project');
+  assert.ok(id);
+  const created = editor.children.find((node) => node.id === id) as TElement;
+  assert.deepEqual(created.tanaSupertagIds, ['project']);
+  assert.equal(buildTanaIndex(editor.children).nodesBySupertag.get('project')?.includes(id!), true);
+});
