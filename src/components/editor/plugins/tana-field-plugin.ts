@@ -186,7 +186,7 @@ function getCanonicalFieldHostId(editor: PlateEditor, nodeId: NodeId): NodeId | 
  * unless a parent command (for example Supertag apply) already owns it.
  */
 function withFieldHistoryBatch<T>(editor: PlateEditor, action: () => T): T {
-  if (editor.api.isSplittingOnce()) return action();
+  if (editor.api.isMerging()) return action();
 
   let result!: T;
 
@@ -719,6 +719,51 @@ function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
     : undefined;
 }
 
+/** Creates one real Option Node and assigns its NodeId in the same command. */
+function createOptionAndAssign(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  name: string,
+  valueNodeId?: NodeId
+): boolean {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+
+  if (!canonicalNodeId || definition?.type !== 'options') return false;
+
+  const existingField = getFieldNode(editor, canonicalNodeId, fieldId);
+  const optionId = createOption(editor, fieldId, name);
+
+  if (!optionId) return false;
+
+  const optionValue: Extract<FieldValue, { type: 'options' }> = {
+    type: 'options',
+    value: optionId,
+  };
+  const fieldNodeId = materialize(editor, canonicalNodeId, fieldId);
+
+  if (!fieldNodeId) return false;
+
+  if (definition.cardinality !== 'list') {
+    return writeValue(editor, canonicalNodeId, fieldId, optionValue);
+  }
+
+  if (valueNodeId) {
+    return writeValue(editor, canonicalNodeId, fieldId, optionValue, valueNodeId);
+  }
+
+  if (existingField) {
+    return addValue(editor, canonicalNodeId, fieldId, optionValue) !== undefined;
+  }
+
+  const firstValueNodeId = getFieldNode(editor, canonicalNodeId, fieldId)?.valueNodeId;
+
+  return firstValueNodeId
+    ? writeValue(editor, canonicalNodeId, fieldId, optionValue, firstValueNodeId)
+    : false;
+}
+
 function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
@@ -949,6 +994,15 @@ export const TanaFieldPlugin = createPlatePlugin({
       ) => withFieldHistoryBatch(editor, () => createDefinition(editor, name, definition, ownerNodeId)),
       createOption: (fieldId: NodeId, name: string) =>
         withFieldHistoryBatch(editor, () => createOption(editor, fieldId, name)),
+      createOptionAndAssign: (
+        nodeId: NodeId,
+        fieldId: NodeId,
+        name: string,
+        valueNodeId?: NodeId
+      ) =>
+        withFieldHistoryBatch(editor, () =>
+          createOptionAndAssign(editor, nodeId, fieldId, name, valueNodeId)
+        ),
       deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) =>
         withFieldHistoryBatch(editor, () => deleteAdHoc(editor, nodeId, fieldId)),
       materialize: (nodeId: NodeId, fieldId: NodeId) =>

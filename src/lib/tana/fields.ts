@@ -7,9 +7,11 @@ import {
   getActiveSupertagInstances,
   getNodeSupertagIds,
   getSupertagInheritance,
+  getTanaProjectionTarget,
   isTanaNodeActive,
 } from './index';
 import { hasNodeSemantic } from './node-semantic';
+import { runTanaQuery } from './query';
 import {
   getTanaAncestorPaths,
   getTanaDirectChildPaths,
@@ -457,7 +459,11 @@ export function getSupertagTemplateFields(
   });
 }
 
-/** Candidate values are always derived from NodeIds already present in the index. */
+/**
+ * Candidate values are an ordered projection of real nodes. Options may use
+ * static child Nodes, one-hop Reference child sources, or Search child
+ * sources; none of those sources writes a candidate list into the document.
+ */
 export function getFieldValueCandidates(
   index: TanaIndex,
   fieldId: NodeId
@@ -468,9 +474,43 @@ export function getFieldValueCandidates(
   if (!definition || !definitionNode) return [];
 
   if (definition.type === 'options') {
-    return getTanaDirectChildPaths(index.document, definitionNode.path)
+    const candidates: TanaNode[] = [];
+    const candidateIds = new Set<NodeId>();
+    const addCandidate = (nodeId: NodeId) => {
+      const candidate = getTanaProjectionTarget(index, nodeId);
+
+      if (!candidate || candidateIds.has(candidate.id)) return;
+
+      candidateIds.add(candidate.id);
+      candidates.push(candidate);
+    };
+
+    getTanaDirectChildPaths(index.document, definitionNode.path)
       .map((path) => getNodeAtDocumentPath(index, path))
-      .filter((node): node is TanaNode => !!node);
+      .filter((node): node is TanaNode => !!node)
+      .forEach((source) => {
+        if (source.referenceTargetId !== undefined) {
+          const target = getTanaProjectionTarget(index, source.id);
+
+          (target ? index.childrenByParent.get(target.id) ?? [] : []).forEach(addCandidate);
+          return;
+        }
+
+        if (source.searchDefinition) {
+          try {
+            runTanaQuery(index, source.searchDefinition.query).forEach((node) =>
+              addCandidate(node.id)
+            );
+          } catch {
+            // An uncommitted malformed Search is not a candidate source.
+          }
+          return;
+        }
+
+        addCandidate(source.id);
+      });
+
+    return candidates;
   }
 
   if (definition.type !== 'from-supertag' || !definition.sourceSupertagId) {

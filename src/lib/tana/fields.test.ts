@@ -354,6 +354,97 @@ describe('Field occurrence Nodes', () => {
     });
   });
 
+  test('derives Options candidates from static, one-hop Reference, and Search sources', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Static' }], id: 'static', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Source reference' }], id: 'source-reference', indent: 1, tanaReferenceTargetId: 'source', type: KEYS.p },
+      {
+        children: [{ text: 'Search source' }],
+        id: 'search-source',
+        indent: 1,
+        tanaSearchDefinition: {
+          query: {
+            children: [{ predicate: { kind: 'text-contains', text: 'Search candidate' }, type: 'predicate' }],
+            type: 'and',
+          },
+        },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Broken source' }], id: 'broken-source', indent: 1, tanaReferenceTargetId: 'missing', type: KEYS.p },
+      { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
+      { children: [{ text: 'Source child' }], id: 'source-child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Alias child' }], id: 'source-child-reference', indent: 1, tanaReferenceTargetId: 'canonical-child', type: KEYS.p },
+      { children: [{ text: 'Trashed alias child' }], id: 'source-trashed-reference', indent: 1, tanaReferenceTargetId: 'trashed-candidate', type: KEYS.p },
+      { children: [{ text: 'Canonical child' }], id: 'canonical-child', type: KEYS.p },
+      { children: [{ text: 'Search candidate' }], id: 'search-candidate', type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+      { children: [{ text: 'Trashed candidate' }], id: 'trashed-candidate', indent: 1, type: KEYS.p },
+    ]);
+
+    assert.deepEqual(
+      getFieldValueCandidates(index, 'status').map(({ id }) => id),
+      ['static', 'source-child', 'canonical-child', 'search-candidate']
+    );
+  });
+
+  test('creates an Options candidate Node and assigns it in one undoable batch', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+    const before = structuredClone(editor.children);
+
+    assert.equal(transforms.createOptionAndAssign('task', 'status', 'Collected'), true);
+    const after = structuredClone(editor.children);
+    const optionId = getFieldValueCandidates(buildTanaIndex(editor.children), 'status')[0]?.id;
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+
+    assert.ok(optionId);
+    assert.deepEqual(occurrence.values, [{ type: 'options', value: optionId }]);
+    editor.tf.undo();
+    assert.deepEqual(editor.children, before);
+    editor.tf.redo();
+    assert.deepEqual(editor.children, after);
+  });
+
+  test('creates a From-Supertag instance and assigns its canonical NodeId in one undoable batch', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Home' }], id: 'home', tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', indent: 1, type: KEYS.p },
+      {
+        children: [{ text: 'Owner' }],
+        id: 'owner',
+        tanaFieldDefinition: { sourceSupertagId: 'person', type: 'from-supertag' },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Person' }], id: 'person', tanaSupertagDefinition: {}, type: KEYS.p },
+    ]);
+    const before = structuredClone(editor.children);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    const instanceId = supertag.createSourceInstanceAndAssign(
+      'task',
+      'owner',
+      'person',
+      'Ada'
+    );
+    const after = structuredClone(editor.children);
+
+    assert.ok(instanceId);
+    assert.equal(buildTanaIndex(editor.children).nodesById.get(instanceId)?.text, 'Ada');
+    assert.deepEqual(buildTanaIndex(editor.children).nodesById.get(instanceId)?.supertagIds, ['person']);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values,
+      [{ type: 'from-supertag', value: instanceId }]
+    );
+    editor.tf.undo();
+    assert.deepEqual(editor.children, before);
+    editor.tf.redo();
+    assert.deepEqual(editor.children, after);
+  });
+
   test('refuses to materialize a Field below Field or Value structure', () => {
     const editor = createEditor([
       {
@@ -796,6 +887,46 @@ describe('Field occurrence Nodes', () => {
     assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
       ['estimate', { type: 'number', value: 5 }],
     ]));
+  });
+
+  test('stores Checkbox false and true distinctly, then clears back to unset', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Done' }], id: 'done', tanaFieldDefinition: { type: 'checkbox' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'done'));
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, []);
+    assert.equal(transforms.setValue('task', 'done', { type: 'checkbox', value: false }), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, [
+      { type: 'checkbox', value: false },
+    ]);
+    assert.equal(transforms.setValue('task', 'done', { type: 'checkbox', value: true }), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, [
+      { type: 'checkbox', value: true },
+    ]);
+    assert.equal(transforms.clearValue('task', 'done'), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, []);
+  });
+
+  test('stores Date text in its canonical Value Node and warns without creating a second date store', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'due'));
+    assert.equal(transforms.setValue('task', 'due', { type: 'date', value: '2026-02-29' }), true);
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+    assert.deepEqual(occurrence.values, [{ type: 'date', value: '2026-02-29' }]);
+    assert.deepEqual(
+      occurrence.validationIssuesByValueNodeId.get(occurrence.valueNodeId!),
+      ['invalid-date']
+    );
+    assert.equal(transforms.clearValue('task', 'due'), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, []);
   });
 
   test('keeps required as a Definition-only unset hint without creating a second Field value', () => {

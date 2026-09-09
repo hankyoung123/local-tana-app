@@ -529,6 +529,20 @@ function Draggable({
           )
         : undefined
     : undefined;
+  const fieldValidationIssues = nodeId && semanticField
+    ? semanticType === 'value'
+      ? semanticField.validationIssuesByValueNodeId.get(nodeId) ?? []
+      : [
+          ...semanticField.validationIssues,
+          ...semanticField.valueNodeIds.flatMap(
+            (valueNodeId) =>
+              semanticField.validationIssuesByValueNodeId.get(valueNodeId) ?? []
+          ),
+        ]
+    : [];
+  const validationDescriptionId = semanticField && fieldValidationIssues.length > 0
+    ? `field-validation-${semanticField.id}`
+    : undefined;
   // Value Nodes are rendered as part of their owning Field row. Their
   // semantic marker is the canonical boundary, so a missing or temporarily
   // broken Field Definition cannot re-expose a duplicate node chrome.
@@ -650,6 +664,8 @@ function Draggable({
         />
 
         <div
+          aria-describedby={validationDescriptionId}
+          aria-invalid={fieldValidationIssues.length > 0 ? true : undefined}
           ref={nodeRef}
           className={cn(
             'slate-blockWrapper relative flow-root',

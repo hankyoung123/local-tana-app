@@ -1,5 +1,7 @@
 'use client';
 
+import * as React from 'react';
+
 import {
   EyeOffIcon,
   PinIcon,
@@ -24,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import type {
   FieldValue,
+  FieldValidationIssue,
   NodeId,
   TanaIndex,
   TanaNode,
@@ -62,6 +65,24 @@ export type TanaNodeRenderer = {
   Block?: React.ComponentType<TanaNodeBlockRendererProps>;
   Workspace: React.ComponentType<TanaNodeWorkspaceRendererProps>;
 };
+
+const fieldValidationLabels: Record<FieldValidationIssue, string> = {
+  'incompatible-type': '字段类型已变更，保留原值',
+  'invalid-checkbox': '复选框值无效',
+  'invalid-date': '日期格式无效',
+  'invalid-email': '邮箱格式无效',
+  'invalid-number': '数字不符合字段范围',
+  'invalid-option': '选项不在当前候选中',
+  'invalid-url': '网址格式无效',
+  'missing-reference': '引用目标不可用',
+  'missing-required': '必填字段尚未设置',
+};
+
+function getFieldValidationLabel(issues: readonly FieldValidationIssue[]): string {
+  return Array.from(new Set(issues))
+    .map((issue) => fieldValidationLabels[issue])
+    .join('；');
+}
 
 /** Read-only rows from canonical hierarchy; never traverse Reference edges. */
 export function getReferenceSubtreeRows(index: TanaIndex, targetNodeId: NodeId) {
@@ -202,6 +223,13 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       )
   );
   const canAddValue = field?.fieldDefinition?.cardinality === 'list';
+  const validationIssues = [
+    ...fieldNode.validationIssues,
+    ...fieldNode.valueNodeIds.flatMap(
+      (valueNodeId) => fieldNode.validationIssuesByValueNodeId.get(valueNodeId) ?? []
+    ),
+  ];
+  const validationLabel = getFieldValidationLabel(validationIssues);
 
   return (
     <div
@@ -227,6 +255,17 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
           <span className="truncate">{field?.text || '未命名字段'}</span>
           {field?.fieldDefinition?.required && (
             <span aria-label="必填字段" className="shrink-0 text-destructive">*</span>
+          )}
+          {validationLabel && (
+            <span
+              aria-label={`字段值警告：${validationLabel}`}
+              className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+              id={`field-validation-${fieldNode.id}`}
+              role="status"
+              title={validationLabel}
+            >
+              需修正
+            </span>
           )}
         </span>
       </button>
@@ -301,6 +340,9 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
 
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const currentFieldValue = fieldNode.valueByNodeId.get(nodeId);
+  const validationIssues = fieldNode.validationIssuesByValueNodeId.get(nodeId) ?? [];
+  const validationLabel = getFieldValidationLabel(validationIssues);
+  const warningId = `field-value-warning-${nodeId}`;
   const setValue = (value: FieldValue) =>
     definition.cardinality === 'list'
       ? fieldTransforms.setValueAt(fieldNode.parentNodeId, fieldNode.fieldId, nodeId, value)
@@ -329,6 +371,8 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         <label className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]">
           <Checkbox
             aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
+            aria-describedby={validationLabel ? warningId : undefined}
+            aria-invalid={validationLabel ? true : undefined}
             checked={value ?? false}
             data-plate-prevent-deselect
             onCheckedChange={(checked) => {
@@ -342,6 +386,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         {(value !== undefined || definition.cardinality === 'list') && (
           <ValueClearButton onClear={clearValue} />
         )}
+        <FieldValueWarning id={warningId} label={validationLabel} />
       </ValueControl>
     );
   }
@@ -353,6 +398,8 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       <ValueControl>
         <input
           aria-label="日期字段值"
+          aria-describedby={validationLabel ? warningId : undefined}
+          aria-invalid={validationLabel ? true : undefined}
           className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[var(--tana-text-secondary)] outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
           data-plate-prevent-deselect
           type="date"
@@ -367,6 +414,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
             }
           }}
         />
+        <FieldValueWarning id={warningId} label={validationLabel} />
       </ValueControl>
     );
   }
@@ -388,6 +436,8 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       >
         <SelectTrigger
           aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
+          aria-describedby={validationLabel ? warningId : undefined}
+          aria-invalid={validationLabel ? true : undefined}
           className="h-7 max-w-56 border-0 bg-transparent px-1.5 text-[13px] shadow-none hover:bg-[var(--tana-hover)] focus:ring-1"
           data-plate-prevent-deselect
         >
@@ -408,7 +458,74 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
       {(currentValue || definition.cardinality === 'list') && (
         <ValueClearButton onClear={clearValue} />
       )}
+      {definition.type === 'options' && (
+        <CreateOptionControl
+          fieldId={fieldNode.fieldId}
+          nodeId={fieldNode.parentNodeId}
+          valueNodeId={nodeId}
+        />
+      )}
+      <FieldValueWarning id={warningId} label={validationLabel} />
     </ValueControl>
+  );
+}
+
+function FieldValueWarning({ id, label }: { id: string; label: string }) {
+  return label ? (
+    <span id={id} role="status" className="ml-1 text-[11px] text-amber-700 dark:text-amber-300">
+      {label}
+    </span>
+  ) : null;
+}
+
+function CreateOptionControl({
+  fieldId,
+  nodeId,
+  valueNodeId,
+}: {
+  fieldId: NodeId;
+  nodeId: NodeId;
+  valueNodeId: NodeId;
+}) {
+  const editor = useEditorRef();
+  const [name, setName] = React.useState('');
+
+  const create = () => {
+    if (
+      editor
+        .getTransforms(TanaFieldPlugin)
+        .field.createOptionAndAssign(nodeId, fieldId, name, valueNodeId)
+    ) {
+      setName('');
+    }
+  };
+
+  return (
+    <span className="ml-1 flex items-center gap-1">
+      <input
+        aria-label="新建选项"
+        className="h-6 w-24 rounded border border-[var(--tana-divider)] bg-transparent px-1 text-xs"
+        data-plate-prevent-deselect
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            create();
+          }
+        }}
+      />
+      <button
+        aria-label="创建并选择新选项"
+        className="rounded px-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)] disabled:opacity-50"
+        data-plate-prevent-deselect
+        disabled={name.trim().length === 0}
+        type="button"
+        onClick={create}
+      >
+        新建
+      </button>
+    </span>
   );
 }
 

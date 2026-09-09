@@ -564,7 +564,11 @@ function createAndApply(editor: PlateEditor, nodeId: NodeId, name: string): Node
   return supertagId;
 }
 
-function createInstance(editor: PlateEditor, supertagId: NodeId): NodeId | undefined {
+function createInstanceInBatch(
+  editor: PlateEditor,
+  supertagId: NodeId,
+  title = ''
+): NodeId | undefined {
   const index = buildTanaIndex(editor.children);
   const definition = getDefinitionEntry(editor, supertagId);
   const homeId = index.systemNodeIds.get('home');
@@ -578,19 +582,83 @@ function createInstance(editor: PlateEditor, supertagId: NodeId): NodeId | undef
   const indent = (typeof home.indent === 'number' ? home.indent : 0) + 1;
   let instanceId: NodeId | undefined;
 
-  editor.tf.withNewBatch(() => {
-    editor.tf.insertNodes(
-      editor.api.create.block({ children: [{ text: '' }], indent }),
-      { at: insertionPath }
-    );
-    const entry = editor.api.node(insertionPath);
+  editor.tf.insertNodes(
+    editor.api.create.block({ children: [{ text: title.trim() }], indent }),
+    { at: insertionPath }
+  );
+  const entry = editor.api.node(insertionPath);
 
-    if (!entry || !isTanaNodeElement(entry)) return;
-    instanceId = typeof entry[0].id === 'string' ? entry[0].id : undefined;
-    if (!instanceId || !applyInBatch(editor, instanceId, supertagId)) {
-      instanceId = undefined;
-    }
+  if (!entry || !isTanaNodeElement(entry)) return;
+  instanceId = typeof entry[0].id === 'string' ? entry[0].id : undefined;
+  if (!instanceId || !applyInBatch(editor, instanceId, supertagId)) {
+    instanceId = undefined;
+  }
+
+  return instanceId;
+}
+
+function createInstance(editor: PlateEditor, supertagId: NodeId): NodeId | undefined {
+  if (editor.api.isMerging()) {
+    return createInstanceInBatch(editor, supertagId);
+  }
+
+  let instanceId: NodeId | undefined;
+
+  editor.tf.withNewBatch(() => {
+    instanceId = createInstanceInBatch(editor, supertagId);
   });
+
+  return instanceId;
+}
+
+/** Creates a canonical source instance and assigns it to one From-Supertag Value. */
+function createSourceInstanceAndAssign(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  sourceSupertagId: NodeId,
+  title: string
+): NodeId | undefined {
+  const index = buildTanaIndex(editor.children);
+  const canonicalHost = getTanaProjectionTarget(index, nodeId);
+  const fieldDefinition = index.nodesById.get(fieldId)?.fieldDefinition;
+
+  if (
+    !canonicalHost ||
+    fieldDefinition?.type !== 'from-supertag' ||
+    fieldDefinition.sourceSupertagId !== sourceSupertagId
+  ) {
+    return;
+  }
+
+  let instanceId: NodeId | undefined;
+
+  const createAndAssign = () => {
+    instanceId = createInstanceInBatch(editor, sourceSupertagId, title);
+
+    if (!instanceId) return;
+
+    const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+
+    if (!fieldTransforms.materialize(canonicalHost.id, fieldId)) {
+      instanceId = undefined;
+      return;
+    }
+
+    const assigned = fieldTransforms.setValue(
+      canonicalHost.id,
+      fieldId,
+      { type: 'from-supertag', value: instanceId }
+    );
+
+    if (!assigned) instanceId = undefined;
+  };
+
+  if (editor.api.isMerging()) {
+    createAndAssign();
+  } else {
+    editor.tf.withNewBatch(createAndAssign);
+  }
 
   return instanceId;
 }
@@ -745,6 +813,12 @@ export const TanaSupertagPlugin = createPlatePlugin({
     createAndApply: (nodeId: NodeId, name: string) =>
       createAndApply(editor, nodeId, name),
     createInstance: (supertagId: NodeId) => createInstance(editor, supertagId),
+    createSourceInstanceAndAssign: (
+      nodeId: NodeId,
+      fieldId: NodeId,
+      sourceSupertagId: NodeId,
+      title: string
+    ) => createSourceInstanceAndAssign(editor, nodeId, fieldId, sourceSupertagId, title),
     define: (nodeId: NodeId) => define(editor, nodeId),
     applyDefaultChild: (childNodeId: NodeId) => applyDefaultChild(editor, childNodeId),
     setDefaultChildSupertag: (
