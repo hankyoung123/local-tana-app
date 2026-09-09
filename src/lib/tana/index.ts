@@ -4,7 +4,7 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 import { ElementApi, KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
-import { isTanaNumberInRange, isTanaStringFieldValueValid } from './field-value';
+import { getFieldValueValidationIssues } from './field-value';
 import {
   getNodeSemanticType,
   getNodeSemanticTypes,
@@ -14,6 +14,7 @@ import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import { getTanaTimeKey } from './time';
 import type {
   FieldId,
+  FieldValidationIssue,
   FieldValue,
   NodeId,
   ReferenceRelation,
@@ -119,35 +120,35 @@ function findMentionTarget(element: TElement): NodeId | undefined {
 }
 
 /**
- * Reads a typed Field value from its ordinary value Node. A changed Field
- * Definition never mutates that Node: the type marker simply makes the old
- * value unset for the new Field type.
+ * Decodes a stored Value by its own marker, never by the current Definition.
+ * Type changes therefore preserve historical text and identity as readable
+ * (possibly warned) document state.
  */
 function getFieldValueFromNode(
-  definition: TanaBlockElement['tanaFieldDefinition'],
   valueNode: TanaNode | undefined
 ): FieldValue | undefined {
-  if (!definition || !valueNode) return;
+  if (!valueNode) return;
 
   const valueElement = valueNode.node as TanaBlockElement;
+  const type = valueElement.tanaFieldValueType;
 
-  if (valueElement.tanaFieldValueType !== definition.type) return;
+  if (!type) return;
 
   const text = getRawElementText(valueElement);
 
-  if (definition.type === 'plain') {
+  if (type === 'plain') {
     return text.length > 0 ? { type: 'plain', value: text } : undefined;
   }
 
-  if (definition.type === 'date') {
+  if (type === 'date') {
     return text.length > 0 ? { type: 'date', value: text } : undefined;
   }
 
-  if (definition.type === 'email' || definition.type === 'url') {
-    return text.length > 0 ? { type: definition.type, value: text } : undefined;
+  if (type === 'email' || type === 'url') {
+    return text.length > 0 ? { type, value: text } : undefined;
   }
 
-  if (definition.type === 'number') {
+  if (type === 'number') {
     const normalized = text.trim();
 
     if (
@@ -164,7 +165,7 @@ function getFieldValueFromNode(
     return Number.isFinite(value) ? { type: 'number', value } : undefined;
   }
 
-  if (definition.type === 'checkbox') {
+  if (type === 'checkbox') {
     if (text === 'true') return { type: 'checkbox', value: true };
     if (text === 'false') return { type: 'checkbox', value: false };
 
@@ -175,52 +176,60 @@ function getFieldValueFromNode(
 
   if (!targetNodeId) return;
 
-  return definition.type === 'options'
+  return type === 'options'
     ? { type: 'options', value: targetNodeId }
     : { type: 'from-supertag', value: targetNodeId };
 }
 
-function isDerivedFieldValueValid(
+function getUndecodableFieldValueIssues(
+  valueNode: TanaNode
+): readonly FieldValidationIssue[] {
+  switch ((valueNode.node as TanaBlockElement).tanaFieldValueType) {
+    case 'checkbox':
+      return ['invalid-checkbox'];
+    case 'number':
+      return ['invalid-number'];
+    case 'options':
+    case 'from-supertag':
+      return ['missing-reference'];
+    default:
+      return [];
+  }
+}
+
+function hasStoredFieldValue(valueNode: TanaNode): boolean {
+  const element = valueNode.node as TanaBlockElement;
+
+  return getRawElementText(element).trim().length > 0 || !!findMentionTarget(element);
+}
+
+function getDerivedFieldCandidateIds(
   document: Value,
   fieldId: NodeId,
   definition: NonNullable<TanaBlockElement['tanaFieldDefinition']>,
-  value: FieldValue,
   nodesById: ReadonlyMap<NodeId, TanaNode>,
   nodesBySupertag: ReadonlyMap<NodeId, readonly NodeId[]>
-): boolean {
-  if (definition.type !== value.type) return false;
-
-  if (
-    (definition.type === 'email' && value.type === 'email') ||
-    (definition.type === 'url' && value.type === 'url')
-  ) {
-    return isTanaStringFieldValueValid(definition.type, value.value);
-  }
-
-  if (definition.type === 'number' && value.type === 'number') {
-    return isTanaNumberInRange(definition, value.value);
-  }
-
-  if (definition.type === 'options' && value.type === 'options') {
+): ReadonlySet<NodeId> | undefined {
+  if (definition.type === 'options') {
     const fieldDefinitionNode = nodesById.get(fieldId);
 
-    return !!fieldDefinitionNode && getTanaDirectChildPaths(document, fieldDefinitionNode.path)
-      .some((path) => {
+    return new Set(fieldDefinitionNode ? getTanaDirectChildPaths(document, fieldDefinitionNode.path)
+      .flatMap((path) => {
         const candidate = document[path[0]];
 
-        return ElementApi.isElement(candidate) && candidate.id === value.value;
-      });
+        return ElementApi.isElement(candidate) && typeof candidate.id === 'string'
+          ? [candidate.id]
+          : [];
+      }) : []);
   }
 
-  if (definition.type === 'from-supertag' && value.type === 'from-supertag') {
-    return (
-      definition.sourceSupertagId !== null &&
-      (nodesBySupertag.get(definition.sourceSupertagId)?.includes(value.value) ??
-        false)
+  if (definition.type === 'from-supertag') {
+    return new Set(
+      definition.sourceSupertagId
+        ? nodesBySupertag.get(definition.sourceSupertagId) ?? []
+        : []
     );
   }
-
-  return true;
 }
 
 /** Fully derives the read-only semantic index from the current Plate value. */
@@ -467,23 +476,32 @@ export function buildTanaIndex(document: Value): TanaIndex {
           : [];
       }
     );
-    const valueEntries = definition
-      ? valueNodes.flatMap((valueNode) => {
-          const parsedValue = getFieldValueFromNode(definition, valueNode);
+    const candidateIds = definition
+      ? getDerivedFieldCandidateIds(
+          document,
+          fieldId,
+          definition,
+          nodesById,
+          nodesBySupertag
+        )
+      : undefined;
+    const valueEntries = valueNodes.flatMap((valueNode) => {
+      const parsedValue = getFieldValueFromNode(valueNode);
 
-          return parsedValue &&
-            isDerivedFieldValueValid(
-              document,
-              fieldId,
-              definition,
-              parsedValue,
-              nodesById,
-              nodesBySupertag
-            )
-            ? [[valueNode.id, parsedValue] as const]
-            : [];
-        })
-      : [];
+      return parsedValue ? [[valueNode.id, parsedValue] as const] : [];
+    });
+    const validationIssuesByValueNodeId = new Map(
+      valueNodes.map((valueNode) => {
+        const value = valueEntries.find(([valueNodeId]) => valueNodeId === valueNode.id)?.[1];
+        const issues = definition
+          ? value
+            ? getFieldValueValidationIssues(definition, value, candidateIds)
+            : getUndecodableFieldValueIssues(valueNode)
+          : [];
+
+        return [valueNode.id, issues] as const;
+      })
+    );
     const values = valueEntries.map(([, value]) => value);
     const cardinality = definition?.cardinality ?? 'single';
     const valueNode = valueNodes[0];
@@ -499,6 +517,11 @@ export function buildTanaIndex(document: Value): TanaIndex {
       valueByNodeId: new Map(valueEntries),
       valueNodeId: valueNode?.id,
       valueNodeIds: valueNodes.map((valueNode) => valueNode.id),
+      validationIssues: definition?.required === true &&
+        !valueNodes.some(hasStoredFieldValue)
+        ? ['missing-required']
+        : [],
+      validationIssuesByValueNodeId,
       values,
     };
     const fields = fieldNodesByParent.get(parentNodeId) ?? [];

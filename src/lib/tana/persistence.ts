@@ -476,6 +476,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
   );
   const systemNodes = new Set<string>();
   const timeValues = new Set<string>();
+  const fieldOccurrencesByHostAndDefinition = new Set<string>();
 
   const hasSupertagInheritanceCycle = (supertagId: NodeId) => {
     const visiting = new Set<NodeId>();
@@ -587,25 +588,34 @@ export function isValidTanaDocument(value: unknown): value is Value {
     if (node.tanaFieldId) {
       const definition = fieldDefinitions.get(node.tanaFieldId);
       const parentPath = getTanaParentPath(value, path);
+      const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
 
       if (
-        !parentPath || !isTanaFieldHostNode(value, parentPath)
+        !parentPath ||
+        !parent ||
+        typeof parent.id !== 'string' ||
+        !isTanaFieldHostNode(value, parentPath)
       ) {
         return false;
       }
+
+      // A Field occurrence is unique for its canonical Host and shared
+      // Definition. This is structural ownership, independent of whether the
+      // Definition still resolves or a stored Value matches its current type.
+      const occurrenceKey = `${parent.id}\u0000${node.tanaFieldId}`;
+
+      if (fieldOccurrencesByHostAndDefinition.has(occurrenceKey)) return false;
+      fieldOccurrencesByHostAndDefinition.add(occurrenceKey);
 
       const valuePaths = getTanaDirectChildPaths(value, path).filter(
         (childPath) =>
           elementsByPath.get(childPath[0])?.tanaFieldValueType !== undefined
       );
 
-      if (
-        definition &&
-        valuePaths.some(
-          (valuePath) =>
-            elementsByPath.get(valuePath[0])?.tanaFieldValueType !== definition.type
-        )
-      ) {
+      // Historical Values retain their own original type marker when a
+      // Definition changes. Persisted validation only enforces single/list
+      // structure and never deletes or rejects incompatible scalar content.
+      if (definition?.cardinality !== 'list' && valuePaths.length > 1) {
         return false;
       }
     }
@@ -614,12 +624,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
 
     const parentPath = getTanaParentPath(value, path);
     const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
-    const definition = parent?.tanaFieldId
-      ? fieldDefinitions.get(parent.tanaFieldId)
-      : undefined;
-
     if (!parent?.tanaFieldId) return false;
-    if (definition && node.tanaFieldValueType !== definition.type) return false;
   }
 
   // Canonical workspace structure is the final persistence gate. Field

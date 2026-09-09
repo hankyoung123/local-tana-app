@@ -1,5 +1,5 @@
 import { isTanaQueryAst, isTanaQueryPredicateAst } from '@/lib/tana/query-ast';
-import { ElementApi, KEYS } from 'platejs';
+import { ElementApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
@@ -172,19 +172,13 @@ function getNodeIds(entries: readonly TanaNodeEntry[]): ReadonlySet<NodeId> {
 
 function findDanglingNonReferenceInlineRelation(
   entries: readonly TanaNodeEntry[],
-  document: Value,
   nodeIds: ReadonlySet<NodeId>
 ): Path | undefined {
-  function visit(
-    node: TElement,
-    path: Path,
-    sourceIsValueNode: boolean
-  ): Path | undefined {
+  function visit(node: TElement, path: Path): Path | undefined {
     const targetNodeId = (node as RelationElement).key;
 
     if (
-      (node.type === TANA_SUPERTAG_KEY ||
-        (sourceIsValueNode && node.type === KEYS.mention)) &&
+      node.type === TANA_SUPERTAG_KEY &&
       typeof targetNodeId === 'string' &&
       !nodeIds.has(targetNodeId)
     ) {
@@ -194,18 +188,14 @@ function findDanglingNonReferenceInlineRelation(
     for (const [index, child] of node.children.entries()) {
       if (!ElementApi.isElement(child)) continue;
 
-      const dangling = visit(child, [...path, index], sourceIsValueNode);
+      const dangling = visit(child, [...path, index]);
 
       if (dangling) return dangling;
     }
   }
 
   for (const [node, path] of entries) {
-    const dangling = visit(
-      node,
-      path,
-      getNodeSemanticTypes(node, { document, path }).includes('value')
-    );
+    const dangling = visit(node, path);
 
     if (dangling) return dangling;
   }
@@ -430,11 +420,8 @@ const NodeIntegrityValidators: Partial<
   value: (node, path, context) => {
     const parentPath = getTanaParentPath(context.document, path);
     const parent = parentPath ? getEntryAtPath(context.entries, parentPath) : undefined;
-    const definition = parent?.tanaFieldId
-      ? context.fieldDefinitions.get(parent.tanaFieldId)
-      : undefined;
 
-    if (!parent?.tanaFieldId || (definition && node.tanaFieldValueType !== definition.type)) {
+    if (!parent?.tanaFieldId) {
       return 'invalid-value-owner';
     }
   },
@@ -673,7 +660,6 @@ function normalizeRelations(editor: PlateEditor): boolean {
   };
   const danglingInlinePath = findDanglingNonReferenceInlineRelation(
     entries,
-    editor.children,
     nodeIds
   );
 

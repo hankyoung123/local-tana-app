@@ -204,6 +204,58 @@ describe('Plate document persistence', () => {
     );
   });
 
+  test('rejects duplicate and single Field structure while retaining invalid historical values', () => {
+    const historical = withWorkspace([
+      { children: [{ text: 'When' }], id: 'when', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+      { children: [{ text: 'Email' }], id: 'email', tanaFieldDefinition: { type: 'email' }, type: 'p' },
+      { children: [{ text: 'Range' }], id: 'range', tanaFieldDefinition: { max: 8, min: 2, type: 'number' }, type: 'p' },
+      { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+      { children: [{ text: '' }], id: 'task-when', indent: 1, tanaFieldId: 'when', type: 'p' },
+      { children: [{ text: 'still plain text' }], id: 'task-when-value', indent: 2, tanaFieldValueType: 'plain', type: 'p' },
+      { children: [{ text: '' }], id: 'task-email', indent: 1, tanaFieldId: 'email', type: 'p' },
+      { children: [{ text: 'not-an-email' }], id: 'task-email-value', indent: 2, tanaFieldValueType: 'email', type: 'p' },
+      { children: [{ text: '' }], id: 'task-range', indent: 1, tanaFieldId: 'range', type: 'p' },
+      { children: [{ text: '99' }], id: 'task-range-value', indent: 2, tanaFieldValueType: 'number', type: 'p' },
+    ]);
+
+    assert.equal(isValidTanaDocument(historical), true);
+
+    const duplicateOccurrence = structuredClone(historical);
+    duplicateOccurrence.push({
+      children: [{ text: '' }],
+      id: 'task-when-duplicate',
+      indent: 2,
+      tanaFieldId: 'when',
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(duplicateOccurrence), false);
+
+    const multipleSingleValues = structuredClone(historical);
+    multipleSingleValues.splice(13, 0, {
+      children: [{ text: 'second' }],
+      id: 'task-when-value-second',
+      indent: 3,
+      tanaFieldValueType: 'plain',
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(multipleSingleValues), false);
+
+    const listValues = structuredClone(historical);
+    const rangeDefinitionIndex = listValues.findIndex((node) => node.id === 'range');
+    listValues[rangeDefinitionIndex] = {
+      ...listValues[rangeDefinitionIndex],
+      tanaFieldDefinition: { cardinality: 'list', type: 'number' },
+    };
+    listValues.push({
+      children: [{ text: '2' }],
+      id: 'task-range-list-second',
+      indent: 3,
+      tanaFieldValueType: 'number',
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(listValues), true);
+  });
+
   test('keeps View presentation settings in the persisted Plate Document', () => {
     const document = withWorkspace([
       {

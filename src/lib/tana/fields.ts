@@ -2,14 +2,13 @@ import { ElementApi, TextApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
-import { isTanaNumberInRange, isTanaStringFieldValueValid } from './field-value';
+import { getFieldValueValidationIssues } from './field-value';
 import {
   getActiveSupertagInstances,
   getNodeSupertagIds,
   getSupertagInheritance,
   isTanaNodeActive,
 } from './index';
-import { isTanaDay } from './time';
 import { hasNodeSemantic } from './node-semantic';
 import {
   getTanaAncestorPaths,
@@ -88,42 +87,32 @@ export function isFieldValueValid(
   fieldId: NodeId,
   value: FieldValue
 ): boolean {
+  return (
+    index.nodesById.get(fieldId)?.fieldDefinition !== undefined &&
+    getFieldValueValidation(index, fieldId, value).length === 0
+  );
+}
+
+/**
+ * Read-only validation for a decoded value. It is intentionally separate
+ * from writer permission: callers retain invalid canonical input and expose
+ * the returned warnings in their own presentation.
+ */
+export function getFieldValueValidation(
+  index: TanaIndex,
+  fieldId: NodeId,
+  value: FieldValue
+) {
   const definition = index.nodesById.get(fieldId)?.fieldDefinition;
 
-  if (!definition) return false;
-  if (!isFieldValueCompatible(definition, value)) return false;
+  if (!definition) return [];
 
-  if (definition.type === 'date' && value.type === 'date') {
-    return isTanaDay(value.value);
-  }
+  const candidateIds =
+    definition.type === 'options' || definition.type === 'from-supertag'
+      ? new Set(getFieldValueCandidates(index, fieldId).map((candidate) => candidate.id))
+      : undefined;
 
-  if (
-    (definition.type === 'email' && value.type === 'email') ||
-    (definition.type === 'url' && value.type === 'url')
-  ) {
-    return isTanaStringFieldValueValid(definition.type, value.value);
-  }
-
-  if (definition.type === 'number' && value.type === 'number') {
-    return isTanaNumberInRange(definition, value.value);
-  }
-
-  if (definition.type === 'options' && value.type === 'options') {
-    return getFieldValueCandidates(index, fieldId).some(
-      (candidate) => candidate.id === value.value
-    );
-  }
-
-  if (definition.type === 'from-supertag' && value.type === 'from-supertag') {
-    return (
-      definition.sourceSupertagId !== null &&
-      getActiveSupertagInstances(index, definition.sourceSupertagId).some(
-        (candidate) => candidate.id === value.value
-      )
-    );
-  }
-
-  return true;
+  return getFieldValueValidationIssues(definition, value, candidateIds);
 }
 
 function getTanaBlockAt(

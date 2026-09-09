@@ -8,12 +8,12 @@ import {
   findFieldDefinitionExactMatch,
   isAdHocField,
   isAdHocFieldInputNode,
+  isFieldValueCompatible,
   isTanaFieldHostNode,
-  isFieldValueValid,
   isSupertagFieldInputNode,
   getSupertagFieldInputParentId
 } from '@/lib/tana/fields';
-import { buildTanaIndex } from '@/lib/tana/index';
+import { buildTanaIndex, getTanaProjectionTarget } from '@/lib/tana/index';
 import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
 import {
   getTanaNodeDescendantPaths,
@@ -176,6 +176,27 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   return isTanaNodeElement(entry) ? (entry as NodeEntry<TanaBlockElement>) : undefined;
 }
 
+/** Field writers accept occurrence IDs but only mutate one live canonical Host. */
+function getCanonicalFieldHostId(editor: PlateEditor, nodeId: NodeId): NodeId | undefined {
+  return getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId)?.id;
+}
+
+/**
+ * Field commands are user-facing document actions. Start one history batch
+ * unless a parent command (for example Supertag apply) already owns it.
+ */
+function withFieldHistoryBatch<T>(editor: PlateEditor, action: () => T): T {
+  if (editor.api.isSplittingOnce()) return action();
+
+  let result!: T;
+
+  editor.tf.withNewBatch(() => {
+    result = action();
+  });
+
+  return result;
+}
+
 /** Value Nodes are real direct children, so a list needs no parallel value array. */
 function getDirectValueEntries(editor: PlateEditor, fieldPath: Path) {
   return getTanaDirectChildPaths(editor.children, fieldPath).flatMap((path) => {
@@ -301,6 +322,10 @@ function materialize(
   parentNodeId: NodeId,
   fieldId: NodeId
 ): NodeId | undefined {
+  const canonicalParentNodeId = getCanonicalFieldHostId(editor, parentNodeId);
+  if (!canonicalParentNodeId) return;
+
+  parentNodeId = canonicalParentNodeId;
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getTanaNodeEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
@@ -342,6 +367,10 @@ function writeValue(
   value?: FieldValue,
   valueNodeId?: NodeId
 ): boolean {
+  const canonicalParentNodeId = getCanonicalFieldHostId(editor, parentNodeId);
+  if (!canonicalParentNodeId) return false;
+
+  parentNodeId = canonicalParentNodeId;
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getFieldNodeEntry(editor, parentNodeId, fieldId);
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
@@ -356,7 +385,7 @@ function writeValue(
   ) {
     return false;
   }
-  if (value !== undefined && !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)) {
+  if (value !== undefined && !isFieldValueCompatible(definition, value)) {
     return false;
   }
 
@@ -379,7 +408,7 @@ function writeValue(
       {
         ...valueNode,
         children: createValueChildren(value),
-        tanaFieldValueType: definition.type
+        tanaFieldValueType: value?.type ?? valueNode.tanaFieldValueType ?? definition.type
       },
       { at: valuePath }
     );
@@ -414,11 +443,15 @@ function addValue(
   fieldId: NodeId,
   value?: FieldValue
 ): NodeId | undefined {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  if (!canonicalNodeId) return;
+
+  nodeId = canonicalNodeId;
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (!fieldEntry || definition?.cardinality !== 'list') return;
-  if (value !== undefined && !isFieldValueValid(buildTanaIndex(editor.children), fieldId, value)) {
+  if (value !== undefined && !isFieldValueCompatible(definition, value)) {
     return;
   }
 
@@ -449,6 +482,10 @@ function removeValue(
   fieldId: NodeId,
   valueNodeId: NodeId
 ) {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  if (!canonicalNodeId) return false;
+
+  nodeId = canonicalNodeId;
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
@@ -468,8 +505,11 @@ function removeValue(
 
 /** Applies a valid template default only when the real Field Node is unset. */
 function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: FieldValue) {
-  const index = buildTanaIndex(editor.children);
-  if (!isFieldValueValid(index, fieldId, value)) return false;
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  if (!canonicalNodeId) return false;
+  nodeId = canonicalNodeId;
+  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  if (!definition || !isFieldValueCompatible(definition, value)) return false;
 
   const fieldNodeId = materialize(editor, nodeId, fieldId);
 
@@ -486,6 +526,9 @@ function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, valu
 }
 
 function clearValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  if (!canonicalNodeId) return false;
+  nodeId = canonicalNodeId;
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
   const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
@@ -510,6 +553,9 @@ function clearValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
 }
 
 function deleteAdHoc(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  if (!canonicalNodeId) return false;
+  nodeId = canonicalNodeId;
   const index = buildTanaIndex(editor.children);
   const fieldNode = index.fieldNodesByParent
     .get(nodeId)
@@ -881,42 +927,53 @@ export const TanaFieldPlugin = createPlatePlugin({
   .extendEditorTransforms(({ editor }) => ({
     field: {
       addValue: (nodeId: NodeId, fieldId: NodeId, value?: FieldValue) =>
-        addValue(editor, nodeId, fieldId, value),
+        withFieldHistoryBatch(editor, () => addValue(editor, nodeId, fieldId, value)),
       applyDefault: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
-        applyDefault(editor, nodeId, fieldId, value),
-      clearValue: (nodeId: NodeId, fieldId: NodeId) => clearValue(editor, nodeId, fieldId),
+        withFieldHistoryBatch(editor, () => applyDefault(editor, nodeId, fieldId, value)),
+      clearValue: (nodeId: NodeId, fieldId: NodeId) =>
+        withFieldHistoryBatch(editor, () => clearValue(editor, nodeId, fieldId)),
       completeAdHocInput: (nodeId: NodeId, choice: FieldInputChoice) =>
-        completeAdHocInput(editor, nodeId, choice),
+        withFieldHistoryBatch(editor, () => completeAdHocInput(editor, nodeId, choice)),
       completeTemplateInput: (
         temporaryNodeId: NodeId,
         supertagId: NodeId,
         choice: FieldInputChoice
-      ) => completeTemplateInput(editor, temporaryNodeId, supertagId, choice),
+      ) =>
+        withFieldHistoryBatch(editor, () =>
+          completeTemplateInput(editor, temporaryNodeId, supertagId, choice)
+        ),
       createDefinition: (
         name: string,
         definition: FieldDefinition,
         ownerNodeId?: NodeId
-      ) => createDefinition(editor, name, definition, ownerNodeId),
-      createOption: (fieldId: NodeId, name: string) => createOption(editor, fieldId, name),
-      deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) => deleteAdHoc(editor, nodeId, fieldId),
-      materialize: (nodeId: NodeId, fieldId: NodeId) => materialize(editor, nodeId, fieldId),
+      ) => withFieldHistoryBatch(editor, () => createDefinition(editor, name, definition, ownerNodeId)),
+      createOption: (fieldId: NodeId, name: string) =>
+        withFieldHistoryBatch(editor, () => createOption(editor, fieldId, name)),
+      deleteAdHoc: (nodeId: NodeId, fieldId: NodeId) =>
+        withFieldHistoryBatch(editor, () => deleteAdHoc(editor, nodeId, fieldId)),
+      materialize: (nodeId: NodeId, fieldId: NodeId) =>
+        withFieldHistoryBatch(editor, () => materialize(editor, nodeId, fieldId)),
       removeValue: (nodeId: NodeId, fieldId: NodeId, valueNodeId: NodeId) =>
-        removeValue(editor, nodeId, fieldId, valueNodeId),
-      removeOption: (fieldId: NodeId, optionId: NodeId) => removeOption(editor, fieldId, optionId),
+        withFieldHistoryBatch(editor, () => removeValue(editor, nodeId, fieldId, valueNodeId)),
+      removeOption: (fieldId: NodeId, optionId: NodeId) =>
+        withFieldHistoryBatch(editor, () => removeOption(editor, fieldId, optionId)),
       setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
-        setValue(editor, nodeId, fieldId, value),
+        withFieldHistoryBatch(editor, () => setValue(editor, nodeId, fieldId, value)),
       setValueAt: (
         nodeId: NodeId,
         fieldId: NodeId,
         valueNodeId: NodeId,
         value: FieldValue
-      ) => setValueAt(editor, nodeId, fieldId, valueNodeId, value),
+      ) =>
+        withFieldHistoryBatch(editor, () =>
+          setValueAt(editor, nodeId, fieldId, valueNodeId, value)
+        ),
       setOptional: (templateNodeId: NodeId, optional: boolean) =>
-        setOptional(editor, templateNodeId, optional),
+        withFieldHistoryBatch(editor, () => setOptional(editor, templateNodeId, optional)),
       setPinned: (fieldNodeId: NodeId, pinned: boolean) =>
-        setPinned(editor, fieldNodeId, pinned),
+        withFieldHistoryBatch(editor, () => setPinned(editor, fieldNodeId, pinned)),
       updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
-        updateDefinition(editor, fieldId, definition)
+        withFieldHistoryBatch(editor, () => updateDefinition(editor, fieldId, definition))
     }
   }))
   .overrideEditor(

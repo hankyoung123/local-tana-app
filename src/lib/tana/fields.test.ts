@@ -290,7 +290,7 @@ describe('Field occurrence Nodes', () => {
     );
   });
 
-  test('rejects invalid Field writes without changing the document', () => {
+  test('stores invalid Options writes and derives a warning without treating the Field as unset', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       {
@@ -304,16 +304,21 @@ describe('Field occurrence Nodes', () => {
     ]);
 
     field(editor).materialize('task', 'status');
-    const before = structuredClone(editor.children);
 
     assert.equal(
       field(editor).setValue('task', 'status', {
         type: 'options',
         value: 'other'
       }),
-      false
+      true
     );
-    assert.deepEqual(editor.children, before);
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+
+    assert.deepEqual(occurrence.values, [{ type: 'options', value: 'other' }]);
+    assert.deepEqual(
+      occurrence.validationIssuesByValueNodeId.get(occurrence.valueNodeId!),
+      ['invalid-option']
+    );
   });
 
   test('derives Options candidates from ordered direct child Nodes', () => {
@@ -629,7 +634,45 @@ describe('Field occurrence Nodes', () => {
     assert.equal(isFieldValueCompatible({ type: 'number' }, { type: 'number', value: 1 }), true);
   });
 
-  test('accepts only valid URL and Email FieldValue writes while preserving their Value Nodes', () => {
+  test('preserves typed Value identity and text when a Definition type changes', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'When' }], id: 'when', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task', 'when'));
+    assert.equal(
+      transforms.setValue('task', 'when', { type: 'plain', value: 'not a date' }),
+      true
+    );
+    const before = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+    const valueNodeId = before.valueNodeId!;
+
+    assert.equal(transforms.updateDefinition('when', { type: 'date' }), true);
+    let changed = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+    assert.equal(changed.valueNodeId, valueNodeId);
+    assert.deepEqual(changed.values, [{ type: 'plain', value: 'not a date' }]);
+    assert.deepEqual(
+      changed.validationIssuesByValueNodeId.get(valueNodeId),
+      ['incompatible-type']
+    );
+    const valuePath = getTanaNodePath(editor.children, valueNodeId)!;
+    assert.equal(editor.children[valuePath[0]]?.tanaFieldValueType, 'plain');
+    assert.deepEqual(editor.children[valuePath[0]]?.children, [{ text: 'not a date' }]);
+
+    editor.tf.undo();
+    assert.deepEqual(editor.children.find((node) => node.id === 'when')?.tanaFieldDefinition, {
+      type: 'plain',
+    });
+    editor.tf.redo();
+    changed = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+    assert.equal(changed.valueNodeId, valueNodeId);
+    assert.deepEqual(
+      changed.validationIssuesByValueNodeId.get(valueNodeId), ['incompatible-type']);
+  });
+
+  test('stores invalid URL and Email writes while preserving Value Nodes and warnings', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       { children: [{ text: 'Website' }], id: 'website', tanaFieldDefinition: { type: 'url' }, type: KEYS.p },
@@ -641,11 +684,28 @@ describe('Field occurrence Nodes', () => {
     assert.ok(transforms.materialize('task', 'contact'));
     assert.equal(
       transforms.setValue('task', 'website', { type: 'url', value: 'not-a-url' }),
-      false
+      true
     );
     assert.equal(
       transforms.setValue('task', 'contact', { type: 'email', value: 'not-an-email' }),
-      false
+      true
+    );
+    const invalidIndex = buildTanaIndex(editor.children);
+    const invalidWebsite = invalidIndex.fieldNodesByParent.get('task')?.find(
+      ({ fieldId }) => fieldId === 'website'
+    );
+    const invalidContact = invalidIndex.fieldNodesByParent.get('task')?.find(
+      ({ fieldId }) => fieldId === 'contact'
+    );
+    assert.deepEqual(invalidWebsite?.values, [{ type: 'url', value: 'not-a-url' }]);
+    assert.deepEqual(
+      invalidWebsite?.validationIssuesByValueNodeId.get(invalidWebsite.valueNodeId!),
+      ['invalid-url']
+    );
+    assert.deepEqual(invalidContact?.values, [{ type: 'email', value: 'not-an-email' }]);
+    assert.deepEqual(
+      invalidContact?.validationIssuesByValueNodeId.get(invalidContact.valueNodeId!),
+      ['invalid-email']
     );
     assert.equal(
       transforms.setValue('task', 'website', { type: 'url', value: 'https://localtana.app/docs' }),
@@ -711,7 +771,7 @@ describe('Field occurrence Nodes', () => {
     );
   });
 
-  test('enforces Number min/max for new writes without deleting an existing Value Node', () => {
+  test('stores Number min/max failures and derives a warning without deleting the Value Node', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       {
@@ -724,8 +784,14 @@ describe('Field occurrence Nodes', () => {
     const transforms = field(editor);
 
     assert.ok(transforms.materialize('task', 'estimate'));
-    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 1 }), false);
-    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 9 }), false);
+    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 1 }), true);
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+    assert.deepEqual(occurrence.values, [{ type: 'number', value: 1 }]);
+    assert.deepEqual(
+      occurrence.validationIssuesByValueNodeId.get(occurrence.valueNodeId!),
+      ['invalid-number']
+    );
+    assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 9 }), true);
     assert.equal(transforms.setValue('task', 'estimate', { type: 'number', value: 5 }), true);
     assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
       ['estimate', { type: 'number', value: 5 }],
@@ -749,6 +815,107 @@ describe('Field occurrence Nodes', () => {
     assert.equal(index.fieldValues.get('task')?.has('summary') ?? false, false);
     assert.equal(index.nodesById.get('summary')?.fieldDefinition?.required, true);
     assert.equal(index.fieldNodesByParent.get('task')?.[0]?.valueNodeIds.length, 1);
+    assert.deepEqual(index.fieldNodesByParent.get('task')?.[0]?.validationIssues, [
+      'missing-required',
+    ]);
+  });
+
+  test('writes every Host-level Field operation through one live Reference target', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Task reference' }], id: 'task-reference', tanaReferenceTargetId: 'task', type: KEYS.p },
+      { children: [{ text: 'Summary' }], id: 'summary', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Labels' }], id: 'labels', tanaFieldDefinition: { cardinality: 'list', type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.ok(transforms.materialize('task-reference', 'summary'));
+    assert.equal(
+      transforms.setValue('task-reference', 'summary', { type: 'plain', value: 'canonical' }),
+      true
+    );
+    const summary = buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.find(
+      ({ fieldId }) => fieldId === 'summary'
+    );
+    assert.deepEqual(summary?.values, [{ type: 'plain', value: 'canonical' }]);
+    assert.equal(buildTanaIndex(editor.children).fieldNodesByParent.has('task-reference'), false);
+    assert.equal(transforms.clearValue('task-reference', 'summary'), true);
+
+    assert.ok(transforms.materialize('task-reference', 'labels'));
+    const firstValueId = buildTanaIndex(editor.children)
+      .fieldNodesByParent.get('task')!
+      .find(({ fieldId }) => fieldId === 'labels')!
+      .valueNodeIds[0]!;
+    assert.equal(
+      transforms.setValueAt('task-reference', 'labels', firstValueId, {
+        type: 'plain',
+        value: 'first',
+      }),
+      true
+    );
+    const secondValueId = transforms.addValue('task-reference', 'labels', {
+      type: 'plain',
+      value: 'second',
+    });
+    assert.ok(secondValueId);
+    assert.equal(transforms.removeValue('task-reference', 'labels', secondValueId), true);
+    assert.equal(transforms.deleteAdHoc('task-reference', 'summary'), true);
+    assert.equal(
+      buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.some(
+        ({ fieldId }) => fieldId === 'summary'
+      ) ?? false,
+      false
+    );
+  });
+
+  test('fails Field writes closed for broken and chained References', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Reference' }], id: 'reference', tanaReferenceTargetId: 'task', type: KEYS.p },
+      { children: [{ text: 'Chained' }], id: 'chained', tanaReferenceTargetId: 'reference', type: KEYS.p },
+      { children: [{ text: 'Broken' }], id: 'broken', tanaReferenceTargetId: 'missing', type: KEYS.p },
+      { children: [{ text: 'Summary' }], id: 'summary', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.equal(transforms.materialize('chained', 'summary'), undefined);
+    assert.equal(transforms.materialize('broken', 'summary'), undefined);
+    assert.equal(transforms.setValue('chained', 'summary', { type: 'plain', value: 'nope' }), false);
+    assert.equal(buildTanaIndex(editor.children).fieldNodesByParent.has('task'), false);
+  });
+
+  test('records Field mutations as individual undoable history batches', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Task reference' }], id: 'task-reference', tanaReferenceTargetId: 'task', type: KEYS.p },
+      { children: [{ text: 'Summary' }], id: 'summary', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Tags' }], id: 'tags', tanaFieldDefinition: { cardinality: 'list', type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+    const assertOneUndo = (action: () => unknown) => {
+      const before = structuredClone(editor.children);
+
+      action();
+      const after = structuredClone(editor.children);
+      assert.notDeepEqual(after, before);
+      editor.tf.undo();
+      assert.deepEqual(editor.children, before);
+      editor.tf.redo();
+      assert.deepEqual(editor.children, after);
+    };
+
+    assertOneUndo(() => transforms.materialize('task', 'summary'));
+    assertOneUndo(() =>
+      transforms.setValue('task-reference', 'summary', { type: 'plain', value: 'canonical' })
+    );
+    assertOneUndo(() => transforms.clearValue('task-reference', 'summary'));
+    assertOneUndo(() => transforms.materialize('task', 'tags'));
+    assertOneUndo(() => transforms.addValue('task-reference', 'tags', { type: 'plain', value: 'second' }));
+    const removableValueId = buildTanaIndex(editor.children)
+      .fieldNodesByParent.get('task')!
+      .find(({ fieldId }) => fieldId === 'tags')!
+      .valueNodeIds.at(-1)!;
+    assertOneUndo(() => transforms.removeValue('task-reference', 'tags', removableValueId));
   });
 
   test('edits list cardinality through real sibling Value Nodes without a parent map', () => {

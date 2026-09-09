@@ -253,7 +253,7 @@ describe("Tana relation integrity", () => {
     );
   });
 
-  test("clears a dangling Options value through its ordinary value Node", () => {
+  test("preserves a dangling Options value as warning-only historical data", () => {
     const editor = createEditor([
       {
         children: [{ text: "Status" }],
@@ -284,14 +284,18 @@ describe("Tana relation integrity", () => {
     assert.deepEqual(editor.children[0].tanaFieldDefinition, {
       type: "options",
     });
-    assert.equal(
-      buildTanaIndex(editor.children).fieldValues.get("task")?.has("status") ??
-        false,
-      false,
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldValues.get("task")?.get("status"),
+      { type: "options", value: "active" },
+    );
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldNodesById.get("task-status")
+        ?.validationIssuesByValueNodeId.get("task-status-value"),
+      ["invalid-option"],
     );
   });
 
-  test("clears a dangling template Value Node relation without deleting its Field Node", () => {
+  test("preserves a dangling template Value relation without deleting its Field Node", () => {
     const editor = createEditor([
       {
         children: [{ text: "Project" }],
@@ -325,11 +329,9 @@ describe("Tana relation integrity", () => {
     editor.tf.removeNodes({ at: [4] });
 
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, {});
-    assert.deepEqual(
-      editor.children.find((node) => node.id === "template-status-value")
-        ?.children,
-      [{ text: "" }],
-    );
+    assert.deepEqual(editor.children.find((node) => node.id === "template-status-value")?.children, [
+      relation(KEYS.mention, "active"),
+    ]);
   });
 
   test("nulls a deleted From-Supertag source without deleting the Field Definition", () => {

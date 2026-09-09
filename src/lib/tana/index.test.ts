@@ -171,7 +171,9 @@ describe('buildTanaIndex', () => {
     ]);
 
     assert.equal(index.fieldNodesById.get('missing-field')?.brokenFieldDefinition, true);
-    assert.deepEqual(index.fieldNodesById.get('missing-field')?.values, []);
+    assert.deepEqual(index.fieldNodesById.get('missing-field')?.values, [
+      { type: 'plain', value: 'Historical value' },
+    ]);
   });
 
   test('derives Field values exclusively from occurrence and value Nodes', () => {
@@ -203,7 +205,7 @@ describe('buildTanaIndex', () => {
     assert.equal(index.nodesById.get('task-status-value')?.semanticType, 'value');
   });
 
-  test('keeps an invalid reference-shaped value as an unset Field', () => {
+  test('keeps an invalid reference-shaped value as a stored Field warning', () => {
     const index = buildTanaIndex([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: 'p' },
       { children: [{ text: 'Active' }], id: 'active', indent: 1, type: 'p' },
@@ -219,8 +221,20 @@ describe('buildTanaIndex', () => {
       },
     ]);
 
-    assert.equal(index.fieldValues.get('task')?.has('status') ?? false, false);
-    assert.equal(index.fieldNodesById.get('task-status')?.value, undefined);
+    assert.deepEqual(index.fieldValues.get('task')?.get('status'), {
+      type: 'options',
+      value: 'other',
+    });
+    assert.deepEqual(index.fieldNodesById.get('task-status')?.value, {
+      type: 'options',
+      value: 'other',
+    });
+    assert.deepEqual(
+      index.fieldNodesById.get('task-status')?.validationIssuesByValueNodeId.get(
+        'task-status-value'
+      ),
+      ['invalid-option']
+    );
   });
 
   test('derives numbers from Plate text while preserving intermediate input', () => {

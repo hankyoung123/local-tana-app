@@ -61,6 +61,21 @@ export type FieldValue =
   | { type: 'plain'; value: string }
   | { type: 'url'; value: string };
 
+/**
+ * Validation is a read-only interpretation of an existing Value Node. It is
+ * deliberately not persisted: invalid input remains canonical document data.
+ */
+export type FieldValidationIssue =
+  | 'incompatible-type'
+  | 'invalid-checkbox'
+  | 'invalid-date'
+  | 'invalid-email'
+  | 'invalid-number'
+  | 'invalid-option'
+  | 'invalid-url'
+  | 'missing-required'
+  | 'missing-reference';
+
 export type TanaQueryClause =
   | { kind: 'field-equals'; fieldId: FieldId; value: FieldValue }
   | { kind: 'field-defined'; fieldId: FieldId }
@@ -190,11 +205,16 @@ export type TanaFieldNode = {
   /** Missing or non-Field targets are readable history, not an invalid document. */
   brokenFieldDefinition: boolean;
   value?: FieldValue;
-  /** Read-only value lookup by real Value NodeId, including list Fields. */
+  /** Read-only decoded value lookup by real Value NodeId, including list Fields. */
   valueByNodeId: ReadonlyMap<NodeId, FieldValue>;
+  /** Derived warnings by stored Value NodeId; never document state. */
+  validationIssuesByValueNodeId: ReadonlyMap<NodeId, readonly FieldValidationIssue[]>;
+  /** A required unset warning is field-level because no Value Node owns it. */
+  validationIssues: readonly FieldValidationIssue[];
   valueNodeId?: NodeId;
-  /** Every valid direct Value Node, in document order. */
+  /** Every direct Value Node, including invalid or incompatible history. */
   valueNodeIds: readonly NodeId[];
+  /** Decoded Values in document order, including semantically invalid values. */
   values: readonly FieldValue[];
 };
 
