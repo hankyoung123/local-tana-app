@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { ElementApi, KEYS, TextApi } from 'platejs';
 import type { Descendant, TElement, TText } from 'platejs';
 import { useEditorRef } from 'platejs/react';
@@ -12,12 +13,14 @@ import {
   getTanaReferenceTargetResolution,
   isTanaNodeInTrash,
   resolveTanaNodeTitle,
+  resolveTanaNodeTitleSegments,
   getTanaProjectionTarget,
   isTanaTitleExpressionNameEditable,
   type NodeId,
   type TanaFieldNode,
   type TanaIndex,
   type TanaNode,
+  type TanaTitleExpressionSegment,
 } from '@/lib/tana';
 
 import { TanaNodeBullet } from './tana-node-gutter';
@@ -43,6 +46,26 @@ function RichTitleProjection({
       {nodes.map((node, position) => (
         <ProjectedTitleNode index={index} key={position} node={node} />
       ))}
+    </span>
+  );
+}
+
+/** Renders the safe, derived Title Expression presentation without HTML injection. */
+export function TitleExpressionProjection({
+  segments,
+}: {
+  segments: readonly TanaTitleExpressionSegment[];
+}) {
+  return (
+    <span className={projectionTitleClassName} data-title-expression="true">
+      {segments.map((segment, position) => {
+        let content: React.ReactNode = segment.text;
+
+        if (segment.marks?.italic) content = <em>{content}</em>;
+        if (segment.marks?.bold) content = <strong>{content}</strong>;
+
+        return <React.Fragment key={position}>{content}</React.Fragment>;
+      })}
     </span>
   );
 }
@@ -117,6 +140,7 @@ export function ProjectionTitleInput({
   targetNodeId,
   title,
   displayTitle = title,
+  displaySegments,
   onExitEdit,
   readOnly = false,
   autoFocus = false,
@@ -125,6 +149,7 @@ export function ProjectionTitleInput({
   targetNodeId: NodeId;
   title: string;
   displayTitle?: string;
+  displaySegments?: readonly TanaTitleExpressionSegment[];
   onExitEdit?: () => void;
   readOnly?: boolean;
 }) {
@@ -134,7 +159,11 @@ export function ProjectionTitleInput({
   // the editable canonical title would overwrite user content. The canonical
   // title remains editable when no expression is active.
   if (readOnly) {
-    return <span className={projectionTitleClassName}>{displayTitle}</span>;
+    return displaySegments ? (
+      <TitleExpressionProjection segments={displaySegments} />
+    ) : (
+      <span className={projectionTitleClassName}>{displayTitle}</span>
+    );
   }
 
   return (
@@ -206,6 +235,7 @@ export function TanaNodeRowChrome({
       : [{ id: field.id, label: definition?.text || '未命名字段', value }];
   });
   const displayTitle = resolveTanaNodeTitle(index, target.id);
+  const displaySegments = resolveTanaNodeTitleSegments(index, target.id);
   const editableTitle = getProjectionEditableTitle(target);
   const titleIsExpression =
     target.titleExpression !== undefined &&
@@ -247,13 +277,18 @@ export function TanaNodeRowChrome({
       </button>
       <div className="min-w-0 flex-1">
         {target.systemNode ? (
-          <p className={projectionTitleClassName}>{displayTitle}</p>
+          <p className={projectionTitleClassName}>{target.titleExpression ? <TitleExpressionProjection segments={displaySegments} /> : displayTitle}</p>
         ) : isBlockReference && !isEditing ? (
-          <RichTitleProjection index={index} nodes={target.node.children} />
+          target.titleExpression ? (
+            <TitleExpressionProjection segments={displaySegments} />
+          ) : (
+            <RichTitleProjection index={index} nodes={target.node.children} />
+          )
         ) : (
           <ProjectionTitleInput
             autoFocus={isEditing}
             displayTitle={displayTitle}
+            displaySegments={target.titleExpression ? displaySegments : undefined}
             onExitEdit={onExitEdit}
             readOnly={titleIsExpression || variant === 'trash'}
             targetNodeId={target.id}

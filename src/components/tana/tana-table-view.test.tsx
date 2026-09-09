@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { renderToStaticMarkup } from 'react-dom/server';
 import { KEYS, type Value } from 'platejs';
-import { createPlateEditor } from 'platejs/react';
+import { createPlateEditor, Plate } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { buildTanaIndex } from '@/lib/tana';
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { TanaIndexProvider } from './tana-index-context';
 
 import {
   getTanaTableAvailableFieldIds,
@@ -15,6 +17,7 @@ import {
   groupTanaTableNodes,
   setTanaTableFieldValue,
   sortTanaTableNodes,
+  TanaTableView,
 } from './tana-table-view';
 
 function createEditor(value: Value) {
@@ -168,5 +171,65 @@ describe('Tana Table View', () => {
     assert.equal(field.fieldId, 'due-date');
     assert.deepEqual(field.values, [{ type: 'date', value: '2026-09-05' }]);
     assert.equal(field.valueNodeIds.length, 1);
+  });
+
+  test('renders computed title formatting in a Table title cell from safe segments', () => {
+    const value: Value = [
+      {
+        children: [{ text: 'Status' }],
+        id: 'status',
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagIds: ['tag'],
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'task-status',
+        indent: 1,
+        tanaFieldId: 'status',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Ready' }],
+        id: 'task-status-value',
+        indent: 2,
+        tanaFieldValueType: 'plain',
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Project' }],
+        id: 'tag',
+        tanaSupertagDefinition: { titleExpression: '<b>${Status}</b>' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Table' }],
+        id: 'view',
+        tanaViewDefinition: { type: 'table' },
+        type: KEYS.p,
+      },
+    ];
+    const editor = createEditor(value);
+    const index = buildTanaIndex(value);
+    const html = renderToStaticMarkup(
+      <Plate editor={editor}>
+        <TanaIndexProvider>
+          <TanaTableView
+            index={index}
+            results={[index.nodesById.get('task')!]}
+            view={index.nodesById.get('view')!}
+          />
+        </TanaIndexProvider>
+      </Plate>
+    );
+
+    assert.match(html, /<strong>Ready<\/strong>/);
+    assert.doesNotMatch(html, /&lt;b&gt;|<b>Ready<\/b>/);
+    assert.equal(value[1].children[0].text, 'Task');
   });
 });

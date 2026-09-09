@@ -34,6 +34,7 @@ import {
   getSupertagTemplateFields,
   isTanaTitleExpressionNameEditable,
   resolveTanaNodeTitle,
+  resolveTanaNodeTitleSegments,
   type FieldDefinition,
   type FieldValue,
   type NodeId,
@@ -434,6 +435,7 @@ function TableRow({
 }) {
   const editor = useEditorRef();
   const displayTitle = resolveTanaNodeTitle(index, node.id);
+  const displaySegments = resolveTanaNodeTitleSegments(index, node.id);
   const editableTitle = getProjectionEditableTitle(node);
 
   return (
@@ -451,6 +453,7 @@ function TableRow({
           </button>
           <ProjectionTitleInput
             displayTitle={displayTitle}
+            displaySegments={node.titleExpression ? displaySegments : undefined}
             readOnly={
               node.titleExpression !== undefined &&
               !isTanaTitleExpressionNameEditable(node.titleExpression)

@@ -8,7 +8,7 @@ import {
   BlockMenuPlugin,
   BlockSelectionPlugin,
 } from '@platejs/selection/react';
-import { KEYS, type TElement } from 'platejs';
+import { KEYS } from 'platejs';
 import {
   useEditorPlugin,
   useEditorReadOnly,
@@ -40,7 +40,36 @@ import {
   canTurnInto,
   canUseSlashCommand,
 } from '@/lib/tana/node-behavior';
-import { isTanaNodeActive } from '@/lib/tana';
+import {
+  getTanaProjectionTarget,
+  isTanaNodeActive,
+  type NodeId,
+  type TanaIndex,
+} from '@/lib/tana';
+
+/**
+ * Context-menu membership is always derived from canonical targets. This lets
+ * a Reference-only block selection expose the same removal choices without
+ * assigning transient membership to its occurrences.
+ */
+export function getSelectedCanonicalSupertagIds(
+  index: TanaIndex,
+  selectedNodeIds: readonly NodeId[]
+): NodeId[] {
+  const targetIds = new Set<NodeId>();
+  const supertagIds = new Set<NodeId>();
+
+  for (const nodeId of selectedNodeIds) {
+    const target = getTanaProjectionTarget(index, nodeId);
+
+    if (!target || targetIds.has(target.id)) continue;
+
+    targetIds.add(target.id);
+    target.supertagIds.forEach((supertagId) => supertagIds.add(supertagId));
+  }
+
+  return [...supertagIds];
+}
 
 export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const { api, editor } = useEditorPlugin(BlockMenuPlugin);
@@ -77,11 +106,7 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
   const supertagDefinitions = Array.from(index.nodesById.values()).filter(
     (node) => isTanaNodeActive(index, node.id) && node.semanticTypes.includes('supertag-definition')
   );
-  const selectedSupertagIds = Array.from(new Set(
-    selectedNodes.flatMap(([node]) =>
-      (node as TElement & { tanaSupertagIds?: readonly string[] }).tanaSupertagIds ?? []
-    )
-  ));
+  const selectedSupertagIds = getSelectedCanonicalSupertagIds(index, selectedNodeIds);
   const canZoomToSelection =
     !!selectedNode &&
     typeof selectedNodeId === 'string' &&
