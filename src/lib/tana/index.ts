@@ -509,6 +509,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
     const fieldNode: TanaFieldNode = {
       brokenFieldDefinition: !definition,
       fieldId,
+      hasStoredValue: valueNodes.some(hasStoredFieldValue),
       id: node.id,
       node: node.node as TanaBlockElement,
       parentNodeId,

@@ -159,4 +159,50 @@ describe('Tana Field presentation', () => {
       ['task']
     );
   });
+
+  test('derives every Field visibility policy from Definition data and stored Value presence', () => {
+    const cases: Array<{
+      hidden: boolean;
+      policy: 'always' | 'default' | 'never' | 'when-empty' | 'when-non-empty';
+      value?: string;
+    }> = [
+      { hidden: false, policy: 'default' },
+      { hidden: false, policy: 'never' },
+      { hidden: true, policy: 'always', value: 'set' },
+      { hidden: true, policy: 'when-empty' },
+      { hidden: false, policy: 'when-empty', value: 'set' },
+      { hidden: false, policy: 'when-non-empty' },
+      { hidden: true, policy: 'when-non-empty', value: 'set' },
+    ];
+
+    for (const { hidden, policy, value } of cases) {
+      const editor = createEditor([
+        { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+        {
+          children: [{ text: 'Status' }],
+          id: 'status',
+          tanaFieldDefinition: { type: 'plain', visibility: policy },
+          type: KEYS.p,
+        },
+      ]);
+      const fieldNodeId = editor.getTransforms(TanaFieldPlugin).field.materialize('task', 'status')!;
+
+      if (value) {
+        editor.getTransforms(TanaFieldPlugin).field.setValue('task', 'status', {
+          type: 'plain',
+          value,
+        });
+      }
+
+      const index = buildTanaIndex(editor.children);
+      const fieldPath = index.nodesById.get(fieldNodeId)!.path;
+
+      assert.equal(isTanaFieldNodePresentationHidden(editor.children, fieldPath), hidden);
+      assert.equal(
+        editor.children[0].tanaPresentation,
+        undefined,
+        `${policy} remains derived rather than an instance visibility write`
+      );
+    }
+  });
 });

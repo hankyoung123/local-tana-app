@@ -19,6 +19,7 @@ import {
 } from './outliner';
 import type {
   FieldDefinition,
+  FieldVisibilityPolicy,
   FieldValue,
   NodeId,
   TanaBlockElement,
@@ -66,6 +67,7 @@ export type TanaFieldDescriptor = {
   fieldId?: NodeId;
   /** The real Field occurrence Node that presentation can show or hide. */
   fieldNodeId?: NodeId;
+  hasStoredValue?: boolean;
   key: NodeId | TanaSystemFieldKey;
   label: string;
   pinned?: boolean;
@@ -73,6 +75,7 @@ export type TanaFieldDescriptor = {
   supertagIds?: readonly NodeId[];
   systemValue?: string;
   visible: boolean;
+  visibilityPolicy?: FieldVisibilityPolicy;
 };
 
 /** Field values are never coerced across Field Definition type changes. */
@@ -556,7 +559,12 @@ export function getNodeFieldDescriptors(
     ...descriptor,
     visible:
       descriptor.fieldNodeId === undefined ||
-      !hiddenFieldNodeIds.has(descriptor.fieldNodeId),
+      (!hiddenFieldNodeIds.has(descriptor.fieldNodeId) &&
+        !(
+          descriptor.visibilityPolicy === 'always' ||
+          (descriptor.visibilityPolicy === 'when-empty' && !descriptor.hasStoredValue) ||
+          (descriptor.visibilityPolicy === 'when-non-empty' && descriptor.hasStoredValue)
+        )),
   });
   const parentPath = getTanaParentPath(index.document, node.path);
   const parent = parentPath
@@ -633,10 +641,12 @@ export function getNodeFieldDescriptors(
         definition: field.fieldDefinition,
         fieldId: field.id,
         fieldNodeId: fieldNode.id,
+        hasStoredValue: fieldNode.hasStoredValue,
         key: fieldNode.id,
         label: field.text || '未命名字段',
         pinned: matchingTemplates.some(({ template }) => template.pinned),
         source: matchingSupertagIds.length > 0 ? 'supertag' : 'custom',
+        visibilityPolicy: field.fieldDefinition.visibility ?? 'default',
         ...(matchingSupertagIds.length > 0
           ? { supertagIds: matchingSupertagIds }
           : {}),

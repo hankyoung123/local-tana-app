@@ -311,14 +311,27 @@ function isFieldDefinition(value: unknown): value is {
 
   if (field.required !== undefined && field.required !== true) return false;
 
+  if (
+    field.visibility !== undefined &&
+    !['always', 'default', 'never', 'when-empty', 'when-non-empty'].includes(
+      field.visibility as string
+    )
+  ) {
+    return false;
+  }
+
   if (field.type === 'options') {
     return Object.keys(field).every(
-      (key) => key === 'type' || key === 'cardinality' || key === 'required'
+      (key) =>
+        key === 'type' ||
+        key === 'cardinality' ||
+        key === 'required' ||
+        key === 'visibility'
     );
   }
 
   if (field.type === 'number') {
-    if (!Object.keys(field).every((key) => ['type', 'cardinality', 'required', 'min', 'max'].includes(key))) {
+    if (!Object.keys(field).every((key) => ['type', 'cardinality', 'required', 'visibility', 'min', 'max'].includes(key))) {
       return false;
     }
 
@@ -334,13 +347,22 @@ function isFieldDefinition(value: unknown): value is {
 
   if (['checkbox', 'date', 'email', 'plain', 'url'].includes(field.type as string)) {
     return Object.keys(field).every(
-      (key) => key === 'type' || key === 'cardinality' || key === 'required'
+      (key) =>
+        key === 'type' ||
+        key === 'cardinality' ||
+        key === 'required' ||
+        key === 'visibility'
     );
   }
 
   return (
     Object.keys(field).every(
-      (key) => key === 'type' || key === 'cardinality' || key === 'required' || key === 'sourceSupertagId'
+      (key) =>
+        key === 'type' ||
+        key === 'cardinality' ||
+        key === 'required' ||
+        key === 'visibility' ||
+        key === 'sourceSupertagId'
     ) &&
     (field.sourceSupertagId === null ||
       (typeof field.sourceSupertagId === 'string' && field.sourceSupertagId.length > 0))

@@ -26,27 +26,38 @@ export type TanaSystemNode =
   | 'trash'
   | 'workspace';
 
-export type FieldDefinition =
-  | { cardinality?: FieldCardinality; required?: true; type: 'checkbox' }
-  | { cardinality?: FieldCardinality; required?: true; type: 'date' }
-  | { cardinality?: FieldCardinality; required?: true; type: 'email' }
+export type FieldVisibilityPolicy =
+  | 'always'
+  | 'default'
+  | 'never'
+  | 'when-empty'
+  | 'when-non-empty';
+
+type FieldDefinitionBase = {
+  cardinality?: FieldCardinality;
+  required?: true;
+  /** Visibility is presentation configuration, derived per occurrence. */
+  visibility?: FieldVisibilityPolicy;
+};
+
+export type FieldDefinition = FieldDefinitionBase & (
+  | { type: 'checkbox' }
+  | { type: 'date' }
+  | { type: 'email' }
   | {
-      cardinality?: FieldCardinality;
-      required?: true;
       sourceSupertagId: NodeId | null;
       type: 'from-supertag';
     }
   | {
-      cardinality?: FieldCardinality;
       max?: number;
       min?: number;
-      required?: true;
       type: 'number';
     }
   /** Option candidates are ordered direct child Nodes of this definition. */
-  | { cardinality?: FieldCardinality; required?: true; type: 'options' }
-  | { cardinality?: FieldCardinality; required?: true; type: 'plain' }
-  | { cardinality?: FieldCardinality; required?: true; type: 'url' };
+  | { type: 'options' }
+  | { type: 'plain' }
+  | { type: 'url' }
+);
 
 export type FieldType = FieldDefinition['type'];
 export type FieldCardinality = 'list' | 'single';
@@ -214,6 +225,8 @@ export type TanaFieldNode = {
   valueNodeId?: NodeId;
   /** Every direct Value Node, including invalid or incompatible history. */
   valueNodeIds: readonly NodeId[];
+  /** True when any direct Value Node has user-authored stored content. */
+  hasStoredValue: boolean;
   /** Decoded Values in document order, including semantically invalid values. */
   values: readonly FieldValue[];
 };

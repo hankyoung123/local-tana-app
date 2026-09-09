@@ -19,6 +19,45 @@ function getTanaNodeAt(document: Value, path: Path): TElement | undefined {
   return isElement(node) && isTanaNodeElement(node, path) ? node : undefined;
 }
 
+function hasStoredFieldValueNode(node: TanaBlockElement): boolean {
+  const visit = (candidate: TElement | { text: unknown }): boolean => {
+    if ('text' in candidate) {
+      return typeof candidate.text === 'string' && candidate.text.trim().length > 0;
+    }
+
+    return candidate.children.some((child) => {
+      if ('text' in child && typeof child.text === 'string' && child.text.trim().length > 0) {
+        return true;
+      }
+
+      if ('children' in child && Array.isArray(child.children)) {
+        const relationKey = (child as TElement & { key?: unknown }).key;
+
+        return (
+          (typeof relationKey === 'string' && relationKey.length > 0) || visit(child)
+        );
+      }
+
+      return false;
+    });
+  };
+
+  return visit(node);
+}
+
+function getFieldDefinitionForOccurrence(
+  document: Value,
+  fieldId: NodeId
+): TanaBlockElement['tanaFieldDefinition'] | undefined {
+  return getTanaNodePaths(document).flatMap((definitionPath) => {
+    const definition = getTanaNodeAt(document, definitionPath) as TanaBlockElement | undefined;
+
+    return definition?.id === fieldId && definition.tanaFieldDefinition
+      ? [definition.tanaFieldDefinition]
+      : [];
+  })[0];
+}
+
 /** Returns every top-level Plate block that participates in the outliner. */
 export function getTanaNodePaths(document: Value): Path[] {
   return document.flatMap((node, index) =>
@@ -219,6 +258,27 @@ export function isTanaFieldNodePresentationHidden(
 
       if (parent?.tanaPresentation?.hiddenFieldNodeIds?.includes(candidate.id)) {
         return true;
+      }
+
+      const definition = getFieldDefinitionForOccurrence(document, candidate.tanaFieldId);
+      const hasStoredValue = getTanaDirectChildPaths(document, candidatePath).some(
+        (valuePath) => {
+          const value = getTanaNodeAt(document, valuePath) as TanaBlockElement | undefined;
+
+          return value?.tanaFieldValueType !== undefined && hasStoredFieldValueNode(value);
+        }
+      );
+
+      switch (definition?.visibility ?? 'default') {
+        case 'always':
+          return true;
+        case 'when-empty':
+          return !hasStoredValue;
+        case 'when-non-empty':
+          return hasStoredValue;
+        case 'default':
+        case 'never':
+          break;
       }
     }
 

@@ -202,6 +202,32 @@ describe('Plate document persistence', () => {
       ]),
       false
     );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain', visibility: 'when-empty' },
+            type: 'p',
+          },
+        ])
+      ),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain', visibility: 'sometimes' },
+            type: 'p',
+          },
+        ])
+      ),
+      false
+    );
   });
 
   test('rejects duplicate and single Field structure while retaining invalid historical values', () => {

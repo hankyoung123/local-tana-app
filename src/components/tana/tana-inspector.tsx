@@ -26,6 +26,7 @@ import {
   resolveTanaNodeTitle,
   type FieldDefinition,
   type FieldType,
+  type FieldVisibilityPolicy,
   type NodeId,
   type TanaBlockElement,
   type TanaFieldDescriptor,
@@ -59,6 +60,14 @@ const fieldTypes: readonly FieldType[] = [
   'from-supertag',
   'url',
 ];
+
+const fieldVisibilityPolicyLabels: Record<FieldVisibilityPolicy, string> = {
+  always: '始终隐藏',
+  default: '默认显示',
+  never: '从不隐藏',
+  'when-empty': '值为空时隐藏',
+  'when-non-empty': '有值时隐藏',
+};
 
 /**
  * The Inspector owns semantic configuration, Field source navigation, and
@@ -555,6 +564,7 @@ function FieldDefinitionEditor({
     const shared = {
       ...(definition.cardinality === 'list' ? { cardinality: 'list' as const } : {}),
       ...(definition.required === true ? { required: true as const } : {}),
+      ...(definition.visibility ? { visibility: definition.visibility } : {}),
     };
     const nextDefinition: FieldDefinition =
       type === 'from-supertag'
@@ -593,6 +603,17 @@ function FieldDefinitionEditor({
         ? { ...definitionWithoutRequired, required: true }
         : definitionWithoutRequired
     );
+  };
+
+  const setVisibilityPolicy = (visibility: FieldVisibilityPolicy) => {
+    const next = { ...definition } as FieldDefinition & {
+      visibility?: FieldVisibilityPolicy;
+    };
+
+    if (visibility === 'default') delete next.visibility;
+    else next.visibility = visibility;
+
+    fieldTransforms.updateDefinition(fieldId, next);
   };
 
   const updateNumberBoundary = (boundary: 'max' | 'min', rawValue: string) => {
@@ -675,6 +696,27 @@ function FieldDefinitionEditor({
         必填（未设置时显示提示）
       </label>
 
+      <div className="mt-3">
+        <p className="mb-1.5 text-[var(--tana-text-tertiary)] text-[11px]">字段可见性</p>
+        <Select
+          value={definition.visibility ?? 'default'}
+          onValueChange={(value) => setVisibilityPolicy(value as FieldVisibilityPolicy)}
+        >
+          <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(fieldVisibilityPolicyLabels) as FieldVisibilityPolicy[]).map(
+              (policy) => (
+                <SelectItem key={policy} value={policy}>
+                  {fieldVisibilityPolicyLabels[policy]}
+                </SelectItem>
+              )
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
       {definition.type === 'from-supertag' && (
         <div className="mt-3">
           <p className="mb-1.5 text-[var(--tana-text-tertiary)] text-[11px]">候选来源</p>
@@ -684,6 +726,7 @@ function FieldDefinitionEditor({
               fieldTransforms.updateDefinition(fieldId, {
                 ...(definition.cardinality === 'list' ? { cardinality: 'list' as const } : {}),
                 ...(definition.required === true ? { required: true as const } : {}),
+                ...(definition.visibility ? { visibility: definition.visibility } : {}),
                 sourceSupertagId,
                 type: 'from-supertag',
               })
