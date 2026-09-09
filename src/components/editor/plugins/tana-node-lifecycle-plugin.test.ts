@@ -9,9 +9,11 @@ import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex, searchTanaNodes } from '@/lib/tana/index';
+import { getNodeFieldDescriptors } from '@/lib/tana/fields';
 import { getTanaNodePath } from '@/lib/tana/outliner';
 import { createAndQuery, runTanaQuery } from '@/lib/tana/query';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
+import { TanaFieldPlugin } from './tana-field-plugin';
 
 function createEditor(value: Value) {
   const editor = createPlateEditor({
@@ -186,6 +188,61 @@ describe('Tana Node lifecycle', () => {
     assert.deepEqual(index.backlinks.get('project-node')?.map(({ sourceNodeId }) => sourceNodeId), [
       'project-reference',
     ]);
+  });
+
+  test('keeps Field occurrences broken through definition Trash and permanent delete without same-name rebinding', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+
+    assert.equal(lifecycle(editor).trash('status'), true);
+    let index = buildTanaIndex(editor.children);
+    let occurrence = index.fieldNodesById.get('project-status');
+    let descriptor = getNodeFieldDescriptors(index, 'project-node').find(
+      (field) => field.fieldNodeId === 'project-status'
+    );
+
+    assert.equal(occurrence?.brokenFieldDefinition, true);
+    assert.deepEqual(occurrence?.values, [{ type: 'plain', value: 'Open' }]);
+    assert.equal(descriptor?.brokenFieldDefinition, true);
+    assert.equal(descriptor?.fieldDefinitionInTrash, true);
+    assert.match(descriptor?.label ?? '', /已移至回收站/);
+    const beforeBrokenWrite = structuredClone(editor.children);
+    assert.equal(
+      editor.getTransforms(TanaFieldPlugin).field.setValue('project-node', 'status', {
+        type: 'plain',
+        value: 'must not write',
+      }),
+      false
+    );
+    assert.deepEqual(editor.children, beforeBrokenWrite);
+
+    assert.equal(lifecycle(editor).restore('status'), true);
+    index = buildTanaIndex(editor.children);
+    occurrence = index.fieldNodesById.get('project-status');
+    assert.equal(occurrence?.brokenFieldDefinition, false);
+    assert.deepEqual(occurrence?.values, [{ type: 'plain', value: 'Open' }]);
+
+    assert.equal(lifecycle(editor).trash('status'), true);
+    assert.equal(lifecycle(editor).deletePermanently('status'), true);
+    editor.tf.insertNodes(
+      {
+        children: [{ text: 'Status' }],
+        id: 'replacement-status',
+        indent: 2,
+        tanaFieldDefinition: { type: 'plain' },
+        type: KEYS.p,
+      },
+      { at: [8] }
+    );
+
+    index = buildTanaIndex(editor.children);
+    occurrence = index.fieldNodesById.get('project-status');
+    descriptor = getNodeFieldDescriptors(index, 'project-node').find(
+      (field) => field.fieldNodeId === 'project-status'
+    );
+    assert.equal(occurrence?.fieldId, 'status');
+    assert.equal(occurrence?.brokenFieldDefinition, true);
+    assert.equal(descriptor?.fieldDefinitionInTrash, false);
+    assert.equal(descriptor?.label, '已删除字段');
   });
 
   test('routes ordinary root removal into Trash and never permits system Nodes in lifecycle transforms', () => {

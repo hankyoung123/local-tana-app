@@ -7,7 +7,7 @@ import type {
   TanaQueryExpression,
   TanaQueryPredicate,
 } from "./types";
-import { isFieldDefined, isFieldValueValid } from "./fields";
+import { isFieldDefined, isFieldValueCompatible } from "./fields";
 import { isTanaNodeActive } from "./index";
 
 export function getFieldDefinition(
@@ -55,7 +55,8 @@ export function isTanaQueryPredicateValid(
     case "field-exists":
       return !!getFieldDefinition(index, predicate.fieldId);
     case "field-equals":
-      return isFieldValueValid(index, predicate.fieldId, predicate.value);
+      return !!getFieldDefinition(index, predicate.fieldId) &&
+        isFieldValueCompatible(getFieldDefinition(index, predicate.fieldId)!, predicate.value);
     case "text-contains":
       return predicate.text.trim().length > 0;
     case "child-of":
@@ -186,7 +187,7 @@ export function matchesTanaQueryPredicate(
           .get(node.id)
           ?.some(
             (field) =>
-              field.fieldId === predicate.fieldId && field.values.length > 0,
+              field.fieldId === predicate.fieldId && field.hasStoredValue,
           ) ?? false
       );
     case "has-supertag":

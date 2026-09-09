@@ -181,6 +181,17 @@ function getCanonicalFieldHostId(editor: PlateEditor, nodeId: NodeId): NodeId | 
   return getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId)?.id;
 }
 
+/** A trashed or missing Definition keeps old relations readable but cannot be written. */
+function getLiveFieldDefinitionEntry(editor: PlateEditor, fieldId: NodeId) {
+  const index = buildTanaIndex(editor.children);
+
+  if (getTanaProjectionTarget(index, fieldId)?.id !== fieldId) return;
+
+  const entry = getTanaNodeEntry(editor, fieldId);
+
+  return entry?.[0].tanaFieldDefinition ? entry : undefined;
+}
+
 /**
  * Field commands are user-facing document actions. Start one history batch
  * unless a parent command (for example Supertag apply) already owns it.
@@ -327,7 +338,7 @@ function materialize(
 
   parentNodeId = canonicalParentNodeId;
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
-  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  const fieldEntry = getLiveFieldDefinitionEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
   if (!parentEntry || !definition || !isTanaFieldHostNode(editor.children, parentEntry[1])) {
@@ -373,7 +384,7 @@ function writeValue(
   parentNodeId = canonicalParentNodeId;
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getFieldNodeEntry(editor, parentNodeId, fieldId);
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (
     !parentEntry ||
@@ -421,6 +432,56 @@ function setValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, value: F
   return writeValue(editor, nodeId, fieldId, value);
 }
 
+/** Writes scalar text without treating a decoder failure as a rejected edit. */
+function setRawScalarValue(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  fieldId: NodeId,
+  text: string,
+  valueNodeId?: NodeId
+): boolean {
+  const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+
+  if (
+    !canonicalNodeId ||
+    !definition ||
+    !['date', 'email', 'number', 'plain', 'url'].includes(definition.type)
+  ) {
+    return false;
+  }
+
+  const fieldNodeId = materialize(editor, canonicalNodeId, fieldId);
+
+  if (!fieldNodeId) return false;
+
+  const fieldEntry = getFieldNodeEntry(editor, canonicalNodeId, fieldId);
+  if (!fieldEntry) return false;
+
+  const entries = getDirectValueEntries(editor, fieldEntry[1]);
+  const valueEntry = valueNodeId
+    ? getDirectValueEntryById(editor, fieldEntry[1], valueNodeId)
+    : entries[0] ?? insertValueChild(editor, fieldEntry, definition);
+
+  if (!valueEntry) return false;
+
+  const [valueNode, valuePath] = valueEntry;
+
+  editor.tf.withoutNormalizing(() => {
+    editor.tf.removeNodes({ at: valuePath });
+    editor.tf.insertNodes(
+      {
+        ...valueNode,
+        children: [{ text }],
+        tanaFieldValueType: definition.type,
+      },
+      { at: valuePath }
+    );
+  });
+
+  return true;
+}
+
 /** Writes one existing list Value Node; the Field itself remains the owner. */
 function setValueAt(
   editor: PlateEditor,
@@ -429,7 +490,7 @@ function setValueAt(
   valueNodeId: NodeId,
   value: FieldValue
 ) {
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (definition?.cardinality !== 'list') return false;
 
@@ -447,12 +508,43 @@ function addValue(
   if (!canonicalNodeId) return;
 
   nodeId = canonicalNodeId;
-  const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  let fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
-  if (!fieldEntry || definition?.cardinality !== 'list') return;
+  if (definition?.cardinality !== 'list') return;
   if (value !== undefined && !isFieldValueCompatible(definition, value)) {
     return;
+  }
+
+  // A Table or Reference projection may expose a configured list Field before
+  // it has a real occurrence. Materialize the normal Field/Value subtree in
+  // the same user batch, then reuse its first empty Value instead of adding a
+  // second placeholder sibling.
+  if (!fieldEntry) {
+    const fieldNodeId = materialize(editor, nodeId, fieldId);
+
+    if (!fieldNodeId) return;
+    fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
+    const initialValue = fieldEntry && getDirectValueEntries(editor, fieldEntry[1])[0];
+
+    if (!fieldEntry || !initialValue || typeof initialValue[0].id !== 'string') return;
+    if (value !== undefined) writeValue(editor, nodeId, fieldId, value, initialValue[0].id);
+
+    if (value === undefined) {
+      const point = editor.api.start(initialValue[1]);
+
+      if (point) {
+        editor.tf.navigation.navigate({
+          flash: false,
+          focus: true,
+          scroll: true,
+          select: point,
+          target: { path: initialValue[1], type: 'node' },
+        });
+      }
+    }
+
+    return initialValue[0].id;
   }
 
   const entry = insertValueChild(editor, fieldEntry, definition, value);
@@ -487,7 +579,7 @@ function removeValue(
 
   nodeId = canonicalNodeId;
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (!fieldEntry || definition?.cardinality !== 'list') return false;
 
@@ -508,7 +600,7 @@ function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, valu
   const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
   if (!canonicalNodeId) return false;
   nodeId = canonicalNodeId;
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
   if (!definition || !isFieldValueCompatible(definition, value)) return false;
 
   const fieldNodeId = materialize(editor, nodeId, fieldId);
@@ -530,7 +622,7 @@ function clearValue(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
   if (!canonicalNodeId) return false;
   nodeId = canonicalNodeId;
   const fieldEntry = getFieldNodeEntry(editor, nodeId, fieldId);
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (!fieldEntry || !definition) return false;
 
@@ -613,7 +705,7 @@ function createDefinition(
 }
 
 function updateDefinition(editor: PlateEditor, fieldId: NodeId, definition: FieldDefinition) {
-  const entry = getTanaNodeEntry(editor, fieldId);
+  const entry = getLiveFieldDefinitionEntry(editor, fieldId);
 
   if (!entry?.[0].tanaFieldDefinition) return false;
 
@@ -694,7 +786,7 @@ function setPinned(editor: PlateEditor, templateNodeId: NodeId, pinned: boolean)
 
 function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
   const normalizedName = name.trim();
-  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  const fieldEntry = getLiveFieldDefinitionEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
   if (!normalizedName || !fieldEntry || definition?.type !== 'options') return;
@@ -728,7 +820,7 @@ function createOptionAndAssign(
   valueNodeId?: NodeId
 ): boolean {
   const canonicalNodeId = getCanonicalFieldHostId(editor, nodeId);
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
 
   if (!canonicalNodeId || definition?.type !== 'options') return false;
 
@@ -765,7 +857,7 @@ function createOptionAndAssign(
 }
 
 function removeOption(editor: PlateEditor, fieldId: NodeId, optionId: NodeId) {
-  const fieldEntry = getTanaNodeEntry(editor, fieldId);
+  const fieldEntry = getLiveFieldDefinitionEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
 
   if (!fieldEntry || definition?.type !== 'options') {
@@ -794,7 +886,7 @@ function materializeInputNode(
   fieldId: NodeId
 ): NodeId | undefined {
   const inputEntry = editor.api.node(inputPath) as NodeEntry<TanaBlockElement> | undefined;
-  const definition = getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition;
+  const definition = getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition;
   const parentPath = getTanaParentPath(editor.children, inputPath);
 
   if (
@@ -848,7 +940,7 @@ function completeTemplateInput(
     const fieldId = choice.fieldId;
 
     if (
-      !getTanaNodeEntry(editor, fieldId)?.[0].tanaFieldDefinition ||
+      !getLiveFieldDefinitionEntry(editor, fieldId)?.[0].tanaFieldDefinition ||
       getFieldNode(editor, supertagId, fieldId)
     ) {
       return;
@@ -1013,6 +1105,15 @@ export const TanaFieldPlugin = createPlatePlugin({
         withFieldHistoryBatch(editor, () => removeOption(editor, fieldId, optionId)),
       setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
         withFieldHistoryBatch(editor, () => setValue(editor, nodeId, fieldId, value)),
+      setRawScalarValue: (
+        nodeId: NodeId,
+        fieldId: NodeId,
+        text: string,
+        valueNodeId?: NodeId
+      ) =>
+        withFieldHistoryBatch(editor, () =>
+          setRawScalarValue(editor, nodeId, fieldId, text, valueNodeId)
+        ),
       setValueAt: (
         nodeId: NodeId,
         fieldId: NodeId,

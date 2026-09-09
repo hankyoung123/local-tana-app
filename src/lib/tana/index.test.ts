@@ -349,6 +349,17 @@ test('search includes Field labels and values, Supertags, and reference target s
   }
 });
 
+test('search includes stored scalar text even when the current Field decoder cannot parse it', () => {
+  const index = buildTanaIndex([
+    { id: 'estimate', type: 'p', tanaFieldDefinition: { type: 'number' as const }, children: [{ text: 'Estimate' }] },
+    { id: 'task', type: 'p', children: [{ text: 'Task' }] },
+    { id: 'task-estimate', type: 'p', indent: 1, tanaFieldId: 'estimate', children: [{ text: '' }] },
+    { id: 'task-estimate-value', type: 'p', indent: 2, tanaFieldValueType: 'number' as const, children: [{ text: 'draft-number' }] },
+  ]);
+
+  assert.deepEqual(searchTanaNodes(index, 'draft-number').map(({ id }) => id), ['task']);
+});
+
 test('search excludes broken, trashed-target and chained References without falling back to occurrence text', () => {
   const document: Value = [
     { id: 'target', type: 'p', children: [{ text: 'Canonical title' }] },

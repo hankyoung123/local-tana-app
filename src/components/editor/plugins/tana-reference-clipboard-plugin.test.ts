@@ -7,6 +7,7 @@ import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { buildTanaIndex } from '@/lib/tana/index';
 import { duplicateTanaSubtree } from './tana-node-identity-plugin';
 import { TanaReferencePlugin } from './tana-reference-plugin';
 import {
@@ -198,4 +199,29 @@ test('Duplicate remains an independent subtree copy rather than a Reference', ()
   assert.notEqual(copy?.id, 'target');
   assert.equal(copy?.tanaReferenceTargetId, undefined);
   assert.equal(copy?.children[0]?.text, 'Target');
+});
+
+test('Duplicate keeps a Field occurrence and list Value subtree owned by the fresh Host IDs', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { cardinality: 'list', type: 'plain' }, type: KEYS.p },
+    { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+    { children: [{ text: 'One' }], id: 'task-status-one', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    { children: [{ text: 'Two' }], id: 'task-status-two', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+  ]);
+
+  const copiedIds = duplicateTanaSubtree(editor, [[1]]);
+  const copiedHostId = copiedIds[0]!;
+  const copiedIndex = buildTanaIndex(editor.children);
+  const copiedField = copiedIndex.fieldNodesByParent.get(copiedHostId)?.[0];
+
+  assert.equal(copiedIds.length, 4);
+  assert.notEqual(copiedHostId, 'task');
+  assert.notEqual(copiedField?.id, 'task-status');
+  assert.equal(copiedField?.fieldId, 'status');
+  assert.deepEqual(copiedField?.values, [
+    { type: 'plain', value: 'One' },
+    { type: 'plain', value: 'Two' },
+  ]);
+  assert.deepEqual(copiedField?.valueNodeIds.every((id) => !['task-status-one', 'task-status-two'].includes(id)), true);
 });

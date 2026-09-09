@@ -116,12 +116,22 @@ export function canTurnInto(
   return canSelect(node, context);
 }
 
-/** Trash lifecycle only accepts Nodes whose semantic subtree is not Field-owned. */
+/**
+ * A Definition owns an ordinary subtree (including real Option Nodes), so its
+ * lifecycle can move it to Trash as one unit. Field occurrences and Values
+ * remain protected because moving either would split a Host-owned relation.
+ */
 export function canTrash(
   node: TElement,
   context: TanaNodeSemanticContext = {}
 ): boolean {
-  return canSelect(node, context);
+  if (isSystemNode(node)) return false;
+
+  const semantics = getNodeSemanticTypes(node, context);
+
+  return !semantics.some(
+    (semantic) => semantic === 'field' || semantic === 'option' || semantic === 'value'
+  );
 }
 
 /** Slash remains Plate-owned, but only ordinary content can start a generic command. */

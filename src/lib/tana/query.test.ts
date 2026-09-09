@@ -200,6 +200,32 @@ describe("runTanaQuery", () => {
     );
   });
 
+  test("treats invalid and incompatible stored Values as existing rather than absent", () => {
+    const advisoryIndex = buildTanaIndex([
+      { children: [{ text: "Estimate" }], id: "estimate", tanaFieldDefinition: { max: 8, type: "number" }, type: "p" },
+      { children: [{ text: "Task" }], id: "task", type: "p" },
+      { children: [{ text: "" }], id: "task-estimate", indent: 1, tanaFieldId: "estimate", type: "p" },
+      { children: [{ text: "draft" }], id: "task-estimate-value", indent: 2, tanaFieldValueType: "number", type: "p" },
+      { children: [{ text: "Historical" }], id: "historical", type: "p" },
+      { children: [{ text: "" }], id: "historical-estimate", indent: 1, tanaFieldId: "estimate", type: "p" },
+      { children: [{ text: "legacy" }], id: "historical-estimate-value", indent: 2, tanaFieldValueType: "plain", type: "p" },
+    ]);
+    const exists = { fieldId: "estimate", kind: "field-exists" } as const;
+
+    assert.deepEqual(
+      runTanaQuery(advisoryIndex, createAndQuery([exists])).map(({ id }) => id),
+      ["task", "historical"]
+    );
+    assert.equal(
+      isTanaQueryPredicateValid(advisoryIndex, {
+        fieldId: "estimate",
+        kind: "field-equals",
+        value: { type: "number", value: 99 },
+      }),
+      true
+    );
+  });
+
   test("treats both a template-derived and an ad-hoc Field Node as field-defined", () => {
     assert.deepEqual(
       run([{ fieldId: "estimate", kind: "field-defined" }]).map(({ id }) => id),
@@ -376,7 +402,7 @@ describe("runTanaQuery", () => {
         kind: "field-equals",
         value: { type: "options", value: "alpha" },
       }),
-      false,
+      true,
     );
     assert.equal(
       isTanaQueryPredicateValid(index, { kind: "text-contains", text: "  " }),

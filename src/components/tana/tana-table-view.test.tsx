@@ -173,6 +173,55 @@ describe('Tana Table View', () => {
     assert.equal(field.valueNodeIds.length, 1);
   });
 
+  test('writes a Reference Table cell through to its live canonical target', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+      { children: [{ text: '' }], id: 'target-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Before' }], id: 'target-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Reference occurrence' }], id: 'reference', tanaReferenceTargetId: 'target', type: KEYS.p },
+    ]);
+
+    assert.equal(
+      setTanaTableFieldValue(editor, 'reference', 'status', { type: 'plain', value: 'After' }),
+      true
+    );
+
+    const index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.fieldNodesByParent.get('target')?.[0]?.values, [
+      { type: 'plain', value: 'After' },
+    ]);
+    assert.equal(index.fieldNodesByParent.has('reference'), false);
+    assert.deepEqual(getTanaTableFieldIds(index, [index.nodesById.get('reference')!]), ['status']);
+  });
+
+  test('renders stored invalid scalar text as an editable warning rather than dropping it', () => {
+    const value: Value = [
+      { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { max: 8, type: 'number' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-estimate', indent: 1, tanaFieldId: 'estimate', type: KEYS.p },
+      { children: [{ text: 'draft' }], id: 'task-estimate-value', indent: 2, tanaFieldValueType: 'number', type: KEYS.p },
+      { children: [{ text: 'Table' }], id: 'view', tanaViewDefinition: { type: 'table' }, type: KEYS.p },
+    ];
+    const editor = createEditor(value);
+    const index = buildTanaIndex(value);
+    const html = renderToStaticMarkup(
+      <Plate editor={editor}>
+        <TanaIndexProvider>
+          <TanaTableView
+            index={index}
+            results={[index.nodesById.get('task')!]}
+            view={index.nodesById.get('view')!}
+          />
+        </TanaIndexProvider>
+      </Plate>
+    );
+
+    assert.match(html, /value="draft"/);
+    assert.match(html, /需修正：数字或范围无效/);
+    assert.match(html, /aria-invalid="true"/);
+  });
+
   test('renders computed title formatting in a Table title cell from safe segments', () => {
     const value: Value = [
       {

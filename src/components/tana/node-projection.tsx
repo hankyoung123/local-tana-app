@@ -6,10 +6,21 @@ import type { Descendant, TElement, TText } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
+import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
 import {
   getNodeDisplayNameFromIndex,
+  getFieldValueCandidates,
   getTanaReferenceTargetResolution,
   isTanaNodeInTrash,
   resolveTanaNodeTitle,
@@ -18,6 +29,7 @@ import {
   isTanaTitleExpressionNameEditable,
   type NodeId,
   type TanaFieldNode,
+  type FieldValue,
   type TanaIndex,
   type TanaNode,
   type TanaTitleExpressionSegment,
@@ -228,11 +240,17 @@ export function TanaNodeRowChrome({
     if (fieldIds && !fieldIds.includes(field.fieldId)) return [];
 
     const definition = index.nodesById.get(field.fieldId);
-    const value = getFieldValueLabel(index, field);
 
-    return value === undefined
-      ? []
-      : [{ id: field.id, label: definition?.text || '未命名字段', value }];
+    return [{
+      field,
+      id: field.id,
+      label: field.brokenFieldDefinition
+        ? isTanaNodeInTrash(index, field.fieldId)
+          ? `${definition?.text || '字段'}（已移至回收站）`
+          : '已删除字段'
+        : definition?.text || '未命名字段',
+      value: getFieldValueLabel(index, field),
+    }];
   });
   const displayTitle = resolveTanaNodeTitle(index, target.id);
   const displaySegments = resolveTanaNodeTitleSegments(index, target.id);
@@ -310,13 +328,210 @@ export function TanaNodeRowChrome({
         {fields.length > 0 && (
           <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[var(--tana-text-tertiary)] text-[11px] leading-4">
             {fields.map((field) => (
-              <span key={field.id}>{field.label}: {field.value}</span>
+              isEditing && variant !== 'trash' ? (
+                <ProjectionFieldControl
+                  field={field.field}
+                  index={index}
+                  key={field.id}
+                  label={field.label}
+                  targetNodeId={target.id}
+                />
+              ) : (
+                <span key={field.id}>
+                  {field.label}{field.value === undefined ? '' : `: ${field.value}`}
+                </span>
+              )
             ))}
           </div>
         )}
       </div>
     </div>
   );
+}
+
+/**
+ * Edit-mode controls are a view over the existing canonical Field Nodes. They
+ * deliberately carry neither values nor a projection editor: every event
+ * delegates straight to the Field transforms with the canonical Host id.
+ */
+function ProjectionFieldControl({
+  field,
+  index,
+  label,
+  targetNodeId,
+}: {
+  field: TanaFieldNode;
+  index: TanaIndex;
+  label: string;
+  targetNodeId: NodeId;
+}) {
+  const editor = useEditorRef();
+  const definition = field.brokenFieldDefinition
+    ? undefined
+    : index.nodesById.get(field.fieldId)?.fieldDefinition;
+  const inTrash = isTanaNodeInTrash(index, field.fieldId);
+  const transforms = editor.getTransforms(TanaFieldPlugin).field;
+
+  if (!definition) {
+    return (
+      <span className="flex items-center gap-1" role="status">
+        <span>{inTrash ? '字段定义已移至回收站' : '字段定义已删除'}</span>
+        {inTrash && (
+          <button
+            aria-label="恢复字段定义"
+            className="rounded px-1 text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+            type="button"
+            onClick={() => editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(field.fieldId)}
+          >
+            恢复
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  const valueNodeIds = definition.cardinality === 'list'
+    ? field.valueNodeIds
+    : field.valueNodeId ? [field.valueNodeId] : [];
+
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[var(--tana-text-tertiary)]">{label}:</span>
+      {valueNodeIds.map((valueNodeId) => (
+        <ProjectionFieldValueControl
+          definition={definition}
+          field={field}
+          index={index}
+          key={valueNodeId}
+          targetNodeId={targetNodeId}
+          valueNodeId={valueNodeId}
+        />
+      ))}
+      {definition.cardinality === 'list' && (
+        <button
+          aria-label={`添加${label}字段值`}
+          className="rounded px-1 text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+          type="button"
+          onClick={() => transforms.addValue(targetNodeId, field.fieldId)}
+        >
+          添加
+        </button>
+      )}
+    </span>
+  );
+}
+
+function ProjectionFieldValueControl({
+  definition,
+  field,
+  index,
+  targetNodeId,
+  valueNodeId,
+}: {
+  definition: NonNullable<TanaNode['fieldDefinition']>;
+  field: TanaFieldNode;
+  index: TanaIndex;
+  targetNodeId: NodeId;
+  valueNodeId: NodeId;
+}) {
+  const editor = useEditorRef();
+  const transforms = editor.getTransforms(TanaFieldPlugin).field;
+  const value = field.valueByNodeId.get(valueNodeId);
+  const warning = (field.validationIssuesByValueNodeId.get(valueNodeId) ?? []).length > 0;
+  const warningId = `projection-field-warning-${valueNodeId}`;
+  const clear = () => definition.cardinality === 'list'
+    ? transforms.removeValue(targetNodeId, field.fieldId, valueNodeId)
+    : transforms.clearValue(targetNodeId, field.fieldId);
+  const set = (next: FieldValue) => definition.cardinality === 'list'
+    ? transforms.setValueAt(targetNodeId, field.fieldId, valueNodeId, next)
+    : transforms.setValue(targetNodeId, field.fieldId, next);
+
+  if (definition.type === 'checkbox') {
+    return (
+      <span className="flex items-center gap-1">
+        <Checkbox
+          aria-describedby={warning ? warningId : undefined}
+          aria-invalid={warning || undefined}
+          aria-label="复选框字段值"
+          checked={value?.type === 'checkbox' ? value.value : false}
+          onCheckedChange={(checked) => {
+            if (typeof checked === 'boolean') set({ type: 'checkbox', value: checked });
+          }}
+        />
+        <ProjectionFieldWarning id={warningId} warning={warning} />
+      </span>
+    );
+  }
+
+  if (definition.type === 'options' || definition.type === 'from-supertag') {
+    const selected = value?.type === definition.type ? value.value : undefined;
+
+    return (
+      <span className="flex items-center gap-1">
+        <Select
+          value={selected}
+          onValueChange={(candidateId) => set({
+            type: definition.type,
+            value: candidateId,
+          } as Extract<FieldValue, { type: 'options' | 'from-supertag' }>)}
+        >
+          <SelectTrigger
+            aria-describedby={warning ? warningId : undefined}
+            aria-invalid={warning || undefined}
+            className="h-6 min-w-24 border-0 bg-transparent px-1 text-[11px] shadow-none"
+          >
+            <SelectValue placeholder="未设置" />
+          </SelectTrigger>
+          <SelectContent>
+            {getFieldValueCandidates(index, field.fieldId).map((candidate) => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.text || '未命名节点'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button aria-label="清除字段值" className="rounded px-1 hover:bg-[var(--tana-hover)]" type="button" onClick={clear}>清除</button>
+        <ProjectionFieldWarning id={warningId} warning={warning} />
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <input
+        aria-describedby={warning ? warningId : undefined}
+        aria-invalid={warning || undefined}
+        aria-label="字段值"
+        className="h-6 min-w-24 rounded bg-transparent px-1 text-[11px] outline-none hover:bg-[var(--tana-hover)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
+        defaultValue={index.nodesById.get(valueNodeId)?.text ?? ''}
+        inputMode={definition.type === 'number' ? 'decimal' : undefined}
+        placeholder={definition.type === 'date' ? 'YYYY-MM-DD' : undefined}
+        type="text"
+        onBlur={(event) => {
+          const text = event.currentTarget.value;
+          if (text === '') clear();
+          else transforms.setRawScalarValue(targetNodeId, field.fieldId, text, valueNodeId);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            event.currentTarget.value = index.nodesById.get(valueNodeId)?.text ?? '';
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <button aria-label="清除字段值" className="rounded px-1 hover:bg-[var(--tana-hover)]" type="button" onClick={clear}>清除</button>
+      <ProjectionFieldWarning id={warningId} warning={warning} />
+    </span>
+  );
+}
+
+function ProjectionFieldWarning({ id, warning }: { id: string; warning: boolean }) {
+  return warning ? (
+    <span className="text-amber-700 dark:text-amber-300" id={id} role="status">
+      需修正：字段值需要修正
+    </span>
+  ) : null;
 }
 
 /**

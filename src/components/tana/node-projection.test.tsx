@@ -114,3 +114,61 @@ test('normal and Reference projections render formatted title expression segment
   assert.doesNotMatch(reference, /stale occurrence/);
   assert.equal(value[1].children[0].text, 'Target');
 });
+
+test('Reference edit projection reads canonical Fields and exposes canonical controls without copying them', () => {
+  const value: Value = [
+    { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+    { children: [{ text: '' }], id: 'target-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+    { children: [{ text: 'Canonical value' }], id: 'target-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    { children: [{ text: 'Occurrence title' }], id: 'reference', tanaReferenceTargetId: 'target', type: KEYS.p },
+  ];
+  const editor = createPlateEditor({ plugins: EditorKit, value });
+  const html = renderToStaticMarkup(
+    <Plate editor={editor}>
+      <TanaIndexProvider>
+        <NodeProjection
+          index={buildTanaIndex(value)}
+          isEditing
+          targetNodeId="reference"
+          variant="block-reference"
+        />
+      </TanaIndexProvider>
+    </Plate>
+  );
+
+  assert.match(html, /Status:/);
+  assert.match(html, /value="Canonical value"/);
+  assert.match(html, /aria-label="字段值"/);
+  assert.doesNotMatch(html, /Occurrence title/);
+  assert.equal(value.some((node) => node.id === 'reference-status'), false);
+});
+
+test('a trashed Field Definition remains a broken canonical relation with an accessible restore action', () => {
+  const value: Value = [
+    { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+    { children: [{ text: '' }], id: 'target-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+    { children: [{ text: 'Retained value' }], id: 'target-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+    { children: [{ text: 'Status' }], id: 'status', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+  ];
+  const editor = createPlateEditor({ plugins: EditorKit, value });
+  const index = buildTanaIndex(value);
+  const html = renderToStaticMarkup(
+    <Plate editor={editor}>
+      <TanaIndexProvider>
+        <TanaNodeRowChrome
+          index={index}
+          isEditing
+          target={index.nodesById.get('target')!}
+          variant="search-result"
+        />
+      </TanaIndexProvider>
+    </Plate>
+  );
+
+  assert.equal(index.fieldNodesById.get('target-status')?.brokenFieldDefinition, true);
+  assert.deepEqual(index.fieldNodesById.get('target-status')?.values, [{ type: 'plain', value: 'Retained value' }]);
+  assert.match(html, /字段定义已移至回收站/);
+  assert.match(html, /aria-label="恢复字段定义"/);
+});

@@ -290,6 +290,64 @@ describe('Field occurrence Nodes', () => {
     );
   });
 
+  test('stores raw scalar edits through the Field writer, including invalid text and undo/redo', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Estimate' }],
+        id: 'estimate',
+        tanaFieldDefinition: { max: 8, type: 'number' },
+        type: KEYS.p,
+      },
+    ]);
+
+    field(editor).materialize('task', 'estimate');
+    const valueNodeId = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!.valueNodeId!;
+
+    assert.equal(field(editor).setRawScalarValue('task', 'estimate', 'draft', valueNodeId), true);
+    let index = buildTanaIndex(editor.children);
+    let occurrence = index.fieldNodesByParent.get('task')![0]!;
+    assert.equal(index.nodesById.get(valueNodeId)?.text, 'draft');
+    assert.equal(occurrence.hasStoredValue, true);
+    assert.deepEqual(occurrence.values, []);
+    assert.deepEqual(occurrence.validationIssuesByValueNodeId.get(valueNodeId), ['invalid-number']);
+
+    editor.tf.undo();
+    assert.equal(buildTanaIndex(editor.children).nodesById.get(valueNodeId)?.text, '');
+    editor.tf.redo();
+    index = buildTanaIndex(editor.children);
+    occurrence = index.fieldNodesByParent.get('task')![0]!;
+    assert.equal(index.nodesById.get(valueNodeId)?.text, 'draft');
+    assert.deepEqual(occurrence.validationIssuesByValueNodeId.get(valueNodeId), ['invalid-number']);
+  });
+
+  test('materializes a configured list Field and adds its first editable Value in one action', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      {
+        children: [{ text: 'Tags' }],
+        id: 'tags',
+        tanaFieldDefinition: { cardinality: 'list', type: 'plain' },
+        type: KEYS.p,
+      },
+    ]);
+
+    const valueNodeId = field(editor).addValue('task', 'tags');
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+
+    assert.ok(valueNodeId);
+    assert.deepEqual(occurrence.valueNodeIds, [valueNodeId]);
+    assert.equal(field(editor).setRawScalarValue('task', 'tags', 'first', valueNodeId), true);
+    assert.ok(field(editor).addValue('task', 'tags', { type: 'plain', value: 'second' }));
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!.values,
+      [
+        { type: 'plain', value: 'first' },
+        { type: 'plain', value: 'second' },
+      ]
+    );
+  });
+
   test('stores invalid Options writes and derives a warning without treating the Field as unset', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },

@@ -213,7 +213,7 @@ export type TanaFieldNode = {
   node: TanaBlockElement;
   parentNodeId: NodeId;
   path: Path;
-  /** Missing or non-Field targets are readable history, not an invalid document. */
+  /** Missing, non-Field, or trashed targets are readable history, not an invalid document. */
   brokenFieldDefinition: boolean;
   value?: FieldValue;
   /** Read-only decoded value lookup by real Value NodeId, including list Fields. */

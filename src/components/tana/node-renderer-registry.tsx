@@ -6,6 +6,7 @@ import {
   EyeOffIcon,
   PinIcon,
   PlusIcon,
+  RotateCcwIcon,
   XIcon,
 } from 'lucide-react';
 import type { TElement } from 'platejs';
@@ -13,6 +14,7 @@ import { TogglePlugin } from '@platejs/toggle/react';
 import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
@@ -35,6 +37,7 @@ import type {
 import {
   getFieldValueCandidates,
   getTanaProjectionTarget,
+  isTanaNodeInTrash,
   isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
 } from '@/lib/tana';
@@ -212,6 +215,8 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
   if (!fieldNode || typeof fieldId !== 'string') return null;
 
   const field = index.nodesById.get(fieldId);
+  const brokenFieldDefinition = fieldNode.brokenFieldDefinition;
+  const fieldDefinitionInTrash = brokenFieldDefinition && isTanaNodeInTrash(index, fieldId);
   const indent = typeof element.indent === 'number' ? element.indent : 0;
   const labelLeft = `${getTanaDisplayIndentPx(indent, baseIndent)}px`;
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
@@ -222,7 +227,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
         (template) => template.fieldId === fieldId && template.pinned
       )
   );
-  const canAddValue = field?.fieldDefinition?.cardinality === 'list';
+  const canAddValue = !brokenFieldDefinition && field?.fieldDefinition?.cardinality === 'list';
   const validationIssues = [
     ...fieldNode.validationIssues,
     ...fieldNode.valueNodeIds.flatMap(
@@ -240,20 +245,32 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       <button
         className="tana-fieldLabel pointer-events-auto shrink-0 truncate pr-1 text-left text-[13px] text-[var(--tana-text-secondary)] hover:text-[var(--tana-link)]"
         data-plate-prevent-deselect
-        title="打开字段定义"
+        disabled={brokenFieldDefinition}
+        title={brokenFieldDefinition ? '字段定义不可用' : '打开字段定义'}
         type="button"
         style={{ width: `${TANA_FIELD_LABEL_PX}px` }}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          editor.getTransforms(TanaZoomPlugin).zoom.to(fieldId);
+          if (!brokenFieldDefinition) editor.getTransforms(TanaZoomPlugin).zoom.to(fieldId);
         }}
         onMouseDown={(event) => event.preventDefault()}
       >
         <span className="flex min-w-0 items-center gap-1.5">
           {pinned && <PinIcon aria-label="已置顶" className="size-3 shrink-0" />}
-          <span className="truncate">{field?.text || '未命名字段'}</span>
-          {field?.fieldDefinition?.required && (
+          <span className="truncate">
+            {brokenFieldDefinition
+              ? fieldDefinitionInTrash
+                ? `${field?.text || '字段'}（已移至回收站）`
+                : '已删除字段'
+              : field?.text || '未命名字段'}
+          </span>
+          {brokenFieldDefinition && (
+            <span className="shrink-0 text-[10px] text-[var(--tana-text-tertiary)]" role="status">
+              {fieldDefinitionInTrash ? '可恢复' : '不可用'}
+            </span>
+          )}
+          {!brokenFieldDefinition && field?.fieldDefinition?.required && (
             <span aria-label="必填字段" className="shrink-0 text-destructive">*</span>
           )}
           {validationLabel && (
@@ -271,6 +288,14 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
       </button>
 
       <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-[var(--tana-canvas)]/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
+        {fieldDefinitionInTrash && (
+          <FieldAction
+            label="恢复字段定义"
+            onClick={() => editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(fieldId)}
+          >
+            <RotateCcwIcon />
+          </FieldAction>
+        )}
         {canAddValue && (
           <FieldAction
             label="添加字段值"
@@ -279,12 +304,14 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
             <PlusIcon />
           </FieldAction>
         )}
-        <FieldAction
-          label="在正文中隐藏"
-          onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
-        >
-          <EyeOffIcon />
-        </FieldAction>
+        {!brokenFieldDefinition && (
+          <FieldAction
+            label="在正文中隐藏"
+            onClick={() => presentation.setFieldVisible(fieldNode.parentNodeId, fieldNode.id, false)}
+          >
+            <EyeOffIcon />
+          </FieldAction>
+        )}
       </div>
     </div>
   );
@@ -334,9 +361,13 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
 
   if (!fieldNode) return null;
 
-  const definition = index.nodesById.get(fieldNode.fieldId)?.fieldDefinition;
+  const definition = fieldNode.brokenFieldDefinition
+    ? undefined
+    : index.nodesById.get(fieldNode.fieldId)?.fieldDefinition;
 
-  if (!definition) return null;
+  if (!definition) {
+    return <BrokenFieldDefinitionValue fieldId={fieldNode.fieldId} index={index} />;
+  }
 
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const currentFieldValue = fieldNode.valueByNodeId.get(nodeId);
@@ -392,7 +423,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   }
 
   if (definition.type === 'date') {
-    const value = currentFieldValue?.type === 'date' ? currentFieldValue.value : '';
+    const value = index.nodesById.get(nodeId)?.text ?? '';
 
     return (
       <ValueControl>
@@ -402,13 +433,19 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
           aria-invalid={validationLabel ? true : undefined}
           className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[var(--tana-text-secondary)] outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
           data-plate-prevent-deselect
-          type="date"
+          placeholder="YYYY-MM-DD"
+          type="text"
           value={value}
           onChange={(event) => {
             const nextValue = event.target.value;
 
             if (nextValue) {
-              setValue({ type: 'date', value: nextValue });
+              fieldTransforms.setRawScalarValue(
+                fieldNode.parentNodeId,
+                fieldNode.fieldId,
+                nextValue,
+                nodeId
+              );
             } else {
               clearValue();
             }
@@ -466,6 +503,36 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
         />
       )}
       <FieldValueWarning id={warningId} label={validationLabel} />
+    </ValueControl>
+  );
+}
+
+function BrokenFieldDefinitionValue({
+  fieldId,
+  index,
+}: {
+  fieldId: NodeId;
+  index: TanaIndex;
+}) {
+  const editor = useEditorRef();
+  const inTrash = isTanaNodeInTrash(index, fieldId);
+
+  return (
+    <ValueControl>
+      <span className="text-[11px] text-[var(--tana-text-tertiary)]" role="status">
+        {inTrash ? '字段定义已移至回收站' : '字段定义已删除'}
+      </span>
+      {inTrash && (
+        <button
+          aria-label="恢复字段定义"
+          className="rounded px-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+          data-plate-prevent-deselect
+          type="button"
+          onClick={() => editor.getTransforms(TanaNodeLifecyclePlugin).node.restore(fieldId)}
+        >
+          恢复字段定义
+        </button>
+      )}
     </ValueControl>
   );
 }

@@ -399,6 +399,22 @@ export function buildTanaIndex(document: Value): TanaIndex {
     });
   });
 
+  // A trashed definition remains indexed with its Value history, but cannot
+  // act as a live definition until Lifecycle restores the same canonical Node.
+  const isNodeInDerivedTrash = (nodeId: NodeId): boolean => {
+    const trashNodeId = systemNodeIds.get('trash');
+    const visited = new Set<NodeId>();
+    let currentNodeId: NodeId | undefined = nodeId;
+
+    while (trashNodeId && currentNodeId && !visited.has(currentNodeId)) {
+      if (currentNodeId === trashNodeId) return true;
+      visited.add(currentNodeId);
+      currentNodeId = parentNodeIds.get(currentNodeId);
+    }
+
+    return false;
+  };
+
   function addReference(relation: ReferenceRelation) {
     references.push(relation);
 
@@ -460,7 +476,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
       definitionNode && hasNodeSemantic(definitionNode.node, 'field-definition', {
         document,
         path: definitionNode.path,
-      })
+      }) && !isNodeInDerivedTrash(definitionNode.id)
         ? definitionNode.fieldDefinition
         : undefined;
     const valueNodes = getTanaDirectChildPaths(document, node.path).flatMap(
@@ -699,6 +715,15 @@ export function searchTanaNodes(
   const contains: TanaNode[] = [];
 
   for (const node of index.nodesById.values()) {
+    // Field occurrences and Value Nodes contribute semantic text to their
+    // canonical Host result. They are never independent global-search rows.
+    if (
+      node.semanticTypes.includes('field') ||
+      node.semanticTypes.includes('value')
+    ) {
+      continue;
+    }
+
     const owner = getTanaProjectionTarget(index, node.id);
     if (!owner) continue;
     const text = resolveTanaNodeTitle(index, owner.id).toLocaleLowerCase();
@@ -706,6 +731,9 @@ export function searchTanaNodes(
       ...owner.supertagIds.map((id) => index.nodesById.get(id)?.text ?? ''),
       ...(index.fieldNodesByParent.get(owner.id) ?? []).flatMap((field) => [
         index.nodesById.get(field.fieldId)?.text ?? '',
+        ...field.valueNodeIds.map((valueNodeId) =>
+          index.nodesById.get(valueNodeId)?.text ?? ''
+        ),
         ...field.values.map((value) => value.type === 'options' || value.type === 'from-supertag'
           ? index.nodesById.get(value.value)?.text ?? '' : String(value.value)),
       ]),

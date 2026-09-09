@@ -6,6 +6,7 @@ import { ArrowUpRightIcon, Link2Icon, Settings2Icon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
@@ -458,6 +459,25 @@ function PresentationFieldRow({
   const editor = useEditorRef();
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
   const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
+  const lifecycle = editor.getTransforms(TanaNodeLifecyclePlugin).node;
+
+  if (descriptor.brokenFieldDefinition) {
+    return (
+      <div className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs text-[var(--tana-text-tertiary)]">
+        <span className="min-w-0 flex-1 truncate" role="status">{descriptor.label}</span>
+        {descriptor.fieldDefinitionInTrash && descriptor.fieldId && (
+          <button
+            aria-label="恢复字段定义"
+            className="rounded px-1 py-0.5 text-[11px] text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+            type="button"
+            onClick={() => lifecycle.restore(descriptor.fieldId!)}
+          >
+            恢复
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="group flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[var(--tana-hover)]">

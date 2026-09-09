@@ -9,6 +9,7 @@ import {
   getSupertagInheritance,
   getTanaProjectionTarget,
   isTanaNodeActive,
+  isTanaNodeInTrash,
 } from './index';
 import { hasNodeSemantic } from './node-semantic';
 import { runTanaQuery } from './query';
@@ -63,6 +64,10 @@ export type TanaSystemFieldKey =
  * from the current TanaIndex.
  */
 export type TanaFieldDescriptor = {
+  /** The relation is retained, but its definition is unavailable. */
+  brokenFieldDefinition?: boolean;
+  /** A broken definition can still be restored when its original Node is in Trash. */
+  fieldDefinitionInTrash?: boolean;
   definition?: FieldDefinition;
   fieldId?: NodeId;
   /** The real Field occurrence Node that presentation can show or hide. */
@@ -93,6 +98,7 @@ export function isFieldValueValid(
   value: FieldValue
 ): boolean {
   return (
+    isTanaNodeActive(index, fieldId) &&
     index.nodesById.get(fieldId)?.fieldDefinition !== undefined &&
     getFieldValueValidation(index, fieldId, value).length === 0
   );
@@ -110,7 +116,7 @@ export function getFieldValueValidation(
 ) {
   const definition = index.nodesById.get(fieldId)?.fieldDefinition;
 
-  if (!definition) return [];
+  if (!definition || !isTanaNodeActive(index, fieldId)) return [];
 
   const candidateIds =
     definition.type === 'options' || definition.type === 'from-supertag'
@@ -626,8 +632,24 @@ export function getNodeFieldDescriptors(
 
   const semanticFields = fieldNodes.flatMap((fieldNode) => {
     const field = index.nodesById.get(fieldNode.fieldId);
+    const fieldDefinitionInTrash = isTanaNodeInTrash(index, fieldNode.fieldId);
 
-    if (!field?.fieldDefinition) return [];
+    if (fieldNode.brokenFieldDefinition || !field?.fieldDefinition) {
+      return [
+        withVisibility({
+          brokenFieldDefinition: true,
+          fieldDefinitionInTrash,
+          fieldId: fieldNode.fieldId,
+          fieldNodeId: fieldNode.id,
+          hasStoredValue: fieldNode.hasStoredValue,
+          key: fieldNode.id,
+          label: fieldDefinitionInTrash
+            ? `${field?.text || '字段'}（已移至回收站）`
+            : '已删除字段',
+          source: 'custom',
+        }),
+      ];
+    }
 
     const matchingTemplates = supertagIds.flatMap((supertagId) =>
       getSupertagTemplateFields(index, supertagId).flatMap((template) =>

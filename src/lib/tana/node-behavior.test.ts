@@ -130,6 +130,7 @@ describe('Node behavior runtime', () => {
     assert.equal(canTurnInto(nodeAt([2]), { document, path: [2] }), false);
     assert.equal(canTurnInto(system), false);
     assert.equal(canTrash(nodeAt([0]), { document, path: [0] }), true);
+    assert.equal(canTrash(nodeAt([1]), { document, path: [1] }), true);
     assert.equal(canTrash(nodeAt([3]), { document, path: [3] }), false);
     assert.equal(canUseSlashCommand(nodeAt([0]), { document, path: [0] }), true);
     assert.equal(canUseSlashCommand(nodeAt([2]), { document, path: [2] }), false);
