@@ -48,6 +48,14 @@ const graphPredicateKinds: readonly Extract<
   "child-of" | "descendant-of" | "grandchild-of" | "references" | "referenced-by"
 >[] = ["child-of", "descendant-of", "grandchild-of", "references", "referenced-by"];
 
+/** The Builder's one-click NOT DONE remains the existing recursive AST. */
+export function createNotDoneQueryExpression(): TanaQueryExpression {
+  return {
+    child: { predicate: { kind: "done-state", state: "done" }, type: "predicate" },
+    type: "not",
+  };
+}
+
 const viewTypeLabels: Record<TanaViewDefinition["type"], string> = {
   calendar: "日历",
   cards: "卡片",
@@ -432,6 +440,16 @@ function QueryGroupEditor({
           >
             <PlusIcon />
             NOT 组
+          </Button>
+          <Button
+            className="h-7 px-2 text-[11px]"
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={() => append(createNotDoneQueryExpression())}
+          >
+            <PlusIcon />
+            NOT DONE
           </Button>
         </div>
       )}

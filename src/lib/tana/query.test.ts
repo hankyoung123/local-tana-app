@@ -271,7 +271,7 @@ describe("runTanaQuery", () => {
         },
         type: "not",
       }).some(({ id }) => id === "alpha"),
-      true,
+      false,
     );
     assert.deepEqual(
       runTanaQuery(index, {
@@ -395,6 +395,45 @@ describe("runTanaQuery", () => {
         createAndQuery([{ kind: "references", nodeId: "target" }]),
       ).map(({ id }) => id),
       ["target"],
+    );
+  });
+
+  test("combines occurrence graph context with canonical content semantics", () => {
+    const mixedIndex = buildTanaIndex([
+      { children: [{ text: "Project" }], id: "project", tanaSupertagDefinition: {}, type: "p" },
+      { children: [{ text: "Status" }], id: "status", tanaFieldDefinition: { type: "plain" }, type: "p" },
+      {
+        children: [{ text: "Canonical launch" }],
+        id: "canonical",
+        tanaDoneState: "done",
+        tanaSupertagIds: ["project"],
+        type: "p",
+      },
+      { children: [{ text: "" }], id: "canonical-status", indent: 1, tanaFieldId: "status", type: "p" },
+      { children: [{ text: "ready" }], id: "canonical-status-value", indent: 2, tanaFieldValueType: "plain", type: "p" },
+      { children: [{ text: "Parent" }], id: "parent", type: "p" },
+      {
+        children: [{ text: "Occurrence only" }],
+        id: "occurrence",
+        indent: 1,
+        tanaReferenceTargetId: "canonical",
+        type: "p",
+      },
+    ]);
+
+    assert.deepEqual(
+      runTanaQuery(mixedIndex, createAndQuery([
+        { kind: "has-supertag", supertagId: "project" },
+        {
+          fieldId: "status",
+          kind: "field-equals",
+          value: { type: "plain", value: "ready" },
+        },
+        { kind: "done-state", state: "done" },
+        { kind: "text-contains", text: "canonical" },
+        { kind: "descendant-of", nodeId: "parent" },
+      ])).map(({ id }) => id),
+      ["canonical"],
     );
   });
 

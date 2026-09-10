@@ -316,75 +316,82 @@ function hasReferencedDateContext(index: TanaIndex, nodeId: NodeId, date: string
 }
 
 export function matchesTanaQueryPredicate(
-  node: TanaNode,
+  contextNode: TanaNode,
   index: TanaIndex,
   predicate: TanaQueryPredicate,
+  contentNode: TanaNode = contextNode,
 ): boolean {
   switch (predicate.kind) {
     case 'field-equals':
-      return fieldValuesEqual(predicate, node, index);
+      return fieldValuesEqual(predicate, contentNode, index);
     case 'field-greater-than':
     case 'field-less-than':
-      return fieldValuesCompare(predicate, node, index);
+      return fieldValuesCompare(predicate, contentNode, index);
     case 'field-defined':
     case 'has-field':
-      return isFieldDefined(index, node.id, predicate.fieldId);
+      return isFieldDefined(index, contentNode.id, predicate.fieldId);
     case 'field-exists':
-      return index.fieldNodesByParent.get(node.id)?.some(
+      return index.fieldNodesByParent.get(contentNode.id)?.some(
         (field) => field.fieldId === predicate.fieldId && field.hasStoredValue,
       ) ?? false;
     case 'has-supertag':
     case 'has-tag':
-      return index.nodesBySupertag.get(predicate.supertagId)?.includes(node.id) ?? false;
+      return index.nodesBySupertag.get(predicate.supertagId)?.includes(contentNode.id) ?? false;
     case 'done-state':
-      return node.doneState === predicate.state;
+      return contentNode.doneState === predicate.state;
     case 'date-is':
-      return isInTanaDay(index, node.id, predicate.date) ||
-        hasDateFieldValue(index, node.id, predicate.date) ||
-        hasReferencedDateContext(index, node.id, predicate.date);
+      return isInTanaDay(index, contextNode.id, predicate.date) ||
+        hasReferencedDateContext(index, contextNode.id, predicate.date) ||
+        isInTanaDay(index, contentNode.id, predicate.date) ||
+        hasDateFieldValue(index, contentNode.id, predicate.date);
     case 'is-semantic':
       return predicate.semantic === 'calendar-node'
-        ? node.time !== undefined
-        : node.semanticTypes.includes(predicate.semantic);
+        ? contentNode.time !== undefined
+        : contentNode.semanticTypes.includes(predicate.semantic);
     case 'text-contains':
-      return node.text.toLocaleLowerCase().includes(predicate.text.trim().toLocaleLowerCase());
+      return contentNode.text.toLocaleLowerCase().includes(predicate.text.trim().toLocaleLowerCase());
     case 'text-matches-regex':
-      return createTanaQueryRegExp(predicate.pattern).test(node.text);
+      return createTanaQueryRegExp(predicate.pattern).test(contentNode.text);
     case 'child-of':
-      return index.parentNodeIds.get(node.id) === predicate.nodeId;
+      return index.parentNodeIds.get(contextNode.id) === predicate.nodeId;
     case 'descendant-of':
-      return isDescendantOf(index, node.id, predicate.nodeId);
+      return isDescendantOf(index, contextNode.id, predicate.nodeId);
     case 'grandchild-of':
-      return isGrandchildOf(index, node.id, predicate.nodeId);
+      return isGrandchildOf(index, contextNode.id, predicate.nodeId);
     case 'references':
       return index.references.some(
         (reference) =>
-          reference.sourceNodeId === node.id &&
+          reference.sourceNodeId === contextNode.id &&
           reference.targetNodeId === predicate.nodeId,
       );
     case 'referenced-by':
       return index.references.some(
         (reference) =>
-          reference.targetNodeId === node.id &&
+          reference.targetNodeId === contextNode.id &&
           reference.sourceNodeId === predicate.nodeId,
       );
   }
 }
 
 export function matchesTanaQueryExpression(
-  node: TanaNode,
+  contextNode: TanaNode,
   index: TanaIndex,
   expression: TanaQueryExpression,
+  contentNode: TanaNode = contextNode,
 ): boolean {
   switch (expression.type) {
     case 'predicate':
-      return matchesTanaQueryPredicate(node, index, expression.predicate);
+      return matchesTanaQueryPredicate(contextNode, index, expression.predicate, contentNode);
     case 'not':
-      return !matchesTanaQueryExpression(node, index, expression.child);
+      return !matchesTanaQueryExpression(contextNode, index, expression.child, contentNode);
     case 'and':
-      return expression.children.every((child) => matchesTanaQueryExpression(node, index, child));
+      return expression.children.every((child) =>
+        matchesTanaQueryExpression(contextNode, index, child, contentNode),
+      );
     case 'or':
-      return expression.children.some((child) => matchesTanaQueryExpression(node, index, child));
+      return expression.children.some((child) =>
+        matchesTanaQueryExpression(contextNode, index, child, contentNode),
+      );
   }
 }
 
@@ -402,14 +409,17 @@ export function runTanaQuery(
   const seen = new Set<NodeId>();
   const results: TanaNode[] = [];
   for (const candidate of index.nodesById.values()) {
-    // An occurrence's physical hierarchy and direct reference edges are its
-    // own query context. Only after that context matches do we project the
-    // result to its one live canonical owner.
-    if (!matchesTanaQueryExpression(candidate, index, query)) continue;
-    const target = getTanaProjectionTarget(index, candidate.id);
-    if (!target || target.id === options.excludeNodeId || seen.has(target.id)) continue;
-    seen.add(target.id);
-    results.push(target);
+    const contentTarget = getTanaProjectionTarget(index, candidate.id);
+    if (!contentTarget) continue;
+
+    // The physical occurrence supplies hierarchy and direct Reference edges.
+    // Its one canonical target supplies title, Field, Supertag and Done
+    // content. The candidate itself is never replaced, so mixed predicates
+    // retain both semantics before canonical result de-duplication.
+    if (!matchesTanaQueryExpression(candidate, index, query, contentTarget)) continue;
+    if (contentTarget.id === options.excludeNodeId || seen.has(contentTarget.id)) continue;
+    seen.add(contentTarget.id);
+    results.push(contentTarget);
     if (results.length >= limit) break;
   }
   return results;
