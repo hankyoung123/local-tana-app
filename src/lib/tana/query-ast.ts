@@ -8,6 +8,16 @@ const id = (value: unknown): value is string =>
 const keys = (value: Record<string, unknown>, expected: string[]) =>
   Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 
+/** Accept the UI's familiar `/pattern/` form while retaining plain regex input. */
+export function createTanaQueryRegExp(pattern: string): RegExp {
+  const slashDelimited = /^\/([\s\S]*)\/$/u.exec(pattern);
+  const source = slashDelimited ? slashDelimited[1]! : pattern;
+
+  if (source.length === 0) throw new Error('Empty regular expression');
+
+  return new RegExp(source, 'iu');
+}
+
 export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredicate {
   if (!record(value)) return false;
   switch (value.kind) {
@@ -29,7 +39,7 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
         (value.semantic === 'calendar-node' || value.semantic === 'field' || value.semantic === 'search');
     case 'text-matches-regex':
       if (!keys(value, ['kind', 'pattern']) || typeof value.pattern !== 'string' || value.pattern.length === 0 || value.pattern.length > 256) return false;
-      try { new RegExp(value.pattern, 'iu'); return true; } catch { return false; }
+      try { createTanaQueryRegExp(value.pattern); return true; } catch { return false; }
     case 'field-equals':
     case 'field-greater-than':
     case 'field-less-than': {

@@ -22,6 +22,8 @@ test('runtime AST rejects unknown kinds, invalid IDs, values and recursion', () 
     assert.deepEqual(runTanaQuery(buildTanaIndex([]), value as never), []);
   }
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '^ok$' } }), true);
+  assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '/^ok$/' } }), true);
+  assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '//' } }), false);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'field-greater-than', fieldId: 'field', value: { type: 'number', value: 1 } } }), true);
   assert.equal(isTanaQueryAst({ type: 'and', children: [] }), true);
   assert.equal(isTanaSearchQueryAst({ type: 'and', children: [] }), true);

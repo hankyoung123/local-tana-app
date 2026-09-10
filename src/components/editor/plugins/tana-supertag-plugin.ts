@@ -516,6 +516,10 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
 
 /** Applies through a Reference only to its direct canonical owner. */
 function apply(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
+  if (editor.api.isMerging()) {
+    return applyInBatch(editor, nodeId, supertagId);
+  }
+
   let applied = false;
 
   editor.tf.withNewBatch(() => {

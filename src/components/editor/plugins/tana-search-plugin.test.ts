@@ -176,3 +176,88 @@ test('Search writer shares canonical-host policy with persistence and integrity'
     assert.equal(search.define(nodeId), false);
   });
 });
+
+test('Add result creates one canonical Daily child and only reports a match after derived re-evaluation', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+    { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+    {
+      children: [{ text: 'Matching search' }],
+      id: 'matching-search',
+      indent: 2,
+      tanaSearchDefinition: {
+        query: {
+          children: [
+            { predicate: { kind: 'has-supertag', supertagId: 'project' }, type: 'predicate' },
+            {
+              predicate: {
+                fieldId: 'status',
+                kind: 'field-equals',
+                value: { type: 'plain', value: 'ready' },
+              },
+              type: 'predicate',
+            },
+            { predicate: { kind: 'done-state', state: 'todo' }, type: 'predicate' },
+            { predicate: { date: '2026-05-01', kind: 'date-is' }, type: 'predicate' },
+          ],
+          type: 'and',
+        },
+      },
+      type: KEYS.p,
+    },
+    {
+      children: [{ text: 'Mismatching search' }],
+      id: 'mismatching-search',
+      indent: 2,
+      tanaSearchDefinition: {
+        query: {
+          children: [
+            { predicate: { date: '2026-05-01', kind: 'date-is' }, type: 'predicate' },
+            { predicate: { kind: 'text-contains', text: 'cannot-materialize' }, type: 'predicate' },
+          ],
+          type: 'and',
+        },
+      },
+      type: KEYS.p,
+    },
+    { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+    { children: [{ text: 'Schema' }], id: 'schema', indent: 1, tanaSystemNode: 'schema', type: KEYS.p },
+    { children: [{ text: 'Project' }], id: 'project', indent: 2, tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Status' }], id: 'status', indent: 2, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    { children: [{ text: 'Library' }], id: 'library', indent: 1, tanaSystemNode: 'library', type: KEYS.p },
+    { children: [{ text: 'Settings' }], id: 'settings', indent: 1, tanaSystemNode: 'settings', type: KEYS.p },
+    { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+  ]);
+  const before = structuredClone(editor.children);
+  const search = editor.getTransforms(TanaSearchPlugin).search;
+  const matched = search.addResult('matching-search');
+
+  assert.ok(matched);
+  assert.equal(matched.matches, true);
+  const index = buildTanaIndex(editor.children);
+  const created = index.nodesById.get(matched.nodeId);
+  assert.equal(index.parentNodeIds.get(matched.nodeId), matched.dayNodeId);
+  assert.equal(created?.doneState, 'todo');
+  assert.deepEqual(created?.supertagIds, ['project']);
+  assert.deepEqual(index.fieldNodesByParent.get(matched.nodeId)?.[0]?.values, [
+    { type: 'plain', value: 'ready' },
+  ]);
+  assert.equal(
+    runTanaQuery(
+      index,
+      index.nodesById.get('matching-search')!.searchDefinition!.query,
+    ).some((node) => node.id === matched.nodeId),
+    true,
+  );
+
+  const afterMatch = structuredClone(editor.children);
+  editor.tf.undo();
+  assert.deepEqual(editor.children, before);
+  editor.tf.redo();
+  assert.deepEqual(editor.children, afterMatch);
+
+  const mismatched = search.addResult('mismatching-search');
+  assert.ok(mismatched);
+  assert.equal(mismatched.matches, false);
+  assert.equal(buildTanaIndex(editor.children).nodesById.get(mismatched.nodeId)?.text, '');
+});

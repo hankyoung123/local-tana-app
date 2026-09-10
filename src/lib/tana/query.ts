@@ -1,4 +1,8 @@
-import { isTanaQueryAst, isTanaQueryPredicateAst } from './query-ast';
+import {
+  createTanaQueryRegExp,
+  isTanaQueryAst,
+  isTanaQueryPredicateAst,
+} from './query-ast';
 import type {
   FieldDefinition,
   FieldId,
@@ -201,7 +205,7 @@ export function describeTanaQueryClause(
     case 'text-contains':
       return `文本包含“${clause.text}”`;
     case 'text-matches-regex':
-      return `文本匹配 /${clause.pattern}/`;
+      return `文本匹配 ${clause.pattern.startsWith('/') ? clause.pattern : `/${clause.pattern}/`}`;
     case 'child-of':
       return `是 ${index.nodesById.get(clause.nodeId)?.text ?? clause.nodeId} 的直接子节点`;
     case 'descendant-of':
@@ -280,6 +284,20 @@ function isGrandchildOf(index: TanaIndex, nodeId: NodeId, grandparentId: NodeId)
   return !!parentId && index.parentNodeIds.get(parentId) === grandparentId;
 }
 
+/** A Daily page is a normal canonical Day Node, so its descendants share its date context. */
+function isInTanaDay(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+  let currentId: NodeId | undefined = nodeId;
+  const visited = new Set<NodeId>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    if (index.nodesById.get(currentId)?.time?.value === date) return true;
+    currentId = index.parentNodeIds.get(currentId);
+  }
+
+  return false;
+}
+
 export function matchesTanaQueryPredicate(
   node: TanaNode,
   index: TanaIndex,
@@ -304,7 +322,7 @@ export function matchesTanaQueryPredicate(
     case 'done-state':
       return node.doneState === predicate.state;
     case 'date-is':
-      return node.time?.value === predicate.date ||
+      return isInTanaDay(index, node.id, predicate.date) ||
         (index.fieldNodesByParent.get(node.id) ?? []).some((field) =>
           field.values.some((value) => value.type === 'date' && value.value === predicate.date),
         );
@@ -315,7 +333,7 @@ export function matchesTanaQueryPredicate(
     case 'text-contains':
       return node.text.toLocaleLowerCase().includes(predicate.text.trim().toLocaleLowerCase());
     case 'text-matches-regex':
-      return new RegExp(predicate.pattern, 'iu').test(node.text);
+      return createTanaQueryRegExp(predicate.pattern).test(node.text);
     case 'child-of':
       return index.parentNodeIds.get(node.id) === predicate.nodeId;
     case 'descendant-of':

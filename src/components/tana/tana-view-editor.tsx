@@ -22,6 +22,7 @@ import {
   getTanaProjectionTarget,
   getFieldValueCandidates,
   isTanaNodeActive,
+  runTanaQuery,
   resolveTanaCollectionSource,
   type FieldDefinition,
   type FieldValue,
@@ -132,6 +133,8 @@ export function TanaSearchDefinitionEditor({
   nodeId: NodeId;
 }) {
   const definition = node.tanaSearchDefinition;
+  const [runSummary, setRunSummary] = React.useState<string | null>(null);
+  const [addSummary, setAddSummary] = React.useState<string | null>(null);
 
   if (!definition) {
     return (
@@ -153,6 +156,28 @@ export function TanaSearchDefinitionEditor({
 
   const diagnostics = diagnoseTanaQuery(index, definition.query);
 
+  const runOnce = () => {
+    const results = runTanaQuery(index, definition.query, { excludeNodeId: nodeId });
+
+    setRunSummary(
+      diagnostics.length > 0
+        ? "当前诊断会阻止搜索运行。"
+        : `本次运行得到 ${results.length} 个结果。`,
+    );
+  };
+
+  const addResult = () => {
+    const outcome = editor.getTransforms(TanaSearchPlugin).search.addResult(nodeId);
+
+    setAddSummary(
+      !outcome
+        ? "无法创建每日笔记中的节点。"
+        : outcome.matches
+          ? `已在 ${outcome.day} 创建匹配节点。`
+          : `已在 ${outcome.day} 创建节点，但它不满足当前动态条件。`,
+    );
+  };
+
   return (
     <section className="border-t border-[var(--tana-divider)] px-5 py-4">
       <div className="mb-3 flex items-center justify-between">
@@ -160,21 +185,46 @@ export function TanaSearchDefinitionEditor({
           <ListFilterIcon className="size-3.5" />
           搜索定义
         </h3>
-        <button
-          className="rounded p-1 text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-          type="button"
-          aria-label="移除搜索定义"
-          onClick={() =>
-            editor.getTransforms(TanaSearchPlugin).search.remove(nodeId)
-          }
-        >
-          <Trash2Icon className="size-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <Button
+            className="h-7 px-2 text-[11px]"
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={runOnce}
+          >
+            运行一次
+          </Button>
+          <Button
+            className="h-7 px-2 text-[11px]"
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={() => editor.tf.focus()}
+          >
+            完成
+          </Button>
+          <button
+            className="rounded p-1 text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+            type="button"
+            aria-label="移除搜索定义"
+            onClick={() =>
+              editor.getTransforms(TanaSearchPlugin).search.remove(nodeId)
+            }
+          >
+            <Trash2Icon className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {diagnostics.length > 0 && (
         <p className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800" role="status">
           查询暂不可运行：{diagnostics.map((diagnostic) => diagnostic.code).join('、')}
+        </p>
+      )}
+      {runSummary && (
+        <p className="mb-3 text-xs text-muted-foreground" role="status">
+          {runSummary}
         </p>
       )}
       <QueryExpressionEditor
@@ -185,6 +235,16 @@ export function TanaSearchDefinitionEditor({
         }
         root
       />
+      <div className="mt-3 border-t pt-3">
+        <Button className="h-8 text-xs" size="sm" type="button" variant="outline" onClick={addResult}>
+          添加到每日笔记
+        </Button>
+        {addSummary && (
+          <p className="mt-2 text-xs text-muted-foreground" role="status">
+            {addSummary}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
@@ -588,7 +648,7 @@ function QueryPredicateForm({
         <Input
           className="h-8 text-xs"
           value={text}
-          placeholder={kind === "text-matches-regex" ? "正则表达式" : "要查找的文本"}
+          placeholder={kind === "text-matches-regex" ? "/正则表达式/" : "要查找的文本"}
           onChange={(event) => setText(event.target.value)}
         />
       )}

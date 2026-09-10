@@ -324,6 +324,29 @@ describe("runTanaQuery", () => {
     );
   });
 
+  test("uses direct Reference edges for tree context and never treats a Search AST as a backlink", () => {
+    const referenceIndex = buildTanaIndex([
+      { children: [{ text: "Target" }], id: "target", type: "p" },
+      { children: [{ text: "Occurrence" }], id: "occurrence", tanaReferenceTargetId: "target", type: "p" },
+      {
+        children: [{ text: "Search" }],
+        id: "search",
+        tanaSearchDefinition: {
+          query: createAndQuery([{ kind: "references", nodeId: "target" }]),
+        },
+        type: "p",
+      },
+    ]);
+
+    assert.deepEqual(
+      runTanaQuery(
+        referenceIndex,
+        createAndQuery([{ kind: "references", nodeId: "target" }]),
+      ).map(({ id }) => id),
+      ["target"],
+    );
+  });
+
   test("describes query clauses in the Chinese interface without changing query semantics", () => {
     assert.equal(
       describeTanaQueryClause(index, {
@@ -503,6 +526,7 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
     { children: [{ text: '' }], id: 'release-when', indent: 3, tanaFieldId: 'when', type: 'p' },
     { children: [{ text: '2026-09-10' }], id: 'release-when-value', indent: 4, tanaFieldValueType: 'date', type: 'p' },
     { children: [{ text: '2026-09-11' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-11' }, type: 'p' },
+    { children: [{ text: 'Todo item' }], id: 'todo', tanaDoneState: 'todo', type: 'p' },
     { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: createAndQuery() }, type: 'p' },
   ]);
   const ids = (predicate: TanaQueryPredicate) =>
@@ -510,11 +534,25 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
 
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-greater-than', value: { type: 'number', value: 40 } }), ['release']);
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-less-than', value: { type: 'number', value: 50 } }), ['release']);
+  assert.deepEqual(ids({ fieldId: 'when', kind: 'field-greater-than', value: { type: 'date', value: '2026-09-09' } }), ['release']);
+  assert.deepEqual(ids({ fieldId: 'when', kind: 'field-less-than', value: { type: 'date', value: '2026-09-11' } }), ['release']);
   assert.deepEqual(ids({ kind: 'done-state', state: 'done' }), ['release']);
+  assert.deepEqual(ids({ kind: 'done-state', state: 'todo' }), ['todo']);
+  const notDone = runTanaQuery(featureIndex, {
+    children: [
+      {
+        child: { predicate: { kind: 'done-state', state: 'done' }, type: 'predicate' },
+        type: 'not',
+      },
+    ],
+    type: 'and',
+  }).map(({ id }) => id);
+  assert.equal(notDone.includes('todo'), true);
+  assert.equal(notDone.includes('release'), false);
   assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
-  assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '^Release\\s+\\d+$' }), ['release']);
+  assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '/^Release\\s+\\d+$/' }), ['release']);
   assert.deepEqual(ids({ kind: 'grandchild-of', nodeId: 'grandparent' }), ['release']);
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'has-field' }), ['release']);
 });

@@ -22,17 +22,20 @@ test('Escape opens the existing node menu', async ({ page }) => {
   await expect(page.getByRole('menuitem', { name: '复制', exact: true })).toBeVisible();
 });
 
-test('Done shortcut toggles the existing checkbox', async ({ page }) => {
+test('Done shortcut follows the existing three-state checkbox contract', async ({ page }) => {
   await page.goto('/editor');
   const text = page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true });
   const row = text.locator('xpath=ancestor::*[@data-slate-node="element"][1]');
   const checkbox = row.getByRole('checkbox');
   await text.click();
   await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(checkbox).not.toBeChecked();
+  await text.click();
+  await page.keyboard.press('ControlOrMeta+Enter');
   await expect(checkbox).toBeChecked();
   await text.click();
   await page.keyboard.press('ControlOrMeta+Enter');
-  await expect(checkbox).not.toBeChecked();
+  await expect(row.getByRole('checkbox')).toHaveCount(0);
 });
 
 test('Zoom shortcuts navigate into the canonical Node and back', async ({ page }) => {
