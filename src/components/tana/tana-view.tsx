@@ -8,6 +8,8 @@ import { TanaNavigationView } from "./tana-navigation-view";
 import { TanaTableToolbarControls, TanaTableView } from "./tana-table-view";
 import { TanaViewPagination } from "./tana-view-pagination";
 import { TanaViewGroupControl } from "./tana-view-group-control";
+import { TanaViewSortControls } from "./tana-view-sort-controls";
+import { TanaViewDisplayFieldsControl } from "./tana-view-display-fields-control";
 import { TanaViewToolbar } from "./tana-view-toolbar";
 
 /** Every renderer consumes this one source → filter → sort → display pipeline. */
@@ -21,10 +23,10 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
     <section className="flex min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-[var(--tana-canvas)]">
       <TanaViewToolbar
         controls={
-          viewType === "table" ? <TanaTableToolbarControls index={index} results={results} view={view} /> :
+          viewType === "table" ? <><TanaViewSortControls index={index} results={source.nodes} view={view} /><TanaTableToolbarControls index={index} results={results} view={view} /></> :
           viewType === "calendar" ? <TanaCalendarToolbarControls index={index} results={results} view={view} /> :
-          viewType === "cards" ? <><TanaCardsToolbarControls index={index} results={results} view={view} /></> :
-          viewType === "outline" ? <TanaViewGroupControl index={index} results={results} view={view} /> : undefined
+          viewType === "cards" ? <><TanaViewSortControls index={index} results={source.nodes} view={view} /><TanaCardsToolbarControls index={index} results={results} view={view} /></> :
+          viewType === "outline" ? <><TanaViewSortControls index={index} results={source.nodes} view={view} /><TanaViewDisplayFieldsControl index={index} results={source.nodes} view={view} /><TanaViewGroupControl index={index} results={results} view={view} /></> : undefined
         }
         index={index}
         results={source.nodes}

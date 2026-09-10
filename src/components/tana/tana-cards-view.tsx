@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ArrowDownAZIcon, Columns3Icon, GroupIcon } from 'lucide-react';
+import { GroupIcon } from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 import type { PlateEditor } from 'platejs/react';
 
@@ -18,15 +18,8 @@ import {
 
 import { NodeProjection } from './node-projection';
 import { createTanaViewNode } from './tana-view-actions';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TanaViewDisplayFieldsControl } from './tana-view-display-fields-control';
 
 /** A Cards drop is valid only for a concrete target Field Value. */
 export function applyTanaCardsGroupDrop(
@@ -35,9 +28,21 @@ export function applyTanaCardsGroupDrop(
   fieldId: NodeId,
   value: FieldValue | undefined
 ): boolean {
-  return value
-    ? editor.getTransforms(TanaFieldPlugin).field.setValue(occurrenceId, fieldId, value)
-    : false;
+  if (!value) return false;
+
+  const fields = editor.getTransforms(TanaFieldPlugin).field;
+  const write = () => {
+    if (!fields.materialize(occurrenceId, fieldId)) return false;
+    return fields.setValue(occurrenceId, fieldId, value);
+  };
+
+  if (editor.api.isMerging()) return write();
+
+  let result = false;
+  editor.tf.withNewBatch(() => {
+    result = write();
+  });
+  return result;
 }
 
 /** Cards are grouped canonical Node projections; a group has no stored Card entity. */
@@ -122,65 +127,12 @@ export function TanaCardsToolbarControls({
 }) {
   const editor = useEditorRef();
   const resolved = resolveTanaViewProjection(index, view, results);
-  const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
-  const sort = view.viewDefinition?.sort?.[0];
   const groupFieldId = view.viewDefinition?.groupFieldId;
-  const { availableFieldIds: fieldIds, visibleFieldIds } = resolved;
+  const { availableFieldIds: fieldIds } = resolved;
 
   return (
     <>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          aria-label="选择卡片显示字段"
-          className="inline-flex h-7 items-center gap-1.5 rounded px-2 text-[var(--tana-text-secondary)] text-xs hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-          type="button"
-        >
-          <Columns3Icon className="size-3.5" />
-          显示
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>显示字段</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {fieldIds.map((fieldId) => (
-          <DropdownMenuCheckboxItem
-            key={fieldId}
-            checked={visibleFieldIds.includes(fieldId)}
-            onCheckedChange={(checked) => {
-              const nextVisibleFieldIds = new Set(configuredVisibleFieldIds ?? fieldIds);
-              if (checked) nextVisibleFieldIds.add(fieldId);
-              else nextVisibleFieldIds.delete(fieldId);
-              editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-                visibleFieldIds: fieldIds.filter((candidateId) => nextVisibleFieldIds.has(candidateId)),
-              });
-            }}
-          >
-            {index.nodesById.get(fieldId)?.text || '未命名字段'}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-    <Select
-      value={sort ? `${sort.fieldId}:${sort.direction}` : '__none__'}
-      onValueChange={(value) => {
-        if (value === '__none__') {
-          editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: undefined });
-          return;
-        }
-        const [fieldId, direction] = value.split(':');
-        if ((direction === 'asc' || direction === 'desc') && fieldId) {
-          editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: [{ direction, fieldId: fieldId as NodeId }] });
-        }
-      }}
-    >
-      <SelectTrigger aria-label="排序卡片" className="h-7 w-24 border-0 bg-transparent px-2 text-xs shadow-none"><ArrowDownAZIcon className="size-3.5"/><SelectValue /></SelectTrigger>
-      <SelectContent>
-        <SelectItem value="__none__">文档顺序</SelectItem>
-        <SelectItem value="$title:asc">标题 A → Z</SelectItem><SelectItem value="$title:desc">标题 Z → A</SelectItem>
-        {fieldIds.map((fieldId) => <React.Fragment key={fieldId}><SelectItem value={`${fieldId}:asc`}>{index.nodesById.get(fieldId)?.text || '字段'} ↑</SelectItem><SelectItem value={`${fieldId}:desc`}>{index.nodesById.get(fieldId)?.text || '字段'} ↓</SelectItem></React.Fragment>)}
-      </SelectContent>
-    </Select>
+    <TanaViewDisplayFieldsControl index={index} label="选择卡片显示字段" results={results} view={view} />
     <Select value={groupFieldId ?? '__none__'} onValueChange={(value) => editor.getTransforms(TanaViewPlugin).view.update(view.id, { groupFieldId: value === '__none__' ? undefined : value })}>
       <SelectTrigger aria-label="按字段分组卡片" className="h-7 w-24 border-0 bg-transparent px-2 text-xs shadow-none"><GroupIcon className="size-3.5"/><SelectValue /></SelectTrigger>
       <SelectContent><SelectItem value="__none__">不分组</SelectItem>{fieldIds.map((fieldId) => <SelectItem key={fieldId} value={fieldId}>按{index.nodesById.get(fieldId)?.text || '字段'}</SelectItem>)}</SelectContent>

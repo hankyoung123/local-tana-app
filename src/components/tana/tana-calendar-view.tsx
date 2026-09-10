@@ -27,6 +27,7 @@ import {
   addTanaDays,
   formatTanaDay,
   getTanaToday,
+  getTanaWeekStart,
   isTanaDay,
   type TanaDay,
 } from '@/lib/tana/time';
@@ -42,6 +43,7 @@ import {
 } from '@/lib/tana';
 
 import { createTanaViewNode } from './tana-view-actions';
+import { TanaViewDisplayFieldsControl } from './tana-view-display-fields-control';
 
 export type TanaCalendarEntry = {
   day: TanaDay;
@@ -62,11 +64,36 @@ export function setTanaCalendarDate(
   day: TanaDay
 ): boolean {
   const fields = editor.getTransforms(TanaFieldPlugin).field;
-  if (!fields.materialize(nodeId, fieldId)) return false;
-  return fields.setValue(nodeId, fieldId, {
-    type: 'date',
-    value: day,
+  const write = () => {
+    if (!fields.materialize(nodeId, fieldId)) return false;
+    return fields.setValue(nodeId, fieldId, {
+      type: 'date',
+      value: day,
+    });
+  };
+
+  if (editor.api.isMerging()) return write();
+
+  let result = false;
+  editor.tf.withNewBatch(() => {
+    result = write();
   });
+  return result;
+}
+
+/** Calendar Add creates its canonical Node and Date Field in one undo batch. */
+export function createTanaCalendarNode(
+  editor: PlateEditor,
+  viewId: NodeId,
+  fieldId: NodeId,
+  day: TanaDay
+): NodeId | undefined {
+  let nodeId: NodeId | undefined;
+  editor.tf.withNewBatch(() => {
+    nodeId = createTanaViewNode(editor, viewId);
+    if (nodeId) setTanaCalendarDate(editor, nodeId, fieldId, day);
+  });
+  return nodeId;
 }
 
 export function getTanaDateFieldIds(index: TanaIndex, results: readonly TanaNode[]) {
@@ -90,7 +117,9 @@ export function getTanaCalendarEntries(
   results: readonly TanaNode[],
   dateFieldIds?: readonly NodeId[]
 ): TanaCalendarEntry[] {
-  const selected = dateFieldIds && dateFieldIds.length > 0 ? new Set(dateFieldIds) : undefined;
+  // Undefined means use every available Date Field. An empty list is a
+  // deliberate persisted choice to show no dated placements.
+  const selected = dateFieldIds === undefined ? undefined : new Set(dateFieldIds);
   const seen = new Set<string>();
   const entries: TanaCalendarEntry[] = [];
 
@@ -133,6 +162,14 @@ export function formatTanaCalendarMonth(month: string): string {
   return parsed ? `${parsed[1]} 年 ${Number(parsed[2])} 月` : month;
 }
 
+/** Moves one complete presentation range without storing Calendar cursor state. */
+export function moveTanaCalendarCursor(mode: CalendarMode, cursor: TanaDay, delta: number): TanaDay {
+  if (mode === 'month') {
+    return `${addTanaCalendarMonths(getTanaCalendarMonth(cursor), delta)}-01` as TanaDay;
+  }
+  return addTanaDays(cursor, delta * (mode === 'week' ? 7 : 1));
+}
+
 function selectCalendarDateFieldIds(index: TanaIndex, view: TanaNode, results: readonly TanaNode[]) {
   const available = getTanaDateFieldIds(index, results);
   const configured = view.viewDefinition?.calendarDateFieldIds;
@@ -141,11 +178,23 @@ function selectCalendarDateFieldIds(index: TanaIndex, view: TanaNode, results: r
     : available;
 }
 
-export function calendarDays(mode: CalendarMode, cursor: TanaDay, entries: readonly TanaCalendarEntry[]) {
+export function calendarDays(mode: CalendarMode, cursor: TanaDay, _entries: readonly TanaCalendarEntry[] = []) {
+  void _entries;
   if (mode === 'day') return [cursor];
-  if (mode === 'week') return Array.from({ length: 7 }, (_, offset) => addTanaDays(cursor, offset));
+  if (mode === 'week') {
+    const start = getTanaWeekStart(cursor);
+    return Array.from({ length: 7 }, (_, offset) => addTanaDays(start, offset));
+  }
   const month = getTanaCalendarMonth(cursor);
-  return Array.from(new Set(entries.filter((entry) => getTanaCalendarMonth(entry.day) === month).map((entry) => entry.day)));
+  const parsed = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!parsed) return [];
+  const year = Number(parsed[1]);
+  const monthIndex = Number(parsed[2]);
+  const daysInMonth = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  return Array.from(
+    { length: daysInMonth },
+    (_, day) => `${parsed[1]}-${parsed[2]}-${String(day + 1).padStart(2, '0')}` as TanaDay
+  );
 }
 
 export function TanaCalendarView({
@@ -173,13 +222,10 @@ export function TanaCalendarView({
   const defaultDateFieldId = activeDateFieldIds[0];
   const addOnDay = (day: TanaDay) => {
     if (!defaultDateFieldId) return;
-    const nodeId = createTanaViewNode(editor, view.id);
-    if (nodeId) writeDate(nodeId, defaultDateFieldId, day);
+    createTanaCalendarNode(editor, view.id, defaultDateFieldId, day);
   };
   const go = (delta: number) =>
-    setCursor((current) => mode === 'month'
-      ? `${addTanaCalendarMonths(getTanaCalendarMonth(current), delta)}-01` as TanaDay
-      : addTanaDays(current, delta * (mode === 'week' ? 7 : 1)));
+    setCursor((current) => moveTanaCalendarCursor(mode, current, delta));
 
   return (
     <div className="min-w-0 max-w-full space-y-3">
@@ -274,7 +320,6 @@ export function TanaCalendarView({
 
 export function TanaCalendarToolbarControls({ index, results, view }: { index: TanaIndex; results: readonly TanaNode[]; view: TanaNode }) {
   const editor = useEditorRef();
-  const projection = resolveTanaViewProjection(index, view, results);
   const dateFieldIds = getTanaDateFieldIds(index, results);
   const selected = selectCalendarDateFieldIds(index, view, results);
   return (
@@ -296,23 +341,7 @@ export function TanaCalendarToolbarControls({ index, results, view }: { index: T
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button aria-label="选择日历显示字段" className="inline-flex h-7 items-center rounded px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">显示</button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuLabel>显示字段</DropdownMenuLabel><DropdownMenuSeparator />
-        {projection.availableFieldIds.map((fieldId) => (
-          <DropdownMenuCheckboxItem key={fieldId} checked={projection.visibleFieldIds.includes(fieldId)} onCheckedChange={(checked) => {
-            const next = new Set(view.viewDefinition?.visibleFieldIds ?? projection.availableFieldIds);
-            if (checked) next.add(fieldId); else next.delete(fieldId);
-            editor.getTransforms(TanaViewPlugin).view.update(view.id, { visibleFieldIds: projection.availableFieldIds.filter((candidate) => next.has(candidate)) });
-          }}>
-            {index.nodesById.get(fieldId)?.text || '未命名字段'}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <TanaViewDisplayFieldsControl index={index} label="选择日历显示字段" results={results} view={view} />
     </>
   );
 }

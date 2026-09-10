@@ -37,6 +37,9 @@ import {
 import { TanaCalendarToolbarControls } from "./tana-calendar-view";
 import { TanaCardsToolbarControls } from "./tana-cards-view";
 import { TanaTableToolbarControls } from "./tana-table-view";
+import { TanaViewGroupControl } from "./tana-view-group-control";
+import { TanaViewSortControls } from "./tana-view-sort-controls";
+import { TanaViewDisplayFieldsControl } from "./tana-view-display-fields-control";
 
 type QueryGroup = Extract<TanaQueryExpression, { type: "and" | "or" }>;
 type QueryPredicateKind = TanaQueryPredicate["kind"];
@@ -112,17 +115,17 @@ export function TanaViewConfigurationEditor({
         </SelectContent>
       </Select>
 
-      {type !== "outline" && (
-        <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-[var(--tana-divider)] pt-3">
-          {type === "table" ? (
+      <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-[var(--tana-divider)] pt-3">
+        {(type === 'outline' || type === 'table' || type === 'cards') && <TanaViewSortControls index={index} results={results} view={view} />}
+        {type === 'outline' && <><TanaViewDisplayFieldsControl index={index} results={results} view={view} /><TanaViewGroupControl index={index} results={results} view={view} /></>}
+        {type === "table" ? (
             <TanaTableToolbarControls index={index} results={results} view={view} />
           ) : type === "cards" ? (
             <TanaCardsToolbarControls index={index} results={results} view={view} />
-          ) : (
+          ) : type === 'calendar' ? (
             <TanaCalendarToolbarControls index={index} results={results} view={view} />
-          )}
-        </div>
-      )}
+          ) : null}
+      </div>
     </section>
   );
 }

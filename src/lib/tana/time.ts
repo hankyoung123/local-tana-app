@@ -59,6 +59,17 @@ export function addTanaDays(day: TanaDay, amount: number): TanaDay {
   ).padStart(2, '0')}` as TanaDay;
 }
 
+/** Calendar Week presentation is ISO-aligned: Monday through Sunday. */
+export function getTanaWeekStart(day: TanaDay): TanaDay {
+  const date = toUtcDate(day);
+
+  if (!date) return day;
+
+  const weekday = date.getUTCDay() || 7;
+
+  return addTanaDays(day, 1 - weekday);
+}
+
 export function getTanaDayParts(day: TanaDay): TanaDayParts {
   const date = toUtcDate(day);
 

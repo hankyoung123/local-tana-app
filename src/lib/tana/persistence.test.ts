@@ -369,6 +369,23 @@ describe('Plate document persistence', () => {
     });
   });
 
+  test('preserves an explicit empty Calendar Date Field selection', () => {
+    const document = withWorkspace([{
+      children: [{ text: 'Calendar' }],
+      id: 'calendar',
+      tanaViewDefinition: { calendarDateFieldIds: [], type: 'calendar' },
+      type: 'p',
+    }]);
+    const reloaded = JSON.parse(JSON.stringify(document)) as Value;
+
+    assert.equal(isValidTanaDocument(document), true);
+    assert.equal(isValidTanaDocument(reloaded), true);
+    assert.deepEqual(
+      (reloaded.at(-1) as unknown as { tanaViewDefinition?: { calendarDateFieldIds?: readonly string[] } })?.tanaViewDefinition?.calendarDateFieldIds,
+      []
+    );
+  });
+
   test('accepts complete View presentation config and fails closed on malformed filters, sort, pagination, and date subsets', () => {
     const valid = withWorkspace([{
       children: [{ text: 'View' }], id: 'view', type: 'p',

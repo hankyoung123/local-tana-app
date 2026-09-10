@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import {
-  ArrowDownAZIcon,
   Columns3Icon,
   RotateCcwIcon,
 } from 'lucide-react';
@@ -812,11 +811,9 @@ export function TanaTableToolbarControls({
     results,
     getConfiguredTanaTableFieldIds(view.viewDefinition)
   );
-  const configuredSort = view.viewDefinition?.sort ?? [];
   const visibleFields = configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds;
-  const activeSort = configuredSort[0];
   const fieldName = (fieldId: NodeId) =>
     index.nodesById.get(fieldId)?.text || '未命名字段';
 
@@ -883,66 +880,6 @@ export function TanaTableToolbarControls({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Select
-        value={activeSort ? `${activeSort.fieldId}:${activeSort.direction}` : undefined}
-        onValueChange={(value) => {
-          if (value === '__none__') {
-            editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: undefined });
-            return;
-          }
-          const [fieldId, direction] = value.split(':');
-
-          if ((direction === 'asc' || direction === 'desc') && fieldId) {
-            editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-              sort: [{
-                direction,
-                fieldId: fieldId === TITLE_SORT ? TITLE_SORT : (fieldId as NodeId),
-              }],
-            });
-          }
-        }}
-      >
-        <SelectTrigger aria-label="排序表格结果" className="h-7 w-30 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
-          <ArrowDownAZIcon className="size-3.5" />
-          <SelectValue placeholder="排序" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">文档顺序</SelectItem>
-          <SelectItem value={`${TITLE_SORT}:asc`}>标题 A → Z</SelectItem>
-          <SelectItem value={`${TITLE_SORT}:desc`}>标题 Z → A</SelectItem>
-          {fieldIds.map((fieldId) => (
-            <React.Fragment key={fieldId}>
-              <SelectItem value={`${fieldId}:asc`}>{fieldName(fieldId)} ↑</SelectItem>
-              <SelectItem value={`${fieldId}:desc`}>{fieldName(fieldId)} ↓</SelectItem>
-            </React.Fragment>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value="__add__"
-        onValueChange={(value) => {
-          if (value === '__add__') return;
-          const [fieldId, direction] = value.split(':');
-          if ((direction !== 'asc' && direction !== 'desc') || !fieldId) return;
-          const criterion = {
-            direction,
-            fieldId: fieldId === TITLE_SORT ? TITLE_SORT : fieldId as NodeId,
-          } as const;
-          const withoutSameField = configuredSort.filter((current) => current.fieldId !== criterion.fieldId);
-          editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: [...withoutSameField, criterion] });
-        }}
-      >
-        <SelectTrigger aria-label="添加排序条件" className="h-7 w-24 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__add__">添加排序</SelectItem>
-          <SelectItem value={`${TITLE_SORT}:asc`}>标题 A → Z</SelectItem>
-          <SelectItem value={`${TITLE_SORT}:desc`}>标题 Z → A</SelectItem>
-          {fieldIds.map((fieldId) => <React.Fragment key={fieldId}>
-            <SelectItem value={`${fieldId}:asc`}>{fieldName(fieldId)} ↑</SelectItem>
-            <SelectItem value={`${fieldId}:desc`}>{fieldName(fieldId)} ↓</SelectItem>
-          </React.Fragment>)}
-        </SelectContent>
-      </Select>
     </>
   );
 }

@@ -108,12 +108,14 @@ export function focusAfterTanaSearch(editor: PlateEditor) {
 }
 
 export function TanaWorkspace({
+  documentRevision,
   persistenceStatus,
 }: {
+  documentRevision?: number;
   persistenceStatus: PersistenceStatus;
 }) {
   return (
-    <TanaIndexProvider>
+    <TanaIndexProvider revision={documentRevision}>
       <TanaWorkspaceContent persistenceStatus={persistenceStatus} />
     </TanaIndexProvider>
   );

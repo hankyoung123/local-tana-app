@@ -96,6 +96,9 @@ function LoadedPlateEditor({
     React.useState<PersistenceStatus>(
       sqliteEnabled ? 'saved' : 'browser-preview'
     );
+  // This is only a Plate change notification for rebuilding read-only Tana
+  // projections. It stores no document data or View result state.
+  const [documentRevision, setDocumentRevision] = React.useState(0);
   const saveVersion = React.useRef(0);
   const saveController = React.useMemo(
     () =>
@@ -115,6 +118,9 @@ function LoadedPlateEditor({
     },
     [saveController, sqliteEnabled]
   );
+  const noteDocumentChange = React.useCallback(() => {
+    setDocumentRevision((revision) => revision + 1);
+  }, []);
 
   React.useEffect(() => {
     if (!sqliteEnabled) return;
@@ -150,8 +156,15 @@ function LoadedPlateEditor({
   }, [saveController, sqliteEnabled]);
 
   return (
-    <Plate editor={editor} onValueChange={({ value }) => scheduleSave(value)}>
-      <TanaWorkspace persistenceStatus={persistenceStatus} />
+    <Plate
+      editor={editor}
+      onNodeChange={noteDocumentChange}
+      onValueChange={({ value }) => {
+        noteDocumentChange();
+        scheduleSave(value);
+      }}
+    >
+      <TanaWorkspace documentRevision={documentRevision} persistenceStatus={persistenceStatus} />
     </Plate>
   );
 }

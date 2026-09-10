@@ -34,14 +34,19 @@ export function createTanaViewNode(
   const insertionPath = [(descendants.at(-1) ?? path)[0] + 1];
   let nodeId: NodeId | undefined;
 
-  editor.tf.withNewBatch(() => {
+  const insert = () => {
     editor.tf.insertNodes(
       editor.api.create.block({ children: [{ text: title }], indent }),
       { at: insertionPath }
     );
     const created = editor.api.node(insertionPath)?.[0] as TanaBlockElement | undefined;
     nodeId = typeof created?.id === 'string' ? created.id : undefined;
-  });
+  };
+
+  // Calendar Add composes this adapter with the Field writer. Reuse that
+  // surrounding batch so the one user action remains one undo step.
+  if (editor.api.isMerging()) insert();
+  else editor.tf.withNewBatch(insert);
 
   return nodeId;
 }

@@ -11,7 +11,7 @@ import { isTanaNodeElement } from '@/lib/tana/constants';
 import { initialDocument } from '@/lib/tana/initial-document';
 
 import { createTanaViewNode } from './tana-view-actions';
-import { setTanaCalendarDate } from './tana-calendar-view';
+import { createTanaCalendarNode } from './tana-calendar-view';
 
 function editor(value: Value) {
   let id = 0;
@@ -53,10 +53,35 @@ describe('View collection add actions', () => {
       { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
       { children: [{ text: 'Calendar' }], id: 'calendar', tanaViewDefinition: { calendarDateFieldIds: ['due'], type: 'calendar' }, type: KEYS.p },
     ]);
-    const nodeId = createTanaViewNode(calendar, 'calendar');
+    const nodeId = createTanaCalendarNode(calendar, 'calendar', 'due', '2026-09-18');
     assert.ok(nodeId);
-    assert.equal(setTanaCalendarDate(calendar, nodeId!, 'due', '2026-09-18'), true);
-    const index = buildTanaIndex(calendar.children);
+    let index = buildTanaIndex(calendar.children);
     assert.deepEqual(index.fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
+
+    calendar.tf.undo();
+    index = buildTanaIndex(calendar.children);
+    assert.equal(index.nodesById.has(nodeId!), false);
+
+    calendar.tf.redo();
+    index = buildTanaIndex(calendar.children);
+    assert.deepEqual(index.fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
+  });
+
+  test('a Search + Calendar View add remains a canonical sibling before its Date Field writer runs', () => {
+    const calendar = editor([
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      {
+        children: [{ text: 'Search calendar' }], id: 'search-calendar', type: KEYS.p,
+        tanaSearchDefinition: { query: { children: [], type: 'and' } },
+        tanaViewDefinition: { calendarDateFieldIds: ['due'], type: 'calendar' },
+      },
+    ]);
+
+    const nodeId = createTanaCalendarNode(calendar, 'search-calendar', 'due', '2026-09-18');
+    assert.ok(nodeId);
+    assert.equal(buildTanaIndex(calendar.children).parentNodeIds.get(nodeId!), undefined);
+    assert.deepEqual(buildTanaIndex(calendar.children).fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
+    calendar.tf.undo();
+    assert.equal(buildTanaIndex(calendar.children).nodesById.has(nodeId!), false);
   });
 });

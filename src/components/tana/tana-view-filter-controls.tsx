@@ -73,14 +73,15 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
   const [supertagId, setSupertagId] = React.useState<NodeId | undefined>(tags[0]?.id);
   const [value, setValue] = React.useState('');
   const clauses = view.viewDefinition?.filter?.clauses ?? [];
+  const mode = view.viewDefinition?.filter?.mode ?? 'and';
   const add = (clause: TanaViewFilterClause) =>
     editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-      filter: { clauses: [...clauses, clause], mode: view.viewDefinition?.filter?.mode ?? 'and' },
+      filter: { clauses: [...clauses, clause], mode },
     });
   const remove = (position: number) => {
     const next = clauses.filter((_, indexInList) => indexInList !== position);
     editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-      filter: next.length ? { clauses: next, mode: view.viewDefinition?.filter?.mode ?? 'and' } : undefined,
+      filter: next.length ? { clauses: next, mode } : undefined,
     });
   };
   const selectedDefinition = fieldId ? index.nodesById.get(fieldId)?.fieldDefinition : undefined;
@@ -110,6 +111,14 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72 p-2">
         <DropdownMenuLabel>筛选</DropdownMenuLabel>
+        <Select value={mode} onValueChange={(nextMode) => {
+          editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+            filter: { clauses, mode: nextMode as 'and' | 'or' },
+          });
+        }}>
+          <SelectTrigger aria-label="筛选匹配方式" className="mx-1 h-7 w-[calc(100%-0.5rem)] text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="and">匹配全部</SelectItem><SelectItem value="or">匹配任意</SelectItem></SelectContent>
+        </Select>
         <div className="space-y-1 px-1 pb-2">
           {clauses.map((clause, position) => (
             <div className="flex items-center gap-1 text-xs" key={`${position}:${JSON.stringify(clause)}`}>

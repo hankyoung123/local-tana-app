@@ -2,8 +2,16 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function openCombobox(page: Page) {
   await page.goto('/editor');
+  const editor = page.locator('[data-slate-editor]');
+  await expect(editor).toBeVisible();
   await page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
+  // The fixture is a real hydrated Plate editor. Wait for the click's Slate
+  // selection/focus handoff before emitting the trigger so CI cannot race
+  // initial hydration and type into the document body instead.
+  await expect(editor).toBeFocused();
   await page.keyboard.press('End');
+  // Plate's trigger rule intentionally listens to keyboard input events rather
+  // than a synthetic bulk text insertion.
   await page.keyboard.type(' #');
   const input = page.locator('input[role="combobox"]');
   await expect(input).toBeFocused();

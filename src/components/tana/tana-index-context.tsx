@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import { useEditorValue } from 'platejs/react';
+import { useEditorRef } from 'platejs/react';
 
 import { buildTanaIndex, type TanaIndex } from '@/lib/tana';
 
@@ -13,9 +13,15 @@ const TanaIndexContext = React.createContext<TanaIndex | null>(null);
  * It deliberately exposes no setter: the editor document remains the source
  * of truth and every document change rebuilds this value in full.
  */
-export function TanaIndexProvider({ children }: React.PropsWithChildren) {
-  const value = useEditorValue();
-  const index = React.useMemo(() => buildTanaIndex(value), [value]);
+export function TanaIndexProvider({ children, revision = 0 }: React.PropsWithChildren<{ revision?: number }>) {
+  const editor = useEditorRef();
+  // Plate's stored value is an initial snapshot for metadata-only Slate
+  // operations. Rebuild from the live editor document whenever the root
+  // receives a document-change notification; this remains a read-only view.
+  const index = React.useMemo(() => {
+    void revision;
+    return buildTanaIndex(editor.children);
+  }, [editor, revision]);
 
   return (
     <TanaIndexContext.Provider value={index}>
