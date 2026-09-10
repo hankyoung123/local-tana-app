@@ -109,6 +109,53 @@ describe('Tana Supertag operations', () => {
     assert.deepEqual(index.nodesById.get('new-task')?.supertagIds, ['project']);
   });
 
+  test('initializes template defaults once at apply time without overwriting stored Values', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-title', indent: 1, tanaFieldId: 'title', type: KEYS.p },
+      { children: [{ text: 'Untitled' }], id: 'template-title-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Title' }], id: 'title', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Fresh task' }], id: 'fresh-task', type: KEYS.p },
+      { children: [{ text: 'Existing task' }], id: 'existing-task', type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+    const fields = editor.getTransforms(TanaFieldPlugin).field;
+
+    fields.materialize('existing-task', 'title');
+    fields.setValue('existing-task', 'title', { type: 'plain', value: 'Keep me' });
+    const beforeFreshApply = structuredClone(editor.children);
+
+    assert.equal(supertag.apply('fresh-task', 'project'), true);
+    const afterFreshApply = structuredClone(editor.children);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldValues.get('fresh-task'),
+      new Map([['title', { type: 'plain', value: 'Untitled' }]])
+    );
+
+    editor.tf.undo();
+    assert.deepEqual(editor.children, beforeFreshApply);
+    editor.tf.redo();
+    assert.deepEqual(editor.children, afterFreshApply);
+
+    assert.equal(supertag.apply('existing-task', 'project'), true);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldValues.get('existing-task'),
+      new Map([['title', { type: 'plain', value: 'Keep me' }]])
+    );
+
+    fields.setValue('fresh-task', 'title', { type: 'plain', value: 'Edited once' });
+    const templateValuePath = buildTanaIndex(editor.children).nodesById.get('template-title-value')!.path;
+    editor.tf.setNodes({ children: [{ text: 'Changed template' }] }, { at: templateValuePath });
+    const freshTaskPath = buildTanaIndex(editor.children).nodesById.get('fresh-task')!.path;
+    editor.tf.moveNodes({ at: freshTaskPath, to: [editor.children.length] });
+
+    assert.equal(supertag.apply('fresh-task', 'project'), false);
+    assert.deepEqual(
+      buildTanaIndex(editor.children).fieldValues.get('fresh-task'),
+      new Map([['title', { type: 'plain', value: 'Edited once' }]])
+    );
+  });
+
   test('initializes every real list-template Value Node without a default-value map', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },

@@ -12,6 +12,8 @@ import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-pl
 
 import { isTanaNodeElement } from './constants';
 import {
+  findFieldDefinitionExactMatch,
+  getFieldDefinitionCandidatesFromIndex,
   getNodeFieldDescriptors,
   isAdHocFieldInputNode,
   isFieldDefined,
@@ -19,7 +21,8 @@ import {
   isFieldValueCompatible,
   isFieldValueValid,
   isSupertagFieldInputNode,
-  getFieldValueCandidates
+  getFieldValueCandidates,
+  prioritizeFieldDefinitionCandidates,
 } from './fields';
 import { buildTanaIndex } from './index';
 import { getTanaNodePath, isTanaNodeInteractable } from './outliner';
@@ -444,6 +447,77 @@ describe('Field occurrence Nodes', () => {
       getFieldValueCandidates(index, 'status').map(({ id }) => id),
       ['static', 'source-child', 'canonical-child', 'search-candidate']
     );
+  });
+
+  test('uses the same Reference and Search candidates for Options validation', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { cardinality: 'list', type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Static' }], id: 'static', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Source reference' }], id: 'source-reference', indent: 1, tanaReferenceTargetId: 'source', type: KEYS.p },
+      {
+        children: [{ text: 'Search source' }],
+        id: 'search-source',
+        indent: 1,
+        tanaSearchDefinition: {
+          query: {
+            children: [{ predicate: { kind: 'text-contains', text: 'Search candidate' }, type: 'predicate' }],
+            type: 'and',
+          },
+        },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
+      { children: [{ text: 'Source child' }], id: 'source-child', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Search candidate' }], id: 'search-candidate', type: KEYS.p },
+    ]);
+
+    field(editor).addValue('task', 'status', { type: 'options', value: 'static' });
+    field(editor).addValue('task', 'status', { type: 'options', value: 'source-child' });
+    field(editor).addValue('task', 'status', { type: 'options', value: 'search-candidate' });
+
+    const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
+
+    assert.deepEqual(occurrence.values, [
+      { type: 'options', value: 'static' },
+      { type: 'options', value: 'source-child' },
+      { type: 'options', value: 'search-candidate' },
+    ]);
+    assert.deepEqual(
+      occurrence.valueNodeIds.map((id) => occurrence.validationIssuesByValueNodeId.get(id)),
+      [[], [], []]
+    );
+  });
+
+  test('prioritizes a Schema-owned exact Field Definition in `>` discovery', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'field-input', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Priority' }], id: 'local-priority', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Schema' }], id: 'schema', tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Priority' }], id: 'schema-priority', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Prioritized' }], id: 'fuzzy', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+      { children: [{ text: 'Priority' }], id: 'trashed-priority', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const index = buildTanaIndex(editor.children);
+    const candidates = getFieldDefinitionCandidatesFromIndex(index);
+
+    assert.deepEqual(candidates.map(({ id }) => id), [
+      'local-priority',
+      'schema-priority',
+      'fuzzy',
+    ]);
+    assert.deepEqual(
+      prioritizeFieldDefinitionCandidates(candidates, 'Priority').map(({ id }) => id),
+      ['schema-priority', 'local-priority', 'fuzzy']
+    );
+    assert.equal(findFieldDefinitionExactMatch(index, 'Priority')?.id, 'schema-priority');
+    assert.equal(
+      field(editor).completeAdHocInput('field-input', { name: 'Priority', type: 'create' }),
+      'schema-priority'
+    );
+    assert.equal(buildTanaIndex(editor.children).fieldNodesById.get('field-input')?.fieldId, 'schema-priority');
   });
 
   test('creates an Options candidate Node and assigns it in one undoable batch', () => {

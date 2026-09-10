@@ -64,10 +64,10 @@ const fieldTypes: readonly FieldType[] = [
 
 const fieldVisibilityPolicyLabels: Record<FieldVisibilityPolicy, string> = {
   always: '始终隐藏',
-  default: '默认显示',
   never: '从不隐藏',
   'when-empty': '值为空时隐藏',
   'when-non-empty': '有值时隐藏',
+  'when-default': '值为默认值时隐藏',
 };
 
 /**
@@ -630,7 +630,7 @@ function FieldDefinitionEditor({
       visibility?: FieldVisibilityPolicy;
     };
 
-    if (visibility === 'default') delete next.visibility;
+    if (visibility === 'never') delete next.visibility;
     else next.visibility = visibility;
 
     fieldTransforms.updateDefinition(fieldId, next);
@@ -719,7 +719,7 @@ function FieldDefinitionEditor({
       <div className="mt-3">
         <p className="mb-1.5 text-[var(--tana-text-tertiary)] text-[11px]">字段可见性</p>
         <Select
-          value={definition.visibility ?? 'default'}
+          value={definition.visibility ?? 'never'}
           onValueChange={(value) => setVisibilityPolicy(value as FieldVisibilityPolicy)}
         >
           <SelectTrigger className="h-8 w-full bg-[var(--tana-canvas)] text-xs shadow-none">

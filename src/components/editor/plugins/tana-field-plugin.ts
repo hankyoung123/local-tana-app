@@ -609,7 +609,7 @@ function applyDefault(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId, valu
   if (
     buildTanaIndex(editor.children)
       .fieldNodesByParent.get(nodeId)
-      ?.some((fieldNode) => fieldNode.fieldId === fieldId && fieldNode.values.length > 0)
+      ?.some((fieldNode) => fieldNode.fieldId === fieldId && fieldNode.hasStoredValue)
   ) {
     return false;
   }

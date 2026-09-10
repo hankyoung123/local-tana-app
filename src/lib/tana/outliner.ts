@@ -58,6 +58,145 @@ function getFieldDefinitionForOccurrence(
   })[0];
 }
 
+/**
+ * Normalizes the current canonical Value representation for comparison with a
+ * template default. This is presentation-only: it does not add a value state
+ * to either the Field occurrence or its Definition.
+ */
+function getFieldValueSignature(value: TanaBlockElement): string | undefined {
+  const type = value.tanaFieldValueType;
+
+  if (!type) return;
+
+  const findRelationTarget = (candidate: TElement): string | undefined => {
+    if (typeof candidate.key === 'string' && candidate.key.length > 0) {
+      return candidate.key;
+    }
+
+    for (const child of candidate.children) {
+      if ('children' in child && Array.isArray(child.children)) {
+        const target = findRelationTarget(child as TElement);
+
+        if (target) return target;
+      }
+    }
+  };
+  const getText = (candidate: TElement | { text: unknown }): string => {
+    if ('text' in candidate) {
+      return typeof candidate.text === 'string' ? candidate.text : '';
+    }
+
+    return candidate.children
+      .map((child) =>
+        'children' in child && Array.isArray(child.children)
+          ? getText(child as TElement)
+          : 'text' in child && typeof child.text === 'string'
+            ? child.text
+            : ''
+      )
+      .join('');
+  };
+  const text = getText(value);
+
+  if (type === 'options' || type === 'from-supertag') {
+    const target = findRelationTarget(value);
+
+    return target ? `${type}:${target}` : undefined;
+  }
+
+  if (type === 'number') {
+    const numericValue = Number(text.trim());
+
+    return text.trim().length > 0 && Number.isFinite(numericValue)
+      ? `${type}:${numericValue}`
+      : undefined;
+  }
+
+  if (type === 'checkbox') {
+    return text === 'true' || text === 'false' ? `${type}:${text}` : undefined;
+  }
+
+  return text.length > 0 ? `${type}:${text}` : undefined;
+}
+
+function getDirectFieldValueSignatures(document: Value, path: Path): string[] {
+  return getTanaDirectChildPaths(document, path).flatMap((valuePath) => {
+    const value = getTanaNodeAt(document, valuePath) as TanaBlockElement | undefined;
+    const signature = value ? getFieldValueSignature(value) : undefined;
+
+    return signature ? [signature] : [];
+  });
+}
+
+/**
+ * Returns whether a real Field occurrence currently equals at least one
+ * applicable Supertag template default. Inheritance follows Definition edges
+ * only; it never follows Reference edges or writes a derived marker.
+ */
+export function isTanaFieldNodeAtTemplateDefault(document: Value, path: Path): boolean {
+  const field = getTanaNodeAt(document, path) as TanaBlockElement | undefined;
+  const parentPath = getTanaParentPath(document, path);
+  const parent = parentPath
+    ? (getTanaNodeAt(document, parentPath) as TanaBlockElement | undefined)
+    : undefined;
+
+  if (!field?.tanaFieldId || !parent || !Array.isArray(parent.tanaSupertagIds)) {
+    return false;
+  }
+
+  const currentValues = getDirectFieldValueSignatures(document, path);
+
+  if (currentValues.length === 0) return false;
+
+  const nodesById = new Map(
+    getTanaNodePaths(document).flatMap((nodePath) => {
+      const node = getTanaNodeAt(document, nodePath) as TanaBlockElement | undefined;
+
+      return node && typeof node.id === 'string' ? [[node.id, { node, path: nodePath }] as const] : [];
+    })
+  );
+  const resolveDefault = (supertagId: NodeId): string[] | undefined => {
+    const visited = new Set<NodeId>();
+    let defaultValues: string[] | undefined;
+    const visit = (id: NodeId) => {
+      if (visited.has(id)) return;
+      visited.add(id);
+
+      const supertag = nodesById.get(id);
+      const definition = supertag?.node.tanaSupertagDefinition;
+
+      if (!supertag || !definition) return;
+
+      definition.extends?.forEach((parentSupertagId) => visit(parentSupertagId));
+      const template = getTanaDirectChildPaths(document, supertag.path)
+        .map((childPath) => ({
+          node: getTanaNodeAt(document, childPath) as TanaBlockElement | undefined,
+          path: childPath,
+        }))
+        .find(({ node }) => node?.tanaFieldId === field.tanaFieldId);
+
+      // A direct template binding replaces an inherited binding, including an
+      // unset direct template that intentionally supplies no default.
+      if (template) defaultValues = getDirectFieldValueSignatures(document, template.path);
+    };
+
+    visit(supertagId);
+
+    return defaultValues;
+  };
+  const defaults = parent.tanaSupertagIds.flatMap((supertagId) => {
+    const values = resolveDefault(supertagId);
+
+    return values && values.length > 0 ? [values] : [];
+  });
+
+  return defaults.some(
+    (templateValues) =>
+      templateValues.length === currentValues.length &&
+      templateValues.every((value, index) => value === currentValues[index])
+  );
+}
+
 /** Returns every top-level Plate block that participates in the outliner. */
 export function getTanaNodePaths(document: Value): Path[] {
   return document.flatMap((node, index) =>
@@ -269,14 +408,15 @@ export function isTanaFieldNodePresentationHidden(
         }
       );
 
-      switch (definition?.visibility ?? 'default') {
+      switch (definition?.visibility ?? 'never') {
         case 'always':
           return true;
         case 'when-empty':
           return !hasStoredValue;
         case 'when-non-empty':
           return hasStoredValue;
-        case 'default':
+        case 'when-default':
+          return isTanaFieldNodeAtTemplateDefault(document, candidatePath);
         case 'never':
           break;
       }

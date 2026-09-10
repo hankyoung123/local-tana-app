@@ -3,11 +3,10 @@ import type { Path, TElement, Value } from 'platejs';
 
 import { isTanaNodeElement } from './constants';
 import { getFieldValueValidationIssues } from './field-value';
+import { resolveFieldValueCandidates } from './field-candidates';
 import {
-  getActiveSupertagInstances,
   getNodeSupertagIds,
   getSupertagInheritance,
-  getTanaProjectionTarget,
   isTanaNodeActive,
   isTanaNodeInTrash,
 } from './index';
@@ -16,6 +15,7 @@ import { runTanaQuery } from './query';
 import {
   getTanaAncestorPaths,
   getTanaDirectChildPaths,
+  isTanaFieldNodeAtTemplateDefault,
   getTanaParentPath,
 } from './outliner';
 import type {
@@ -45,6 +45,8 @@ export type FieldDefinitionCandidate = Pick<
   'fieldDefinition' | 'id' | 'text'
 > & {
   fieldDefinition: FieldDefinition;
+  /** Derived hierarchy context for stable `>` discovery ordering. */
+  schemaOwned: boolean;
 };
 
 export const TANA_SYSTEM_FIELD_KEYS = {
@@ -73,6 +75,7 @@ export type TanaFieldDescriptor = {
   /** The real Field occurrence Node that presentation can show or hide. */
   fieldNodeId?: NodeId;
   hasStoredValue?: boolean;
+  isDefaultValue?: boolean;
   key: NodeId | TanaSystemFieldKey;
   label: string;
   pinned?: boolean;
@@ -318,11 +321,29 @@ export function isFieldSet(
 export function getFieldDefinitionCandidatesFromIndex(
   index: TanaIndex
 ): FieldDefinitionCandidate[] {
+  const schemaId = index.systemNodeIds.get('schema');
+  const isSchemaOwned = (nodeId: NodeId) => {
+    const visited = new Set<NodeId>();
+    let current = index.parentNodeIds.get(nodeId);
+
+    while (current && !visited.has(current)) {
+      if (current === schemaId) return true;
+      visited.add(current);
+      current = index.parentNodeIds.get(current);
+    }
+
+    return false;
+  };
+
   return Array.from(index.nodesById.values()).flatMap((node) =>
     isTanaNodeActive(index, node.id) &&
     node.semanticTypes.includes('field-definition') &&
     node.fieldDefinition
-      ? [{ ...node, fieldDefinition: node.fieldDefinition }]
+      ? [{
+          ...node,
+          fieldDefinition: node.fieldDefinition,
+          schemaOwned: isSchemaOwned(node.id),
+        }]
       : []
   );
 }
@@ -360,7 +381,11 @@ export function prioritizeFieldDefinitionCandidates(
     );
   });
 
-  return [...exact, ...fuzzy];
+  return [
+    ...exact.filter((candidate) => candidate.schemaOwned),
+    ...exact.filter((candidate) => !candidate.schemaOwned),
+    ...fuzzy,
+  ];
 }
 
 export function hasFieldDefinitionExactMatch(
@@ -385,9 +410,10 @@ export function findFieldDefinitionExactMatch(
 
   if (!normalizedName) return;
 
-  return getFieldDefinitionCandidatesFromIndex(index).find((candidate) =>
-    isFieldDefinitionNameExact(candidate, normalizedName)
-  );
+  return prioritizeFieldDefinitionCandidates(
+    getFieldDefinitionCandidatesFromIndex(index),
+    normalizedName
+  ).find((candidate) => isFieldDefinitionNameExact(candidate, normalizedName));
 }
 
 /**
@@ -473,60 +499,8 @@ export function getSupertagTemplateFields(
  * static child Nodes, one-hop Reference child sources, or Search child
  * sources; none of those sources writes a candidate list into the document.
  */
-export function getFieldValueCandidates(
-  index: TanaIndex,
-  fieldId: NodeId
-): TanaNode[] {
-  const definitionNode = index.nodesById.get(fieldId);
-  const definition = definitionNode?.fieldDefinition;
-
-  if (!definition || !definitionNode) return [];
-
-  if (definition.type === 'options') {
-    const candidates: TanaNode[] = [];
-    const candidateIds = new Set<NodeId>();
-    const addCandidate = (nodeId: NodeId) => {
-      const candidate = getTanaProjectionTarget(index, nodeId);
-
-      if (!candidate || candidateIds.has(candidate.id)) return;
-
-      candidateIds.add(candidate.id);
-      candidates.push(candidate);
-    };
-
-    getTanaDirectChildPaths(index.document, definitionNode.path)
-      .map((path) => getNodeAtDocumentPath(index, path))
-      .filter((node): node is TanaNode => !!node)
-      .forEach((source) => {
-        if (source.referenceTargetId !== undefined) {
-          const target = getTanaProjectionTarget(index, source.id);
-
-          (target ? index.childrenByParent.get(target.id) ?? [] : []).forEach(addCandidate);
-          return;
-        }
-
-        if (source.searchDefinition) {
-          try {
-            runTanaQuery(index, source.searchDefinition.query).forEach((node) =>
-              addCandidate(node.id)
-            );
-          } catch {
-            // An uncommitted malformed Search is not a candidate source.
-          }
-          return;
-        }
-
-        addCandidate(source.id);
-      });
-
-    return candidates;
-  }
-
-  if (definition.type !== 'from-supertag' || !definition.sourceSupertagId) {
-    return [];
-  }
-
-  return getActiveSupertagInstances(index, definition.sourceSupertagId);
+export function getFieldValueCandidates(index: TanaIndex, fieldId: NodeId): TanaNode[] {
+  return resolveFieldValueCandidates(index, fieldId, runTanaQuery);
 }
 
 function formatNodeNames(nodes: readonly TanaNode[]): string {
@@ -569,7 +543,8 @@ export function getNodeFieldDescriptors(
         !(
           descriptor.visibilityPolicy === 'always' ||
           (descriptor.visibilityPolicy === 'when-empty' && !descriptor.hasStoredValue) ||
-          (descriptor.visibilityPolicy === 'when-non-empty' && descriptor.hasStoredValue)
+          (descriptor.visibilityPolicy === 'when-non-empty' && descriptor.hasStoredValue) ||
+          (descriptor.visibilityPolicy === 'when-default' && descriptor.isDefaultValue)
         )),
   });
   const parentPath = getTanaParentPath(index.document, node.path);
@@ -664,11 +639,15 @@ export function getNodeFieldDescriptors(
         fieldId: field.id,
         fieldNodeId: fieldNode.id,
         hasStoredValue: fieldNode.hasStoredValue,
+        isDefaultValue: isTanaFieldNodeAtTemplateDefault(
+          index.document,
+          fieldNode.path
+        ),
         key: fieldNode.id,
         label: field.text || '未命名字段',
         pinned: matchingTemplates.some(({ template }) => template.pinned),
         source: matchingSupertagIds.length > 0 ? 'supertag' : 'custom',
-        visibilityPolicy: field.fieldDefinition.visibility ?? 'default',
+        visibilityPolicy: field.fieldDefinition.visibility ?? 'never',
         ...(matchingSupertagIds.length > 0
           ? { supertagIds: matchingSupertagIds }
           : {}),

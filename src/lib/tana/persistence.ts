@@ -313,7 +313,7 @@ function isFieldDefinition(value: unknown): value is {
 
   if (
     field.visibility !== undefined &&
-    !['always', 'default', 'never', 'when-empty', 'when-non-empty'].includes(
+    !['always', 'never', 'when-empty', 'when-non-empty', 'when-default'].includes(
       field.visibility as string
     )
   ) {

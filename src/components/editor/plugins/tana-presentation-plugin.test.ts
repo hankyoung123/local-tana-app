@@ -11,6 +11,7 @@ import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { canDropOnInteractableTanaNode } from '@/components/ui/block-draggable';
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { getNodeFieldDescriptors } from '@/lib/tana/fields';
 import { buildTanaIndex } from '@/lib/tana/index';
 import {
   isTanaFieldNodePresentationHidden,
@@ -163,10 +164,9 @@ describe('Tana Field presentation', () => {
   test('derives every Field visibility policy from Definition data and stored Value presence', () => {
     const cases: Array<{
       hidden: boolean;
-      policy: 'always' | 'default' | 'never' | 'when-empty' | 'when-non-empty';
+      policy: 'always' | 'never' | 'when-empty' | 'when-non-empty';
       value?: string;
     }> = [
-      { hidden: false, policy: 'default' },
       { hidden: false, policy: 'never' },
       { hidden: true, policy: 'always', value: 'set' },
       { hidden: true, policy: 'when-empty' },
@@ -204,5 +204,60 @@ describe('Tana Field presentation', () => {
         `${policy} remains derived rather than an instance visibility write`
       );
     }
+  });
+
+  test('derives when-default from current Values and real Supertag template Values', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Draft' }], id: 'template-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain', visibility: 'when-default' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', tanaSupertagIds: ['project'], type: KEYS.p },
+    ]);
+    const fields = editor.getTransforms(TanaFieldPlugin).field;
+    const fieldNodeId = fields.materialize('task', 'status')!;
+
+    fields.setValue('task', 'status', { type: 'plain', value: 'Draft' });
+    let index = buildTanaIndex(editor.children);
+    let fieldPath = index.nodesById.get(fieldNodeId)!.path;
+
+    assert.equal(isTanaFieldNodePresentationHidden(editor.children, fieldPath), true);
+    assert.equal(
+      getNodeFieldDescriptors(index, 'task').find(({ fieldNodeId: id }) => id === fieldNodeId)?.visible,
+      false
+    );
+
+    fields.setValue('task', 'status', { type: 'plain', value: 'Published' });
+    index = buildTanaIndex(editor.children);
+    fieldPath = index.nodesById.get(fieldNodeId)!.path;
+
+    assert.equal(isTanaFieldNodePresentationHidden(editor.children, fieldPath), false);
+    assert.equal(
+      getNodeFieldDescriptors(index, 'task').find(({ fieldNodeId: id }) => id === fieldNodeId)?.visible,
+      true
+    );
+    assert.equal(editor.children.find((node) => node.id === 'task')?.tanaPresentation, undefined);
+  });
+
+  test('lets a direct template binding replace an inherited when-default value', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Base' }], id: 'base', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'base-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Inherited' }], id: 'base-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: { extends: ['base'] }, type: KEYS.p },
+      { children: [{ text: '' }], id: 'project-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: '' }], id: 'project-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain', visibility: 'when-default' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', tanaSupertagIds: ['project'], type: KEYS.p },
+    ]);
+    const fieldNodeId = editor.getTransforms(TanaFieldPlugin).field.materialize('task', 'status')!;
+
+    editor.getTransforms(TanaFieldPlugin).field.setValue('task', 'status', {
+      type: 'plain',
+      value: 'Inherited',
+    });
+    const fieldPath = buildTanaIndex(editor.children).nodesById.get(fieldNodeId)!.path;
+
+    assert.equal(isTanaFieldNodePresentationHidden(editor.children, fieldPath), false);
   });
 });

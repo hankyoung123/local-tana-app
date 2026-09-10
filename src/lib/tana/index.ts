@@ -1,10 +1,12 @@
 import { resolveTanaNodeTitle } from './title';
 import type { Descendant, Path, TElement, Value } from 'platejs';
 
-import { ElementApi, KEYS, TextApi } from 'platejs';
+import { KEYS, TextApi } from 'platejs';
 
 import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
 import { getFieldValueValidationIssues } from './field-value';
+import { resolveFieldValueCandidates } from './field-candidates';
+import { runTanaQuery } from './query';
 import {
   getNodeSemanticType,
   getNodeSemanticTypes,
@@ -201,35 +203,6 @@ function hasStoredFieldValue(valueNode: TanaNode): boolean {
   const element = valueNode.node as TanaBlockElement;
 
   return getRawElementText(element).trim().length > 0 || !!findMentionTarget(element);
-}
-
-function getDerivedFieldCandidateIds(
-  document: Value,
-  fieldId: NodeId,
-  definition: NonNullable<TanaBlockElement['tanaFieldDefinition']>,
-  nodesById: ReadonlyMap<NodeId, TanaNode>,
-  nodesBySupertag: ReadonlyMap<NodeId, readonly NodeId[]>
-): ReadonlySet<NodeId> | undefined {
-  if (definition.type === 'options') {
-    const fieldDefinitionNode = nodesById.get(fieldId);
-
-    return new Set(fieldDefinitionNode ? getTanaDirectChildPaths(document, fieldDefinitionNode.path)
-      .flatMap((path) => {
-        const candidate = document[path[0]];
-
-        return ElementApi.isElement(candidate) && typeof candidate.id === 'string'
-          ? [candidate.id]
-          : [];
-      }) : []);
-  }
-
-  if (definition.type === 'from-supertag') {
-    return new Set(
-      definition.sourceSupertagId
-        ? nodesBySupertag.get(definition.sourceSupertagId) ?? []
-        : []
-    );
-  }
 }
 
 /** Fully derives the read-only semantic index from the current Plate value. */
@@ -492,15 +465,10 @@ export function buildTanaIndex(document: Value): TanaIndex {
           : [];
       }
     );
-    const candidateIds = definition
-      ? getDerivedFieldCandidateIds(
-          document,
-          fieldId,
-          definition,
-          nodesById,
-          nodesBySupertag
-        )
-      : undefined;
+    // Options and From-Supertag candidates need the complete derived index
+    // (including one-hop Reference and Search sources). Validation is filled
+    // in after this initial read-only index has been constructed below.
+    const candidateIds = undefined;
     const valueEntries = valueNodes.flatMap((valueNode) => {
       const parsedValue = getFieldValueFromNode(valueNode);
 
@@ -555,7 +523,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
     }
   });
 
-  return {
+  const index: TanaIndex = {
     backlinks,
     childrenByParent,
     document,
@@ -570,6 +538,36 @@ export function buildTanaIndex(document: Value): TanaIndex {
     systemNodeIds,
     timeNodeIds,
   };
+
+  for (const [parentId, fields] of fieldNodesByParent) {
+    const updated = fields.map((field) => {
+      const definition = field.brokenFieldDefinition
+        ? undefined
+        : index.nodesById.get(field.fieldId)?.fieldDefinition;
+      const candidateIds = definition && (definition.type === 'options' || definition.type === 'from-supertag')
+        ? new Set(resolveFieldValueCandidates(index, field.fieldId, runTanaQuery).map(({ id }) => id))
+        : undefined;
+      const validationIssuesByValueNodeId = new Map(
+        field.valueNodeIds.map((valueNodeId) => {
+          const value = field.valueByNodeId.get(valueNodeId);
+          const valueNode = index.nodesById.get(valueNodeId);
+          return [
+            valueNodeId,
+            definition
+              ? value
+                ? getFieldValueValidationIssues(definition, value, candidateIds)
+                : valueNode ? getUndecodableFieldValueIssues(valueNode) : []
+              : [],
+          ] as const;
+        })
+      );
+      return { ...field, validationIssuesByValueNodeId };
+    });
+    fieldNodesByParent.set(parentId, updated);
+    updated.forEach((field) => fieldNodesById.set(field.id, field));
+  }
+
+  return index;
 }
 
 export * from './time';

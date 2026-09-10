@@ -97,6 +97,19 @@ describe('Plate document persistence', () => {
     assert.equal(
       isValidTanaDocument(
         withWorkspace([
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain', visibility: 'when-default' },
+            type: 'p',
+          },
+        ])
+      ),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
           { children: [{ text: 'Task' }], id: 'task', type: 'p' },
           {
             children: [{ text: '' }],
@@ -222,6 +235,19 @@ describe('Plate document persistence', () => {
             children: [{ text: 'Status' }],
             id: 'status',
             tanaFieldDefinition: { type: 'plain', visibility: 'sometimes' },
+            type: 'p',
+          },
+        ])
+      ),
+      false
+    );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain', visibility: 'default' },
             type: 'p',
           },
         ])

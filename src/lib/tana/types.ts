@@ -28,10 +28,10 @@ export type TanaSystemNode =
 
 export type FieldVisibilityPolicy =
   | 'always'
-  | 'default'
   | 'never'
   | 'when-empty'
-  | 'when-non-empty';
+  | 'when-non-empty'
+  | 'when-default';
 
 type FieldDefinitionBase = {
   cardinality?: FieldCardinality;
