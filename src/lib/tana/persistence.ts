@@ -9,7 +9,8 @@ import {
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import { isTanaFieldHostNode } from './fields';
-import { isTanaQueryAst } from './query-ast';
+import { isTanaSearchQueryAst } from './query-ast';
+import { isTanaSearchHost } from './search-host';
 import { isTanaDay } from './time';
 import { containsTanaSoftLineBreak } from './single-line';
 import type { NodeId, TanaBlockElement } from './types';
@@ -239,11 +240,15 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   if (semantic.tanaSearchDefinition !== undefined) {
-    const definition = semantic.tanaSearchDefinition as { query?: unknown };
+    const definition = semantic.tanaSearchDefinition;
 
     if (
       !definition ||
-      !isTanaQueryAst(definition.query)
+      typeof definition !== 'object' ||
+      Array.isArray(definition) ||
+      Object.keys(definition as Record<string, unknown>).length !== 1 ||
+      !Object.hasOwn(definition as object, 'query') ||
+      !isTanaSearchQueryAst((definition as { query?: unknown }).query)
     ) {
       return false;
     }
@@ -599,6 +604,13 @@ export function isValidTanaDocument(value: unknown): value is Value {
     // semantic Supertag membership; the occurrence cannot persist a second
     // membership truth.
     if (node.tanaReferenceTargetId !== undefined && node.tanaSupertagIds !== undefined) {
+      return false;
+    }
+
+    if (
+      node.tanaSearchDefinition !== undefined &&
+      !isTanaSearchHost(node, { document: value, path })
+    ) {
       return false;
     }
 

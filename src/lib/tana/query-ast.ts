@@ -1,4 +1,5 @@
 import type { TanaQueryExpression, TanaQueryPredicate } from './types';
+import { isTanaDay } from './time';
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -13,11 +14,25 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     case 'text-contains':
       return keys(value, ['kind', 'text']) && typeof value.text === 'string' && value.text.trim().length > 0;
     case 'has-supertag':
+    case 'has-tag':
       return keys(value, ['kind', 'supertagId']) && id(value.supertagId);
     case 'field-defined':
     case 'field-exists':
+    case 'has-field':
       return keys(value, ['kind', 'fieldId']) && id(value.fieldId);
-    case 'field-equals': {
+    case 'done-state':
+      return keys(value, ['kind', 'state']) && (value.state === 'todo' || value.state === 'done');
+    case 'date-is':
+      return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDay(value.date);
+    case 'is-semantic':
+      return keys(value, ['kind', 'semantic']) &&
+        (value.semantic === 'calendar-node' || value.semantic === 'field' || value.semantic === 'search');
+    case 'text-matches-regex':
+      if (!keys(value, ['kind', 'pattern']) || typeof value.pattern !== 'string' || value.pattern.length === 0 || value.pattern.length > 256) return false;
+      try { new RegExp(value.pattern, 'iu'); return true; } catch { return false; }
+    case 'field-equals':
+    case 'field-greater-than':
+    case 'field-less-than': {
       if (!keys(value, ['kind', 'fieldId', 'value']) || !id(value.fieldId) || !record(value.value) || !keys(value.value, ['type', 'value'])) return false;
       const field = value.value;
       switch (field.type) {
@@ -34,6 +49,7 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     }
     case 'child-of':
     case 'descendant-of':
+    case 'grandchild-of':
     case 'references':
     case 'referenced-by':
       return keys(value, ['kind', 'nodeId']) && id(value.nodeId);
@@ -64,4 +80,10 @@ export function isTanaQueryAst(value: unknown): value is TanaQueryExpression {
 export function parseTanaQuery(value: unknown): TanaQueryExpression {
   if (!isTanaQueryAst(value)) throw new Error('Invalid Tana Query AST');
   return value;
+}
+
+
+/** Persisted Search definitions reserve an AND root for stable editor mutations. */
+export function isTanaSearchQueryAst(value: unknown): value is Extract<TanaQueryExpression, { type: 'and' }> {
+  return isTanaQueryAst(value) && value.type === 'and';
 }

@@ -95,15 +95,19 @@ export type FieldValidationIssue =
   | 'missing-reference';
 
 export type TanaQueryClause =
-  | { kind: 'field-equals'; fieldId: FieldId; value: FieldValue }
-  | { kind: 'field-defined'; fieldId: FieldId }
-  | { kind: 'field-exists'; fieldId: FieldId }
-  | { kind: 'has-supertag'; supertagId: NodeId }
-  | { kind: 'text-contains'; text: string };
+  | { kind: 'field-equals' | 'field-greater-than' | 'field-less-than'; fieldId: FieldId; value: FieldValue }
+  | { kind: 'field-defined' | 'field-exists' | 'has-field'; fieldId: FieldId }
+  | { kind: 'has-supertag' | 'has-tag'; supertagId: NodeId }
+  | { kind: 'done-state'; state: TanaDoneState }
+  | { kind: 'date-is'; date: string }
+  | { kind: 'is-semantic'; semantic: 'calendar-node' | 'field' | 'search' }
+  | { kind: 'text-contains'; text: string }
+  | { kind: 'text-matches-regex'; pattern: string };
 
 export type TanaGraphQueryClause =
   | { kind: 'child-of'; nodeId: NodeId }
   | { kind: 'descendant-of'; nodeId: NodeId }
+  | { kind: 'grandchild-of'; nodeId: NodeId }
   | { kind: 'references'; nodeId: NodeId }
   | { kind: 'referenced-by'; nodeId: NodeId };
 

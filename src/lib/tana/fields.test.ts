@@ -443,77 +443,49 @@ describe('Field occurrence Nodes', () => {
     });
   });
 
-  test('derives Options candidates from static, one-hop Reference, and Search sources', () => {
+  test('derives Options candidates from static and one-hop Reference sources', () => {
     const index = buildTanaIndex([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
       { children: [{ text: 'Static' }], id: 'static', indent: 1, type: KEYS.p },
       { children: [{ text: 'Source reference' }], id: 'source-reference', indent: 1, tanaReferenceTargetId: 'source', type: KEYS.p },
-      {
-        children: [{ text: 'Search source' }],
-        id: 'search-source',
-        indent: 1,
-        tanaSearchDefinition: {
-          query: {
-            children: [{ predicate: { kind: 'text-contains', text: 'Search candidate' }, type: 'predicate' }],
-            type: 'and',
-          },
-        },
-        type: KEYS.p,
-      },
       { children: [{ text: 'Broken source' }], id: 'broken-source', indent: 1, tanaReferenceTargetId: 'missing', type: KEYS.p },
       { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
       { children: [{ text: 'Source child' }], id: 'source-child', indent: 1, type: KEYS.p },
       { children: [{ text: 'Alias child' }], id: 'source-child-reference', indent: 1, tanaReferenceTargetId: 'canonical-child', type: KEYS.p },
       { children: [{ text: 'Trashed alias child' }], id: 'source-trashed-reference', indent: 1, tanaReferenceTargetId: 'trashed-candidate', type: KEYS.p },
       { children: [{ text: 'Canonical child' }], id: 'canonical-child', type: KEYS.p },
-      { children: [{ text: 'Search candidate' }], id: 'search-candidate', type: KEYS.p },
       { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
       { children: [{ text: 'Trashed candidate' }], id: 'trashed-candidate', indent: 1, type: KEYS.p },
     ]);
 
     assert.deepEqual(
       getFieldValueCandidates(index, 'status').map(({ id }) => id),
-      ['static', 'source-child', 'canonical-child', 'search-candidate']
+      ['static', 'source-child', 'canonical-child']
     );
   });
 
-  test('uses the same Reference and Search candidates for Options validation', () => {
+  test('uses the same Reference candidates for Options validation', () => {
     const editor = createEditor([
       { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { cardinality: 'list', type: 'options' }, type: KEYS.p },
       { children: [{ text: 'Static' }], id: 'static', indent: 1, type: KEYS.p },
       { children: [{ text: 'Source reference' }], id: 'source-reference', indent: 1, tanaReferenceTargetId: 'source', type: KEYS.p },
-      {
-        children: [{ text: 'Search source' }],
-        id: 'search-source',
-        indent: 1,
-        tanaSearchDefinition: {
-          query: {
-            children: [{ predicate: { kind: 'text-contains', text: 'Search candidate' }, type: 'predicate' }],
-            type: 'and',
-          },
-        },
-        type: KEYS.p,
-      },
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
       { children: [{ text: 'Source' }], id: 'source', type: KEYS.p },
       { children: [{ text: 'Source child' }], id: 'source-child', indent: 1, type: KEYS.p },
-      { children: [{ text: 'Search candidate' }], id: 'search-candidate', type: KEYS.p },
     ]);
 
     field(editor).addValue('task', 'status', { type: 'options', value: 'static' });
     field(editor).addValue('task', 'status', { type: 'options', value: 'source-child' });
-    field(editor).addValue('task', 'status', { type: 'options', value: 'search-candidate' });
 
     const occurrence = buildTanaIndex(editor.children).fieldNodesByParent.get('task')![0]!;
 
     assert.deepEqual(occurrence.values, [
       { type: 'options', value: 'static' },
       { type: 'options', value: 'source-child' },
-      { type: 'options', value: 'search-candidate' },
     ]);
     assert.deepEqual(
       occurrence.valueNodeIds.map((id) => occurrence.validationIssuesByValueNodeId.get(id)),
-      [[], [], []]
+      [[], []]
     );
   });
 

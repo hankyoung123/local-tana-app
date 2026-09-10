@@ -46,9 +46,9 @@ export function resolveTanaCollectionSource(
   if (view.searchDefinition) {
     return {
       kind: 'search',
-      nodes: runTanaQuery(index, view.searchDefinition.query).filter(
-        ({ id }) => id !== view.id
-      ),
+      nodes: runTanaQuery(index, view.searchDefinition.query, {
+        excludeNodeId: view.id,
+      }),
     };
   }
 

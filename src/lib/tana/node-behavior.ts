@@ -87,10 +87,11 @@ export function canDuplicate(
 
   const semantics = getNodeSemanticTypes(node, context);
 
-  return !semantics.some(
-    (semantic) =>
-      semantic === 'search' || semantic === 'supertag-definition' || semantic === 'view'
-  );
+  return !semantics.includes('supertag-definition') &&
+    // Search definitions are plain persisted ASTs and clone with their Node.
+    // A View-only Node remains presentation configuration rather than a
+    // generic duplicate target; a Search + View stays a Search owner.
+    !(semantics.includes('view') && !semantics.includes('search'));
 }
 
 /** Generic hierarchy changes must not separate Field structure or System Nodes. */

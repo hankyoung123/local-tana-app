@@ -106,7 +106,7 @@ describe("Tana search mutations", () => {
         index,
         index.nodesById.get("search")!.searchDefinition!.query,
       ).map(({ id }) => id),
-      ["child", "reference"],
+      ["child", "target"],
     );
 
     assert.equal(
@@ -125,12 +125,54 @@ describe("Tana search mutations", () => {
       ).map(({ id }) => id),
       ["target"],
     );
+    assert.deepEqual(index.nodesById.get("search")!.searchDefinition!.query, {
+      children: [{ predicate: { kind: "text-contains", text: "target" }, type: "predicate" }],
+      type: "and",
+    });
     assert.equal(
       search.setQuery("search", {
         predicate: { kind: "references", nodeId: "missing" },
         type: "predicate",
       }),
-      false,
+      true,
     );
+    index = buildTanaIndex(editor.children);
+    assert.deepEqual(
+      runTanaQuery(index, index.nodesById.get("search")!.searchDefinition!.query),
+      [],
+    );
+  });
+});
+
+test('a blank ordinary Node turns into a Search when ? is typed', () => {
+  const editor = createEditor([
+    { children: [{ text: "" }], id: "search", type: KEYS.p },
+  ]);
+  editor.tf.select({ path: [0, 0], offset: 0 });
+  editor.tf.insertText("?");
+
+  assert.deepEqual(editor.children[0].tanaSearchDefinition, {
+    query: { children: [], type: "and" },
+  });
+  assert.equal(editor.children[0].children[0]?.text, "");
+});
+
+test('Search writer shares canonical-host policy with persistence and integrity', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Ordinary' }], id: 'ordinary', type: KEYS.p },
+    { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'outline' }, type: KEYS.p },
+    { children: [{ text: 'Target' }], id: 'target', type: KEYS.p },
+    { children: [{ text: 'Reference' }], id: 'reference', tanaReferenceTargetId: 'target', type: KEYS.p },
+    { children: [{ text: 'Field definition' }], id: 'definition', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+    { children: [{ text: 'Option' }], id: 'option', indent: 1, type: KEYS.p },
+    { children: [{ text: 'Tag' }], id: 'tag', tanaSupertagDefinition: {}, type: KEYS.p },
+    { children: [{ text: 'Home' }], id: 'home', tanaSystemNode: 'home', type: KEYS.p },
+  ]);
+  const search = editor.getTransforms(TanaSearchPlugin).search;
+
+  assert.equal(search.define('ordinary'), true);
+  assert.equal(search.define('view'), true);
+  ['reference', 'definition', 'option', 'tag', 'home'].forEach((nodeId) => {
+    assert.equal(search.define(nodeId), false);
   });
 });

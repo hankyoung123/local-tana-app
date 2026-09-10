@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/select";
 import {
   describeTanaQueryClause,
+  diagnoseTanaQuery,
+  getTanaProjectionTarget,
   getFieldValueCandidates,
   isTanaNodeActive,
   resolveTanaCollectionSource,
@@ -42,8 +44,8 @@ type GraphQueryPredicate = Extract<TanaQueryPredicate, { nodeId: NodeId }>;
 
 const graphPredicateKinds: readonly Extract<
   QueryPredicateKind,
-  "child-of" | "descendant-of" | "references" | "referenced-by"
->[] = ["child-of", "descendant-of", "references", "referenced-by"];
+  "child-of" | "descendant-of" | "grandchild-of" | "references" | "referenced-by"
+>[] = ["child-of", "descendant-of", "grandchild-of", "references", "referenced-by"];
 
 const viewTypeLabels: Record<TanaViewDefinition["type"], string> = {
   calendar: "日历",
@@ -149,6 +151,8 @@ export function TanaSearchDefinitionEditor({
     );
   }
 
+  const diagnostics = diagnoseTanaQuery(index, definition.query);
+
   return (
     <section className="border-t border-[var(--tana-divider)] px-5 py-4">
       <div className="mb-3 flex items-center justify-between">
@@ -168,6 +172,11 @@ export function TanaSearchDefinitionEditor({
         </button>
       </div>
 
+      {diagnostics.length > 0 && (
+        <p className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800" role="status">
+          查询暂不可运行：{diagnostics.map((diagnostic) => diagnostic.code).join('、')}
+        </p>
+      )}
       <QueryExpressionEditor
         expression={definition.query}
         index={index}
@@ -267,23 +276,25 @@ function QueryGroupEditor({
   return (
         <div className="rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2">
       <div className="flex items-center gap-2">
-        <Select
-          value={expression.type}
-          onValueChange={(type) =>
-            onChange({ ...expression, type: type as QueryGroup["type"] })
-          }
-        >
-          <SelectTrigger className="h-7 min-w-20 border-0 bg-transparent px-1.5 font-medium text-[11px] shadow-none">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="and">全部满足（AND）</SelectItem>
-            <SelectItem value="or">任一满足（OR）</SelectItem>
-          </SelectContent>
-        </Select>
-        {root && (
-          <span className="text-[10px] text-muted-foreground">根条件</span>
+        {root ? (
+          <span className="px-1.5 font-medium text-[11px]">全部满足（AND）</span>
+        ) : (
+          <Select
+            value={expression.type}
+            onValueChange={(type) =>
+              onChange({ ...expression, type: type as QueryGroup["type"] })
+            }
+          >
+            <SelectTrigger className="h-7 min-w-20 border-0 bg-transparent px-1.5 font-medium text-[11px] shadow-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="and">全部满足（AND）</SelectItem>
+              <SelectItem value="or">任一满足（OR）</SelectItem>
+            </SelectContent>
+          </Select>
         )}
+        {root && <span className="text-[10px] text-muted-foreground">根条件</span>}
         <span className="min-w-0 flex-1" />
         {onRemove && <RemoveQueryNodeButton onClick={onRemove} />}
       </div>
@@ -461,10 +472,14 @@ function QueryPredicateForm({
   const [fieldId, setFieldId] = React.useState(getPredicateFieldId(initial));
   const [rawValue, setRawValue] = React.useState(getPredicateRawValue(initial));
   const [supertagId, setSupertagId] = React.useState(
-    initial?.kind === "has-supertag" ? initial.supertagId : "",
+    initial?.kind === "has-supertag" || initial?.kind === "has-tag" ? initial.supertagId : "",
   );
   const [text, setText] = React.useState(
-    initial?.kind === "text-contains" ? initial.text : "",
+    initial?.kind === "text-contains"
+      ? initial.text
+      : initial?.kind === "text-matches-regex"
+        ? initial.pattern
+        : "",
   );
   const [targetNodeId, setTargetNodeId] = React.useState(
     getGraphTargetNodeId(initial),
@@ -484,6 +499,10 @@ function QueryPredicateForm({
       .map((item) => [item.id, item]),
   );
   const selectedField = fields.get(fieldId);
+  const nodeCandidates = Array.from(index.nodesById.values()).flatMap((candidate) => {
+    const target = getTanaProjectionTarget(index, candidate.id);
+    return target && target.id === candidate.id ? [target] : [];
+  });
   const predicate = getDraftPredicate({
     field: selectedField?.fieldDefinition,
     fieldId,
@@ -505,18 +524,27 @@ function QueryPredicateForm({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="has-supertag">包含超级标签</SelectItem>
+          <SelectItem value="has-tag">包含标签</SelectItem>
+          <SelectItem value="has-field">拥有字段</SelectItem>
           <SelectItem value="field-equals">字段等于</SelectItem>
+          <SelectItem value="field-greater-than">字段大于</SelectItem>
+          <SelectItem value="field-less-than">字段小于</SelectItem>
           <SelectItem value="field-defined">字段已定义</SelectItem>
           <SelectItem value="field-exists">字段已设置</SelectItem>
           <SelectItem value="text-contains">文本包含</SelectItem>
+          <SelectItem value="text-matches-regex">文本匹配正则</SelectItem>
+          <SelectItem value="done-state">完成状态</SelectItem>
+          <SelectItem value="date-is">指定日期</SelectItem>
+          <SelectItem value="is-semantic">节点语义</SelectItem>
           <SelectItem value="child-of">是节点的直接子节点</SelectItem>
           <SelectItem value="descendant-of">属于节点后代</SelectItem>
+          <SelectItem value="grandchild-of">是节点的孙节点</SelectItem>
           <SelectItem value="references">引用节点</SelectItem>
           <SelectItem value="referenced-by">被节点引用</SelectItem>
         </SelectContent>
       </Select>
 
-      {kind === "has-supertag" && (
+      {(kind === "has-supertag" || kind === "has-tag") && (
         <Select value={supertagId} onValueChange={setSupertagId}>
           <SelectTrigger className="h-8 w-full text-xs">
             <SelectValue placeholder="选择超级标签" />
@@ -546,7 +574,7 @@ function QueryPredicateForm({
         </Select>
       )}
 
-      {kind === "field-equals" && selectedField?.fieldDefinition && (
+      {(kind === "field-equals" || kind === "field-greater-than" || kind === "field-less-than") && selectedField?.fieldDefinition && (
         <QueryValueInput
           field={selectedField.fieldDefinition}
           fieldId={selectedField.id}
@@ -556,13 +584,29 @@ function QueryPredicateForm({
         />
       )}
 
-      {kind === "text-contains" && (
+      {(kind === "text-contains" || kind === "text-matches-regex") && (
         <Input
           className="h-8 text-xs"
           value={text}
-          placeholder="要查找的文本"
+          placeholder={kind === "text-matches-regex" ? "正则表达式" : "要查找的文本"}
           onChange={(event) => setText(event.target.value)}
         />
+      )}
+
+      {kind === "done-state" && (
+        <Select value={rawValue || "todo"} onValueChange={setRawValue}>
+          <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="todo">待完成</SelectItem><SelectItem value="done">已完成</SelectItem></SelectContent>
+        </Select>
+      )}
+      {kind === "date-is" && (
+        <Input className="h-8 text-xs" type="date" value={rawValue} onChange={(event) => setRawValue(event.target.value)} />
+      )}
+      {kind === "is-semantic" && (
+        <Select value={rawValue} onValueChange={setRawValue}>
+          <SelectTrigger className="h-8 w-full text-xs"><SelectValue placeholder="选择节点语义" /></SelectTrigger>
+          <SelectContent><SelectItem value="field">字段</SelectItem><SelectItem value="search">搜索</SelectItem><SelectItem value="calendar-node">日历节点</SelectItem></SelectContent>
+        </Select>
       )}
 
       {graphPredicateKinds.includes(
@@ -573,9 +617,7 @@ function QueryPredicateForm({
             <SelectValue placeholder="选择节点" />
           </SelectTrigger>
           <SelectContent>
-            {Array.from(index.nodesById.values())
-              .filter((candidate) => isTanaNodeActive(index, candidate.id))
-              .map((candidate) => (
+            {nodeCandidates.map((candidate) => (
                 <SelectItem key={candidate.id} value={candidate.id}>
                   {candidate.text || "未命名节点"}
                 </SelectItem>
@@ -611,7 +653,10 @@ function QueryPredicateForm({
 function isFieldPredicateKind(kind: QueryPredicateKind): boolean {
   return (
     kind === "field-defined" ||
+    kind === "has-field" ||
     kind === "field-equals" ||
+    kind === "field-greater-than" ||
+    kind === "field-less-than" ||
     kind === "field-exists"
   );
 }
@@ -639,9 +684,11 @@ function getPredicateFieldId(
 function getPredicateRawValue(
   predicate: TanaQueryPredicate | undefined,
 ): string {
-  return predicate?.kind === "field-equals"
-    ? String(predicate.value.value)
-    : "";
+  if (predicate?.kind === "field-equals" || predicate?.kind === "field-greater-than" || predicate?.kind === "field-less-than") return String(predicate.value.value);
+  if (predicate?.kind === "done-state") return predicate.state;
+  if (predicate?.kind === "date-is") return predicate.date;
+  if (predicate?.kind === "is-semantic") return predicate.semantic;
+  return "";
 }
 
 function getGraphTargetNodeId(
@@ -669,19 +716,34 @@ function getDraftPredicate({
 }): TanaQueryPredicate | undefined {
   switch (kind) {
     case "has-supertag":
+    case "has-tag":
       return supertagId ? { kind, supertagId } : undefined;
     case "field-defined":
     case "field-exists":
+    case "has-field":
       return fieldId ? { fieldId, kind } : undefined;
-    case "field-equals": {
+    case "field-equals":
+    case "field-greater-than":
+    case "field-less-than": {
       if (!field || !fieldId) return;
       const value = getFieldValue(field, rawValue);
       return value ? { fieldId, kind, value } : undefined;
     }
     case "text-contains":
       return text.trim() ? { kind, text: text.trim() } : undefined;
+    case "text-matches-regex":
+      return text.trim() ? { kind, pattern: text.trim() } : undefined;
+    case "done-state":
+      return rawValue === "todo" || rawValue === "done" ? { kind, state: rawValue } : undefined;
+    case "date-is":
+      return rawValue ? { date: rawValue, kind } : undefined;
+    case "is-semantic":
+      return rawValue === "field" || rawValue === "search" || rawValue === "calendar-node"
+        ? { kind, semantic: rawValue }
+        : undefined;
     case "child-of":
     case "descendant-of":
+    case "grandchild-of":
     case "references":
     case "referenced-by":
       return targetNodeId ? { kind, nodeId: targetNodeId } : undefined;

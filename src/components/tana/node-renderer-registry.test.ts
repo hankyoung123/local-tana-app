@@ -4,8 +4,9 @@ import { describe, test } from 'node:test';
 import { KEYS } from 'platejs';
 
 import { getNodeSemanticType, TANA_NODE_SEMANTIC_TYPES } from '@/lib/tana/node-semantic';
+import { buildTanaIndex } from '@/lib/tana/index';
 
-import { getNodeRenderer, NodeRendererRegistry } from './node-renderer-registry';
+import { getInlineSearchResults, getNodeRenderer, NodeRendererRegistry } from './node-renderer-registry';
 
 describe('Node renderer registry', () => {
   test('registers every semantic through one presentation entry point', () => {
@@ -77,4 +78,15 @@ test('Reference chains and cycles never produce recursive projected subtrees', a
     assert.equal(getTanaProjectionTarget(index, id), undefined);
     assert.deepEqual(getReferenceSubtreeRows(index, id), []);
   }
+});
+
+
+test('inline Search results stay lazy, derived, live, and never become children', () => {
+  const index = buildTanaIndex([
+    { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: { children: [{ predicate: { kind: 'text-contains', text: 'Task' }, type: 'predicate' }], type: 'and' } }, type: 'p' },
+    { children: [{ text: 'Task one' }], id: 'task', type: 'p' },
+  ]);
+  assert.deepEqual(getInlineSearchResults(index, 'search', false), []);
+  assert.deepEqual(getInlineSearchResults(index, 'search', true).map(({ id }) => id), ['task']);
+  assert.deepEqual(index.childrenByParent.get('search') ?? [], []);
 });

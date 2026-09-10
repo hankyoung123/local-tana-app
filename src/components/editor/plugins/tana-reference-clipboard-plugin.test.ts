@@ -8,7 +8,8 @@ import { createPlateEditor } from 'platejs/react';
 import { EditorKit } from '@/components/editor/editor-kit';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { buildTanaIndex } from '@/lib/tana/index';
-import { duplicateTanaSubtree } from './tana-node-identity-plugin';
+import type { TanaQueryExpression } from '@/lib/tana/types';
+import { duplicateTanaSubtree, remapTanaFragmentForPaste } from './tana-node-identity-plugin';
 import { TanaReferencePlugin } from './tana-reference-plugin';
 import {
   getTanaReferenceClipboardNodeIds,
@@ -224,4 +225,72 @@ test('Duplicate keeps a Field occurrence and list Value subtree owned by the fre
     { type: 'plain', value: 'Two' },
   ]);
   assert.deepEqual(copiedField?.valueNodeIds.every((id) => !['task-status-one', 'task-status-two'].includes(id)), true);
+});
+
+test('Duplicate remaps a copied Search AST without materializing results', () => {
+  const editor = createEditor([
+    { children: [{ text: 'Container' }], id: 'container', type: KEYS.p },
+    { children: [{ text: 'Target' }], id: 'target', indent: 1, type: KEYS.p },
+    {
+      children: [{ text: 'Search' }],
+      id: 'search',
+      indent: 1,
+      tanaSearchDefinition: {
+        query: {
+          children: [{ predicate: { kind: 'child-of', nodeId: 'container' }, type: 'predicate' }],
+          type: 'and',
+        },
+      },
+      type: KEYS.p,
+    },
+  ]);
+
+  const copied = duplicateTanaSubtree(editor, [[0]]);
+  const copiedSearch = editor.children.find(
+    (node) => node.id !== 'search' && node.tanaSearchDefinition !== undefined,
+  );
+  const query = (copiedSearch as { tanaSearchDefinition?: { query?: TanaQueryExpression } } | undefined)
+    ?.tanaSearchDefinition?.query;
+
+  assert.ok(copiedSearch);
+  assert.ok(query && query.type === 'and');
+  if (!query || query.type !== 'and') return;
+  const predicate = query.children[0];
+  assert.ok(predicate && predicate.type === 'predicate');
+  if (!predicate || predicate.type !== 'predicate') return;
+  assert.equal(predicate.predicate.kind, 'child-of');
+  if (predicate.predicate.kind !== 'child-of') return;
+  assert.equal(predicate.predicate.nodeId, copied[0]);
+  assert.equal(editor.children.filter((node) => node.id === copiedSearch.id).length, 1);
+});
+
+
+test('clipboard fragment remaps local Search AST relations without copying derived results', () => {
+  const copied = remapTanaFragmentForPaste([
+    { children: [{ text: 'Parent' }], id: 'parent', type: KEYS.p },
+    { children: [{ text: 'Target' }], id: 'target', indent: 1, type: KEYS.p },
+    {
+      children: [{ text: 'Search' }],
+      id: 'search',
+      indent: 1,
+      tanaSearchDefinition: {
+        query: {
+          children: [{ predicate: { kind: 'child-of', nodeId: 'parent' }, type: 'predicate' }],
+          type: 'and',
+        },
+      },
+      type: KEYS.p,
+    },
+  ] as any);
+  const query = (copied[2] as { tanaSearchDefinition?: { query?: TanaQueryExpression } }).tanaSearchDefinition?.query;
+
+  assert.notEqual(copied[0]?.id, 'parent');
+  assert.notEqual(copied[2]?.id, 'search');
+  assert.ok(query?.type === 'and');
+  if (query?.type !== 'and') return;
+  const predicate = query.children[0];
+  assert.ok(predicate?.type === 'predicate' && predicate.predicate.kind === 'child-of');
+  if (!predicate || predicate.type !== 'predicate' || predicate.predicate.kind !== 'child-of') return;
+  assert.equal(predicate.predicate.nodeId, copied[0]?.id);
+  assert.equal((copied[2] as { children?: unknown[] }).children?.length, 1);
 });

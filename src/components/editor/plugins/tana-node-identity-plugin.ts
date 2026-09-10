@@ -349,14 +349,44 @@ function remapSubtreeRelation(value: unknown, ids: ReadonlyMap<string, string>, 
   if (typeof value === 'string') return remap ? ids.get(value) ?? value : value;
   if (Array.isArray(value)) return value.map((item) => remapSubtreeRelation(item, ids, remap));
   if (!value || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
   const relationKeys = new Set([
     'tanaReferenceTargetId', 'tanaFieldId', 'tanaDefaultChildSupertagId',
     'nodeId', 'fieldId', 'supertagId', 'tanaSupertagIds', 'hiddenFieldNodeIds',
     'extends', 'visibleFieldIds',
   ]);
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-    key, remapSubtreeRelation(item, ids, relationKeys.has(key)),
+  const fieldValueReference = record.type === 'options' || record.type === 'from-supertag';
+  return Object.fromEntries(Object.entries(record).map(([key, item]) => [
+    key,
+    remapSubtreeRelation(
+      item,
+      ids,
+      relationKeys.has(key) || (fieldValueReference && key === 'value'),
+    ),
   ]));
+}
+
+/**
+ * Clipboard fragments are a fresh subtree, so their local Search relations
+ * point at the fresh copied NodeIds while external canonical identities stay
+ * untouched. Results themselves are never copied because they are derived.
+ */
+export function remapTanaFragmentForPaste<T extends TElement | TText>(fragment: T[]): T[] {
+  const copies = structuredClone(fragment) as T[];
+  const ids = new Map<string, string>();
+
+  copies.forEach((node) => {
+    if (ElementApi.isElement(node) && typeof node.id === 'string') {
+      ids.set(node.id, nanoid());
+    }
+  });
+
+  return copies.map((node) => {
+    if (!ElementApi.isElement(node) || typeof node.id !== 'string') return node;
+    const remapped = remapSubtreeRelation(node, ids) as TElement;
+    remapped.id = ids.get(node.id)!;
+    return remapped as T;
+  });
 }
 
 /** Duplicate one or more disjoint canonical subtrees with fresh NodeIds. */
@@ -776,7 +806,7 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
         }
         return part;
       }));
-      editor.tf.withNewBatch(() => insertFragment(lines, options));
+      editor.tf.withNewBatch(() => insertFragment(remapTanaFragmentForPaste(lines), options));
     },
     deleteBackward(unit) {
       if (hasSystemMergeBoundary(editor, 'start')) return;

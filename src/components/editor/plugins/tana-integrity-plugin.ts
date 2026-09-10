@@ -1,4 +1,5 @@
-import { isTanaQueryAst, isTanaQueryPredicateAst } from '@/lib/tana/query-ast';
+import { isTanaSearchQueryAst } from '@/lib/tana/query-ast';
+import { isTanaSearchHost } from '@/lib/tana/search-host';
 import { ElementApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -11,13 +12,7 @@ import {
   hasNodeSemantic,
   type TanaNodeSemanticType,
 } from '@/lib/tana/node-semantic';
-import type {
-  FieldValue,
-  NodeId,
-  TanaBlockElement,
-  TanaQueryExpression,
-  TanaQueryPredicate,
-} from '@/lib/tana/types';
+import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 
 export const TANA_INTEGRITY_PLUGIN_KEY = 'tanaIntegrity' as const;
 
@@ -62,6 +57,7 @@ export type TanaNodeIntegrityIssue =
   | 'missing-default-child-supertag'
   | 'missing-from-supertag-source'
   | 'missing-supertag-membership'
+  | 'invalid-search-host'
   | 'invalid-search-query'
   | 'invalid-view-definition';
 
@@ -201,12 +197,6 @@ function findDanglingNonReferenceInlineRelation(
   }
 }
 
-function isReferenceLikeFieldValue(
-  value: FieldValue | undefined
-): value is Extract<FieldValue, { type: 'from-supertag' | 'options' }> {
-  return value?.type === 'from-supertag' || value?.type === 'options';
-}
-
 function pruneHiddenFieldNodeIds(
   editor: PlateEditor,
   node: TanaBlockElement,
@@ -245,92 +235,6 @@ function pruneHiddenFieldNodeIds(
   }
 
   return true;
-}
-
-function isTanaQueryPredicateValid(
-  predicate: TanaQueryPredicate,
-  context: Pick<
-    TanaNodeIntegrityContext,
-    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
-  >
-): boolean {
-  if (!isTanaQueryPredicateAst(predicate)) return false;
-  switch (predicate.kind) {
-    case 'field-defined':
-    case 'field-exists':
-      return context.fieldDefinitionIds.has(predicate.fieldId);
-    case 'field-equals':
-      return (
-        context.fieldDefinitionIds.has(predicate.fieldId) &&
-        (!isReferenceLikeFieldValue(predicate.value) ||
-          context.nodeIds.has(predicate.value.value))
-      );
-    case 'has-supertag':
-      return context.supertagDefinitionIds.has(predicate.supertagId);
-    case 'text-contains':
-      return true;
-    case 'child-of':
-    case 'descendant-of':
-    case 'references':
-    case 'referenced-by':
-      return context.nodeIds.has(predicate.nodeId);
-  }
-}
-
-function isTanaQueryExpressionValid(
-  expression: TanaQueryExpression | undefined,
-  context: Pick<
-    TanaNodeIntegrityContext,
-    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
-  >
-): boolean {
-  if (!isTanaQueryAst(expression)) return false;
-
-  switch (expression.type) {
-    case 'predicate':
-      return isTanaQueryPredicateValid(expression.predicate, context);
-    case 'not':
-      return isTanaQueryExpressionValid(expression.child, context);
-    case 'and':
-    case 'or':
-      return Array.isArray(expression.children) && expression.children.every((child) =>
-        isTanaQueryExpressionValid(child, context)
-      );
-    default:
-      return false;
-  }
-}
-
-function pruneTanaQueryExpression(
-  expression: TanaQueryExpression | undefined,
-  context: Pick<
-    TanaNodeIntegrityContext,
-    'fieldDefinitionIds' | 'nodeIds' | 'supertagDefinitionIds'
-  >
-): TanaQueryExpression | undefined {
-  if (!isTanaQueryAst(expression)) return;
-
-  switch (expression.type) {
-    case 'predicate':
-      return isTanaQueryPredicateValid(expression.predicate, context)
-        ? expression
-        : undefined;
-    case 'not': {
-      const child = pruneTanaQueryExpression(expression.child, context);
-
-      return child ? { child, type: 'not' } : undefined;
-    }
-    case 'and':
-    case 'or':
-      return {
-        children: expression.children.flatMap((child) => {
-          const next = pruneTanaQueryExpression(child, context);
-
-          return next ? [next] : [];
-        }),
-        type: expression.type,
-      };
-  }
 }
 
 function getSemanticNodeIds(
@@ -425,11 +329,10 @@ const NodeIntegrityValidators: Partial<
       return 'invalid-value-owner';
     }
   },
-  search: (node, _, context) => {
-    return isTanaQueryExpressionValid(node.tanaSearchDefinition?.query, context)
+  search: (node) =>
+    isTanaSearchQueryAst(node.tanaSearchDefinition?.query)
       ? undefined
-      : 'invalid-search-query';
-  },
+      : 'invalid-search-query',
   view: (node) =>
     node.tanaViewDefinition?.type === 'outline' ||
     node.tanaViewDefinition?.type === 'table' ||
@@ -449,6 +352,17 @@ export function validateNode(
   path: Path,
   context: TanaNodeIntegrityContext
 ): TanaNodeIntegrityIssue | undefined {
+  if (node.tanaSearchDefinition !== undefined) {
+    if (!isTanaSearchHost(node, { document: context.document, path })) {
+      return 'invalid-search-host';
+    }
+    // Missing targets remain in the persisted AST. Runtime diagnostics block
+    // execution until the same identity becomes available again.
+    if (!isTanaSearchQueryAst(node.tanaSearchDefinition.query)) {
+      return 'invalid-search-query';
+    }
+  }
+
   if (
     node.tanaSupertagIds?.some(
       (supertagId) => !context.supertagDefinitionIds.has(supertagId)
@@ -551,22 +465,17 @@ export function repairNode(
     case 'invalid-view-definition':
       editor.tf.setNodes({ tanaViewDefinition: { type: 'outline' } }, { at: path });
       return true;
-    case 'invalid-search-query': {
-      const query = pruneTanaQueryExpression(
-        node.tanaSearchDefinition?.query,
-        context
-      ) ?? { children: [], type: 'and' };
-
+    case 'invalid-search-host':
+      editor.tf.unsetNodes('tanaSearchDefinition', { at: path });
+      return true;
+    case 'invalid-search-query':
+      // Only malformed in-memory ASTs are reset. Never prune relations merely
+      // because their target is deleted or temporarily unavailable.
       editor.tf.setNodes(
-        {
-          tanaSearchDefinition: {
-            query,
-          },
-        },
+        { tanaSearchDefinition: { query: { children: [], type: 'and' } } },
         { at: path }
       );
       return true;
-    }
   }
 }
 

@@ -37,6 +37,7 @@ import type {
 import {
   getFieldValueCandidates,
   getTanaProjectionTarget,
+  runTanaQuery,
   isTanaNodeInTrash,
   isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
@@ -177,6 +178,60 @@ function ReferenceRenderer({ element, index }: TanaNodeBlockRendererProps) {
       {rows.map(({ id, depth }) => <div key={id} style={{ marginLeft: depth * 20 }}>
         <NodeProjection index={index} targetNodeId={id} variant="block-reference" />
       </div>)}
+    </div>
+  );
+}
+
+/**
+ * Search results are a lazy index projection. The Search occurrence keeps only
+ * its AST; expanding never inserts a child container into the Plate document.
+ */
+export function getInlineSearchResults(
+  index: TanaIndex,
+  searchNodeId: NodeId | undefined,
+  expanded: boolean,
+): readonly TanaNode[] {
+  if (!expanded || !searchNodeId) return [];
+  const search = getTanaProjectionTarget(index, searchNodeId);
+  return search?.searchDefinition
+    ? runTanaQuery(index, search.searchDefinition.query, { excludeNodeId: search.id })
+    : [];
+}
+
+function SearchRenderer({ element, index }: TanaNodeBlockRendererProps) {
+  const editor = useEditorRef();
+  const openIds = usePluginOption(TogglePlugin, 'openIds');
+  const nodeId = typeof element.id === 'string' ? element.id : undefined;
+  const expanded = !!nodeId && openIds?.has(nodeId) === true;
+  const results = getInlineSearchResults(index, nodeId, expanded);
+
+  if (!nodeId) return null;
+
+  return (
+    <div className="tana-inlineSearch mt-1" contentEditable={false}>
+      <button
+        aria-expanded={expanded}
+        aria-label="展开搜索结果"
+        className="rounded px-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+        type="button"
+        onClick={() => editor.getApi(TogglePlugin).toggle.toggleIds([nodeId], !expanded)}
+      >
+        {expanded ? '▾ 搜索结果' : '▸ 搜索结果'}
+      </button>
+      {expanded && (
+        <div className="ml-4 border-l border-[var(--tana-divider)] pl-2">
+          {results.length === 0 ? (
+            <p className="py-1 text-xs text-[var(--tana-text-tertiary)]">暂无匹配节点</p>
+          ) : results.map((result) => (
+            <NodeProjection
+              index={index}
+              key={result.id}
+              targetNodeId={result.id}
+              variant="search-result"
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -652,7 +707,7 @@ export const NodeRendererRegistry: Record<TanaNodeSemanticType, TanaNodeRenderer
   field: { Block: FieldRenderer, Workspace: OutlineRenderer },
   option: { Workspace: OutlineRenderer },
   reference: { Block: ReferenceRenderer, Workspace: OutlineRenderer },
-  search: { Workspace: ViewRenderer },
+  search: { Block: SearchRenderer, Workspace: ViewRenderer },
   'supertag-definition': {
     Workspace: SupertagInstancesRenderer
   },

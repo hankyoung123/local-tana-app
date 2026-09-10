@@ -487,6 +487,49 @@ describe('Plate document persistence', () => {
   });
 });
 
+test('Search persistence requires the exact query envelope and a canonical ordinary host', () => {
+  const valid = withWorkspace([
+    {
+      children: [{ text: 'Search' }],
+      id: 'search',
+      tanaSearchDefinition: { query: { children: [], type: 'and' } },
+      type: 'p',
+    },
+  ]);
+  assert.equal(isValidTanaDocument(valid), true);
+
+  const nonAndRoot = structuredClone(valid);
+  const nonAndSearch = nonAndRoot.find((node) => node.id === 'search')!;
+  nonAndSearch.tanaSearchDefinition = {
+    query: { predicate: { kind: 'text-contains', text: 'root' }, type: 'predicate' },
+  } as never;
+  assert.equal(isValidTanaDocument(nonAndRoot), false);
+
+  const extraEnvelope = structuredClone(valid);
+  const search = extraEnvelope.find((node) => node.id === 'search')!;
+  search.tanaSearchDefinition = { extra: true, query: { children: [], type: 'and' } } as never;
+  assert.equal(isValidTanaDocument(extraEnvelope), false);
+
+  const referenceHost = withWorkspace([
+    { children: [{ text: 'Target' }], id: 'target', type: 'p' },
+    {
+      children: [{ text: 'Search occurrence' }],
+      id: 'reference-search',
+      tanaReferenceTargetId: 'target',
+      tanaSearchDefinition: { query: { children: [], type: 'and' } },
+      type: 'p',
+    },
+  ]);
+  assert.equal(isValidTanaDocument(referenceHost), false);
+
+  const systemHost = minimalWorkspace();
+  systemHost[1] = {
+    ...systemHost[1],
+    tanaSearchDefinition: { query: { children: [], type: 'and' } },
+  };
+  assert.equal(isValidTanaDocument(systemHost), false);
+});
+
 test('rejects malformed Query AST and illegal flat indent at the persistence boundary', () => {
   for (const query of [
     { type: 'not' },

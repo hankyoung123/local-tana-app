@@ -495,7 +495,7 @@ describe("Tana relation integrity", () => {
     );
   });
 
-  test("prunes dangling Search predicates while retaining unrelated AST children", () => {
+  test("preserves dangling Search predicates as a broken persisted AST", () => {
     const editor = createEditor([
       {
         children: [{ text: "Status" }],
@@ -542,17 +542,23 @@ describe("Tana relation integrity", () => {
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
       query: {
         children: [
+          { predicate: { fieldId: "status", kind: "field-defined" }, type: "predicate" },
           {
-            predicate: { kind: "text-contains", text: "open" },
+            predicate: {
+              fieldId: "status",
+              kind: "field-equals",
+              value: { type: "options", value: "active" },
+            },
             type: "predicate",
           },
+          { predicate: { kind: "text-contains", text: "open" }, type: "predicate" },
         ],
         type: "and",
       },
     });
   });
 
-  test("prunes a deleted graph-predicate target inside a nested Search AST", () => {
+  test("preserves a deleted graph-predicate target inside a nested Search AST", () => {
     const editor = createEditor([
       { children: [{ text: "Target" }], id: "target", type: KEYS.p },
       {
@@ -602,6 +608,10 @@ describe("Tana relation integrity", () => {
           children: [
             {
               children: [
+                {
+                  predicate: { kind: "references", nodeId: "target" },
+                  type: "predicate",
+                },
                 {
                   predicate: { kind: "text-contains", text: "reference" },
                   type: "predicate",

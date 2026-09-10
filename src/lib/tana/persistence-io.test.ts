@@ -47,6 +47,12 @@ test('SQLite loading fails closed without writes for invalid schema, JSON or inv
     invalidSupertagMembership.find(node => node.id === 'node-project-example').tanaSupertagIds = ['missing-supertag'];
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalidSupertagMembership)}];
     await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
+    const invalidSearchHost = structuredClone(initialDocument);
+    const target = invalidSearchHost.find(node => node.id === 'node-project-example');
+    target.tanaReferenceTargetId = 'node-principle';
+    target.tanaSearchDefinition = {query: {children: [], type: 'and'}};
+    rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(invalidSearchHost)}];
+    await assert.rejects(loadPlateDocument(initialDocument), /invariants/);
     assert.equal(writes.some(([sql]) => /INSERT|UPDATE|ALTER|DROP/.test(sql)), false);
     rows = [{schema_version: CURRENT_SCHEMA_VERSION, value: JSON.stringify(initialDocument)}];
     assert.deepEqual(await loadPlateDocument(initialDocument), initialDocument);

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import type { Value } from "platejs";
+import type { TanaQueryPredicate } from './types';
 
 import { buildTanaIndex } from "./index";
 import {
   createAndQuery,
   describeTanaQueryClause,
   describeTanaQueryExpression,
+  diagnoseTanaQuery,
   isTanaQueryPredicateValid,
   runTanaQuery,
 } from "./query";
@@ -297,7 +299,7 @@ describe("runTanaQuery", () => {
         ],
         type: "and",
       }).map(({ id }) => id),
-      ["alpha", "alpha-reference"],
+      ["alpha"],
     );
   });
 
@@ -312,13 +314,13 @@ describe("runTanaQuery", () => {
     );
     assert.deepEqual(
       run([{ kind: "references", nodeId: "alpha" }]).map(({ id }) => id),
-      ["alpha-reference"],
+      ["alpha"],
     );
     assert.deepEqual(
       run([{ kind: "referenced-by", nodeId: "alpha-reference" }]).map(
         ({ id }) => id,
       ),
-      ["alpha"],
+      [],
     );
   });
 
@@ -409,4 +411,110 @@ describe("runTanaQuery", () => {
       false,
     );
   });
+  test("fails closed for a broken target even beneath NOT and restores when identity returns", () => {
+    const query = {
+      child: { predicate: { kind: "has-supertag", supertagId: "project-tag" }, type: "predicate" as const },
+      type: "not" as const,
+    };
+    const withoutTag = buildTanaIndex(document.filter((node) => node.id !== "project-tag"));
+
+    assert.deepEqual(runTanaQuery(withoutTag, query), []);
+    assert.equal(diagnoseTanaQuery(withoutTag, query)[0]?.code, "missing-supertag");
+    assert.equal(
+      runTanaQuery(index, query).some(({ id }) => id === "beta"),
+      true,
+    );
+  });
+
+  test("keeps broken target identities stable until the same canonical identities return", () => {
+    const source: Value = [
+      { children: [{ text: "Project" }], id: "tag", tanaSupertagDefinition: {}, type: "p" },
+      { children: [{ text: "Status" }], id: "field", tanaFieldDefinition: { type: "options" }, type: "p" },
+      { children: [{ text: "Open" }], id: "option", indent: 1, type: "p" },
+      { children: [{ text: "Parent" }], id: "parent", type: "p" },
+      { children: [{ text: "Match" }], id: "match", indent: 1, tanaSupertagIds: ["tag"], type: "p" },
+      { children: [{ text: "" }], id: "match-field", indent: 2, tanaFieldId: "field", type: "p" },
+      {
+        children: [{ children: [{ text: "" }], key: "option", type: "mention" }],
+        id: "match-value",
+        indent: 3,
+        tanaFieldValueType: "options",
+        type: "p",
+      },
+    ];
+    const query = createAndQuery([
+      { kind: "has-supertag", supertagId: "tag" },
+      {
+        fieldId: "field",
+        kind: "field-equals",
+        value: { type: "options", value: "option" },
+      },
+      { kind: "child-of", nodeId: "parent" },
+    ]);
+    const expectedAst = structuredClone(query);
+    const withoutTargets = source.filter(
+      (node) => !["tag", "field", "option", "parent"].includes(String(node.id)),
+    );
+    const active = buildTanaIndex(source);
+    const broken = buildTanaIndex(withoutTargets);
+    const replacement = buildTanaIndex([
+      ...withoutTargets,
+      { children: [{ text: "Project" }], id: "replacement-tag", tanaSupertagDefinition: {}, type: "p" },
+      { children: [{ text: "Status" }], id: "replacement-field", tanaFieldDefinition: { type: "options" }, type: "p" },
+      { children: [{ text: "Open" }], id: "replacement-option", indent: 1, type: "p" },
+      { children: [{ text: "Parent" }], id: "replacement-parent", type: "p" },
+    ]);
+
+    assert.deepEqual(runTanaQuery(active, query).map(({ id }) => id), ["match"]);
+    assert.deepEqual(runTanaQuery(broken, query), []);
+    assert.deepEqual(query, expectedAst);
+    assert.deepEqual(runTanaQuery(replacement, query), []);
+    assert.deepEqual(runTanaQuery(buildTanaIndex(source), query).map(({ id }) => id), ["match"]);
+  });
+
+  test("returns a canonical result once when an occurrence and target both match", () => {
+    assert.deepEqual(
+      run([{ kind: "text-contains", text: "alpha" }]).map(({ id }) => id),
+      ["alpha"],
+    );
+  });
+
+  test("caps derived Search results at 2500 and excludes the owning Search", () => {
+    const many = buildTanaIndex(Array.from({ length: 2502 }, (_, number) => ({
+      children: [{ text: `Result ${number}` }],
+      id: `result-${number}`,
+      type: "p",
+    })));
+    assert.equal(runTanaQuery(many, createAndQuery()).length, 2500);
+    assert.equal(runTanaQuery(many, createAndQuery(), { excludeNodeId: "result-0" })[0]?.id, "result-1");
+  });
+
+});
+
+test('runs numeric/date comparisons, completion, semantic, regex and grandparent predicates', () => {
+  const featureIndex = buildTanaIndex([
+    { children: [{ text: 'Estimate' }], id: 'estimate', tanaFieldDefinition: { type: 'number' }, type: 'p' },
+    { children: [{ text: 'When' }], id: 'when', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Grandparent' }], id: 'grandparent', type: 'p' },
+    { children: [{ text: 'Parent' }], id: 'parent', indent: 1, type: 'p' },
+    { children: [{ text: 'Release 42' }], id: 'release', indent: 2, tanaDoneState: 'done', type: 'p' },
+    { children: [{ text: '' }], id: 'release-estimate', indent: 3, tanaFieldId: 'estimate', type: 'p' },
+    { children: [{ text: '42' }], id: 'release-estimate-value', indent: 4, tanaFieldValueType: 'number', type: 'p' },
+    { children: [{ text: '' }], id: 'release-when', indent: 3, tanaFieldId: 'when', type: 'p' },
+    { children: [{ text: '2026-09-10' }], id: 'release-when-value', indent: 4, tanaFieldValueType: 'date', type: 'p' },
+    { children: [{ text: '2026-09-11' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-11' }, type: 'p' },
+    { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: createAndQuery() }, type: 'p' },
+  ]);
+  const ids = (predicate: TanaQueryPredicate) =>
+    runTanaQuery(featureIndex, createAndQuery([predicate])).map(({ id }) => id);
+
+  assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-greater-than', value: { type: 'number', value: 40 } }), ['release']);
+  assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-less-than', value: { type: 'number', value: 50 } }), ['release']);
+  assert.deepEqual(ids({ kind: 'done-state', state: 'done' }), ['release']);
+  assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
+  assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
+  assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
+  assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '^Release\\s+\\d+$' }), ['release']);
+  assert.deepEqual(ids({ kind: 'grandchild-of', nodeId: 'grandparent' }), ['release']);
+  assert.deepEqual(ids({ fieldId: 'estimate', kind: 'has-field' }), ['release']);
 });

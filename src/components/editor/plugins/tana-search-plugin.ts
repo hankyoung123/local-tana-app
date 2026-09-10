@@ -1,14 +1,11 @@
-import { ElementApi } from "platejs";
+import { ElementApi, NodeApi } from "platejs";
 import type { NodeEntry } from "platejs";
 import { createPlatePlugin, type PlateEditor } from "platejs/react";
 
 import { isTanaNodeElement } from "@/lib/tana/constants";
-import { buildTanaIndex } from "@/lib/tana/index";
-import {
-  createAndQuery,
-  isTanaQueryPredicateValid,
-  isTanaQueryExpressionValid,
-} from "@/lib/tana/query";
+import { createAndQuery, normalizeTanaQueryRoot } from "@/lib/tana/query";
+import { isTanaQueryAst, isTanaQueryPredicateAst } from "@/lib/tana/query-ast";
+import { isTanaSearchHost } from "@/lib/tana/search-host";
 import type {
   NodeId,
   TanaBlockElement,
@@ -31,7 +28,12 @@ function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
 function define(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (!entry || entry[0].tanaSearchDefinition) return false;
+  if (
+    !entry ||
+    entry[0].tanaSearchDefinition ||
+    !isTanaSearchHost(entry[0], { document: editor.children, path: entry[1] })
+  )
+    return false;
 
   editor.tf.setNodes(
     { tanaSearchDefinition: { query: createAndQuery() } },
@@ -44,7 +46,11 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 function remove(editor: PlateEditor, nodeId: NodeId) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
-  if (!entry?.[0].tanaSearchDefinition) return false;
+  if (
+    !entry?.[0].tanaSearchDefinition ||
+    !isTanaSearchHost(entry[0], { document: editor.children, path: entry[1] })
+  )
+    return false;
 
   editor.tf.unsetNodes("tanaSearchDefinition", { at: entry[1] });
 
@@ -60,15 +66,20 @@ function setQuery(
   const entry = getTanaNodeEntry(editor, nodeId);
   const definition = entry?.[0].tanaSearchDefinition;
 
-  if (!entry || !definition) return false;
-  if (!isTanaQueryExpressionValid(buildTanaIndex(editor.children), query))
+  if (
+    !entry ||
+    !definition ||
+    !isTanaSearchHost(entry[0], { document: editor.children, path: entry[1] })
+  )
     return false;
+  if (!isTanaQueryAst(query)) return false;
+  const normalizedQuery = normalizeTanaQueryRoot(query);
 
   editor.tf.setNodes(
     {
       tanaSearchDefinition: {
         ...definition,
-        query,
+        query: normalizedQuery,
       },
     },
     { at: entry[1] },
@@ -85,10 +96,14 @@ function addClause(
   const entry = getTanaNodeEntry(editor, nodeId);
   const definition = entry?.[0].tanaSearchDefinition;
 
-  if (!entry || !definition) return false;
-  if (definition.query.type !== "and") return false;
-  if (!isTanaQueryPredicateValid(buildTanaIndex(editor.children), clause))
+  if (
+    !entry ||
+    !definition ||
+    !isTanaSearchHost(entry[0], { document: editor.children, path: entry[1] })
+  )
     return false;
+  if (definition.query.type !== "and") return false;
+  if (!isTanaQueryPredicateAst(clause)) return false;
 
   editor.tf.setNodes(
     {
@@ -115,6 +130,10 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
   if (
     !entry ||
     !definition ||
+    !isTanaSearchHost(entry[0], {
+      document: editor.children,
+      path: entry[1],
+    }) ||
     !Number.isInteger(index) ||
     index < 0 ||
     definition.query.type !== "and" ||
@@ -143,7 +162,8 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
 /** Owns document mutations for a Search Node's result-set definition. */
 export const TanaSearchPlugin = createPlatePlugin({
   key: TANA_SEARCH_PLUGIN_KEY,
-}).extendEditorTransforms(({ editor }) => ({
+})
+  .extendEditorTransforms(({ editor }) => ({
   search: {
     addClause: (nodeId: NodeId, clause: TanaQueryClause) =>
       addClause(editor, nodeId, clause),
@@ -154,4 +174,28 @@ export const TanaSearchPlugin = createPlatePlugin({
     setQuery: (nodeId: NodeId, query: TanaQueryExpression) =>
       setQuery(editor, nodeId, query),
   },
-}));
+}))
+  .overrideEditor(({ editor, tf: { insertText } }) => ({
+    transforms: {
+      insertText(text, options) {
+        if (text === "?") {
+          const entry = editor.api.block();
+          if (
+            entry &&
+            ElementApi.isElement(entry[0]) &&
+            isTanaNodeElement(entry) &&
+            NodeApi.string(entry[0]) === "" &&
+            typeof entry[0].id === "string" &&
+            isTanaSearchHost(entry[0] as TanaBlockElement, {
+              document: editor.children,
+              path: entry[1],
+            }) &&
+            define(editor, entry[0].id)
+          ) {
+            return;
+          }
+        }
+        return insertText(text, options);
+      },
+    },
+  }));
