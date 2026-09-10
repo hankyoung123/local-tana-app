@@ -59,8 +59,11 @@ export function createNotDoneQueryExpression(): TanaQueryExpression {
 const viewTypeLabels: Record<TanaViewDefinition["type"], string> = {
   calendar: "日历",
   cards: "卡片",
+  list: "列表",
   outline: "大纲",
+  "side-menu": "侧边菜单",
   table: "表格",
+  tabs: "标签页",
 };
 
 /**

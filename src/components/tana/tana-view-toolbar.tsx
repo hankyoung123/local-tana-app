@@ -16,12 +16,16 @@ import {
 import { resolveTanaNodeTitle, type TanaIndex, type TanaNode, type TanaViewDefinition } from '@/lib/tana';
 
 import { TanaNodeBullet } from './tana-node-gutter';
+import { TanaViewFilterControls } from './tana-view-filter-controls';
 
 const viewTypeLabels: Record<TanaViewDefinition['type'], string> = {
   calendar: '日历',
   cards: '卡片',
+  list: '列表',
   outline: '大纲',
+  'side-menu': '侧边菜单',
   table: '表格',
+  tabs: '标签页',
 };
 
 /**
@@ -32,14 +36,31 @@ const viewTypeLabels: Record<TanaViewDefinition['type'], string> = {
 export function TanaViewToolbar({
   controls,
   index,
+  results,
   view,
 }: {
   controls?: ReactNode;
   index: TanaIndex;
+  results: readonly TanaNode[];
   view: TanaNode;
 }) {
   const editor = useEditorRef();
   const type = view.viewDefinition?.type ?? 'outline';
+  const visible = view.viewDefinition?.toolbarVisible !== false;
+
+  if (!visible) {
+    return (
+      <header className="shrink-0 px-6 pt-3 sm:px-10">
+        <button
+          className="rounded px-2 py-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+          type="button"
+          onClick={() => editor.getTransforms(TanaViewPlugin).view.update(view.id, { toolbarVisible: true })}
+        >
+          显示工具栏
+        </button>
+      </header>
+    );
+  }
 
   return (
     <header className="min-w-0 max-w-full shrink-0 px-6 pt-8 sm:px-10">
@@ -73,7 +94,16 @@ export function TanaViewToolbar({
             ))}
           </SelectContent>
         </Select>
+        <TanaViewFilterControls index={index} results={results} view={view} />
         {controls && <div className="ml-1 flex min-w-0 max-w-full flex-wrap items-center gap-1">{controls}</div>}
+        <button
+          aria-label="隐藏工具栏"
+          className="ml-auto rounded px-2 py-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+          type="button"
+          onClick={() => editor.getTransforms(TanaViewPlugin).view.update(view.id, { toolbarVisible: false })}
+        >
+          隐藏
+        </button>
       </div>
     </header>
   );

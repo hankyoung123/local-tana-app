@@ -7,7 +7,7 @@ import { TanaView } from '@/components/tana/tana-view';
 import { buildTanaIndex, createAndQuery } from '@/lib/tana';
 
 const type = process.argv[2];
-if (type !== 'table' && type !== 'cards') throw new Error('Expected table or cards');
+if (!['table', 'cards', 'calendar', 'list', 'tabs', 'side-menu', 'outline'].includes(type)) throw new Error('Expected a View type');
 const value: Value = [
   { id: 'view', type: 'p', children: [{ text: 'Long view title '.repeat(40) }],
     tanaViewDefinition: { type },

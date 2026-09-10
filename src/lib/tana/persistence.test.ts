@@ -346,9 +346,9 @@ describe('Plate document persistence', () => {
         children: [{ text: 'Tasks' }],
         id: 'tasks-view',
         tanaViewDefinition: {
-          calendarDateFieldId: 'due-date',
+          calendarDateFieldIds: ['due-date'],
           groupFieldId: 'status',
-          sort: { direction: 'asc', fieldId: '$title' },
+          sort: [{ direction: 'asc', fieldId: '$title' }],
           type: 'table',
           visibleFieldIds: ['status', 'owner'],
         },
@@ -361,12 +361,44 @@ describe('Plate document persistence', () => {
     assert.equal(isValidTanaDocument(document), true);
     assert.equal(isValidTanaDocument(reloaded), true);
     assert.deepEqual(reloaded.at(-1)?.tanaViewDefinition, {
-      calendarDateFieldId: 'due-date',
+      calendarDateFieldIds: ['due-date'],
       groupFieldId: 'status',
-      sort: { direction: 'asc', fieldId: '$title' },
+      sort: [{ direction: 'asc', fieldId: '$title' }],
       type: 'table',
       visibleFieldIds: ['status', 'owner'],
     });
+  });
+
+  test('accepts complete View presentation config and fails closed on malformed filters, sort, pagination, and date subsets', () => {
+    const valid = withWorkspace([{
+      children: [{ text: 'View' }], id: 'view', type: 'p',
+      tanaViewDefinition: {
+        calendarDateFieldIds: ['due'],
+        filter: { clauses: [
+          { kind: 'text-contains', text: 'task' },
+          { fieldId: 'status', kind: 'field-equals', value: { type: 'plain', value: 'ready' } },
+          { kind: 'has-supertag', supertagId: 'project' },
+        ], mode: 'and' },
+        pagination: { page: 1, pageSize: 100 },
+        sort: [{ direction: 'asc', fieldId: '$title' }, { direction: 'desc', fieldId: 'status' }],
+        toolbarVisible: false,
+        type: 'tabs',
+        visibleFieldIds: ['status'],
+      },
+    }]);
+    assert.equal(isValidTanaDocument(valid), true);
+    const invalidFilter = structuredClone(valid);
+    (invalidFilter.at(-1) as unknown as { tanaViewDefinition: { filter: unknown } }).tanaViewDefinition.filter = { clauses: [{ kind: 'text-contains', text: '' }], mode: 'and' };
+    assert.equal(isValidTanaDocument(invalidFilter), false);
+    const invalidSort = structuredClone(valid);
+    (invalidSort.at(-1) as unknown as { tanaViewDefinition: { sort: unknown } }).tanaViewDefinition.sort = { direction: 'asc', fieldId: '$title' };
+    assert.equal(isValidTanaDocument(invalidSort), false);
+    const invalidPagination = structuredClone(valid);
+    (invalidPagination.at(-1) as unknown as { tanaViewDefinition: { pagination: unknown } }).tanaViewDefinition.pagination = { pageSize: 101 };
+    assert.equal(isValidTanaDocument(invalidPagination), false);
+    const invalidDates = structuredClone(valid);
+    (invalidDates.at(-1) as unknown as { tanaViewDefinition: { calendarDateFieldIds: unknown } }).tanaViewDefinition.calendarDateFieldIds = ['due', 'due'];
+    assert.equal(isValidTanaDocument(invalidDates), false);
   });
 
   test('accepts explicit system Nodes and rejects invalid membership metadata', () => {

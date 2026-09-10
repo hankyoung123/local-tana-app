@@ -126,29 +126,60 @@ describe('Tana view mutations', () => {
     assert.equal(
       view(editor).update('view', {
         groupFieldId: 'status',
-        sort: { direction: 'desc', fieldId: '$title' },
+        sort: [{ direction: 'desc', fieldId: '$title' }],
         visibleFieldIds: ['status', 'owner'],
       }),
       true
     );
     assert.equal(
-      view(editor).update('view', { calendarDateFieldId: 'due-date' }),
+      view(editor).update('view', { calendarDateFieldIds: ['due-date'] }),
       true
     );
+    assert.equal(
+      view(editor).update('view', { visibleFieldIds: ['owner', 'status'] }),
+      true
+    );
+    assert.equal(view(editor).update('view', { toolbarVisible: false }), true);
     assert.equal(view(editor).setType('view', 'cards'), true);
 
     const reloaded = createEditor(JSON.parse(JSON.stringify(editor.children)) as Value);
 
     assert.deepEqual(reloaded.children[0].tanaViewDefinition, {
-      calendarDateFieldId: 'due-date',
+      calendarDateFieldIds: ['due-date'],
       groupFieldId: 'status',
-      sort: { direction: 'desc', fieldId: '$title' },
+      sort: [{ direction: 'desc', fieldId: '$title' }],
+      toolbarVisible: false,
       type: 'cards',
-      visibleFieldIds: ['status', 'owner'],
+      visibleFieldIds: ['owner', 'status'],
     });
     assert.deepEqual(reloaded.children[0].tanaSearchDefinition, {
       query: { children: [], type: 'and' },
     });
+  });
+
+  test('switches every F06 renderer without mutating Search, hierarchy, or Field document data', () => {
+    const editor = createEditor([
+      { children: [{ text: 'View' }], id: 'view', tanaSearchDefinition: { query: { children: [], type: 'and' } }, tanaViewDefinition: { type: 'outline' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+    const canonicalBefore = structuredClone(editor.children);
+    for (const type of ['table', 'cards', 'calendar', 'list', 'tabs', 'side-menu', 'outline'] as const) {
+      assert.equal(view(editor).setType('view', type), true);
+    }
+    const canonicalOnly = (nodes: Value) => nodes.map((node) => {
+      const copy = structuredClone(node) as typeof node & {
+        tanaSearchDefinition?: unknown;
+        tanaViewDefinition?: unknown;
+      };
+      delete copy.tanaSearchDefinition;
+      delete copy.tanaViewDefinition;
+      return copy;
+    });
+    assert.deepEqual(
+      canonicalOnly(editor.children),
+      canonicalOnly(canonicalBefore)
+    );
+    assert.deepEqual(editor.children[0]?.tanaSearchDefinition, canonicalBefore[0]?.tanaSearchDefinition);
   });
 
   test('composes a View with a Supertag Definition without changing either Node semantic', () => {

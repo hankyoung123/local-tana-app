@@ -4,7 +4,6 @@ import * as React from 'react';
 import {
   ArrowDownAZIcon,
   Columns3Icon,
-  GroupIcon,
   RotateCcwIcon,
 } from 'lucide-react';
 import { useEditorRef, type PlateEditor } from 'platejs/react';
@@ -35,6 +34,7 @@ import {
   getSupertagTemplateFields,
   isTanaTitleExpressionNameEditable,
   getTanaProjectionTarget,
+  sortTanaViewProjectionItems,
   isTanaNodeInTrash,
   resolveTanaNodeTitle,
   resolveTanaNodeTitleSegments,
@@ -46,12 +46,13 @@ import {
   type TanaIndex,
   type TanaNode,
   type TanaViewDefinition,
+  type TanaViewProjection,
 } from '@/lib/tana';
 
 import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
 import { TanaNodeBullet } from './tana-node-gutter';
+import { createTanaViewNode } from './tana-view-actions';
 
-const NO_GROUP = '__no-group__';
 const TITLE_SORT = '$title';
 
 type TanaTableSort = NonNullable<TanaViewDefinition['sort']>;
@@ -66,10 +67,9 @@ function getConfiguredTanaTableFieldIds(
 ): NodeId[] {
   const configured = [...(settings?.visibleFieldIds ?? [])];
 
-  if (settings?.sort?.fieldId && settings.sort.fieldId !== TITLE_SORT) {
-    configured.push(settings.sort.fieldId);
-  }
-  if (settings?.groupFieldId) configured.push(settings.groupFieldId);
+  settings?.sort?.forEach(({ fieldId }) => {
+    if (fieldId !== TITLE_SORT) configured.push(fieldId);
+  });
 
   return configured;
 }
@@ -197,19 +197,14 @@ export function sortTanaTableNodes(
 ): TanaNode[] {
   if (!sort) return [...nodes];
 
-  const direction = sort.direction === 'asc' ? 1 : -1;
-  const valueFor = (node: TanaNode) =>
-    sort.fieldId === TITLE_SORT
-      ? resolveTanaNodeTitle(index, node.id)
-      : getFieldValueLabel(index, getField(index, node.id, sort.fieldId));
-
-  return [...nodes].sort(
-    (left, right) =>
-      valueFor(left).localeCompare(valueFor(right), undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      }) * direction
-  );
+  return sortTanaViewProjectionItems(
+    index,
+    nodes.flatMap((occurrence) => {
+      const target = getTanaProjectionTarget(index, occurrence.id);
+      return target ? [{ occurrence, target }] : [];
+    }),
+    { sort, type: 'table' }
+  ).map(({ occurrence }) => occurrence);
 }
 
 /** Grouping derives labels from Field Nodes and never retains a result copy. */
@@ -650,10 +645,12 @@ function TableRow({
   fieldIds,
   index,
   node,
+  viewId,
 }: {
   fieldIds: readonly NodeId[];
   index: TanaIndex;
   node: TanaNode;
+  viewId: NodeId;
 }) {
   const editor = useEditorRef();
   const target = getTanaProjectionTarget(index, node.id);
@@ -686,6 +683,7 @@ function TableRow({
             }
             targetNodeId={target.id}
             title={editableTitle}
+            onEnter={() => createTanaViewNode(editor, viewId)}
           />
         </div>
       </td>
@@ -700,37 +698,26 @@ function TableRow({
 
 export function TanaTableView({
   index,
+  projection,
   results,
   view,
 }: {
   index: TanaIndex;
+  projection?: TanaViewProjection;
   results: readonly TanaNode[];
   view: TanaNode;
 }) {
+  const editor = useEditorRef();
   const viewSettings = view.viewDefinition;
   const configuredVisibleFieldIds = viewSettings?.visibleFieldIds;
-  const fieldIds = getTanaTableAvailableFieldIds(
+  const fieldIds = projection?.availableFieldIds ?? getTanaTableAvailableFieldIds(
     index,
     results,
     getConfiguredTanaTableFieldIds(viewSettings)
   );
-  const configuredSort = viewSettings?.sort;
-  const configuredGroupFieldId = viewSettings?.groupFieldId;
-  const visibleFields = configuredVisibleFieldIds
+  const visibleFields = projection?.visibleFieldIds ?? (configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
-    : fieldIds;
-  const activeSort =
-    configuredSort &&
-    configuredSort.fieldId !== TITLE_SORT &&
-    !fieldIds.includes(configuredSort.fieldId)
-      ? undefined
-      : configuredSort;
-  const activeGroupFieldId =
-    configuredGroupFieldId && fieldIds.includes(configuredGroupFieldId)
-      ? configuredGroupFieldId
-      : undefined;
-  const sortedResults = sortTanaTableNodes(index, results, activeSort);
-  const groups = groupTanaTableNodes(index, sortedResults, activeGroupFieldId);
+    : fieldIds);
   const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
 
   return (
@@ -739,9 +726,33 @@ export function TanaTableView({
           <thead className="border-b border-[var(--tana-divider)] text-left text-[var(--tana-text-tertiary)] text-xs">
             <tr>
               <th className="px-1.5 py-1 font-medium">Title</th>
-              {visibleFields.map((fieldId) => (
+              {visibleFields.map((fieldId, position) => (
                 <th key={fieldId} className="px-1.5 py-1 font-medium">
-                  {fieldName(fieldId)}
+                  <span className="inline-flex items-center gap-1">
+                    {fieldName(fieldId)}
+                    <button
+                      aria-label={`左移 ${fieldName(fieldId)} 列`}
+                      className="text-[10px] disabled:opacity-30"
+                      disabled={position === 0}
+                      type="button"
+                      onClick={() => {
+                        const next = [...visibleFields];
+                        [next[position - 1], next[position]] = [next[position], next[position - 1]];
+                        editor.getTransforms(TanaViewPlugin).view.update(view.id, { visibleFieldIds: next });
+                      }}
+                    >←</button>
+                    <button
+                      aria-label={`右移 ${fieldName(fieldId)} 列`}
+                      className="text-[10px] disabled:opacity-30"
+                      disabled={position + 1 === visibleFields.length}
+                      type="button"
+                      onClick={() => {
+                        const next = [...visibleFields];
+                        [next[position], next[position + 1]] = [next[position + 1], next[position]];
+                        editor.getTransforms(TanaViewPlugin).view.update(view.id, { visibleFieldIds: next });
+                      }}
+                    >→</button>
+                  </span>
                 </th>
               ))}
             </tr>
@@ -757,29 +768,27 @@ export function TanaTableView({
                 </td>
               </tr>
             ) : (
-              groups.map((group) => (
-                <React.Fragment key={group.label || '__all__'}>
-                  {activeGroupFieldId && (
-                    <tr className="border-y border-[var(--tana-divider)] text-[var(--tana-text-tertiary)] text-xs">
-                      <th
-                        className="px-1.5 py-1 text-left font-medium"
-                        colSpan={visibleFields.length + 1}
-                      >
-                        {group.label} · {group.nodes.length}
-                      </th>
-                    </tr>
-                  )}
-                  {group.nodes.map((node) => (
-                    <TableRow
-                      key={node.id}
-                      fieldIds={visibleFields}
-                      index={index}
-                      node={node}
-                    />
-                  ))}
-                </React.Fragment>
+              results.map((node) => (
+                <TableRow
+                  key={node.id}
+                  fieldIds={visibleFields}
+                  index={index}
+                  node={node}
+                  viewId={view.id}
+                />
               ))
             )}
+            <tr>
+              <td className="px-1.5 py-2" colSpan={visibleFields.length + 1}>
+                <button
+                  className="rounded px-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+                  type="button"
+                  onClick={() => createTanaViewNode(editor, view.id)}
+                >
+                  添加行
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
     </div>
@@ -803,21 +812,11 @@ export function TanaTableToolbarControls({
     results,
     getConfiguredTanaTableFieldIds(view.viewDefinition)
   );
-  const configuredSort = view.viewDefinition?.sort;
-  const configuredGroupFieldId = view.viewDefinition?.groupFieldId;
+  const configuredSort = view.viewDefinition?.sort ?? [];
   const visibleFields = configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds;
-  const activeSort =
-    configuredSort &&
-    configuredSort.fieldId !== TITLE_SORT &&
-    !fieldIds.includes(configuredSort.fieldId)
-      ? undefined
-      : configuredSort;
-  const activeGroupFieldId =
-    configuredGroupFieldId && fieldIds.includes(configuredGroupFieldId)
-      ? configuredGroupFieldId
-      : undefined;
+  const activeSort = configuredSort[0];
   const fieldName = (fieldId: NodeId) =>
     index.nodesById.get(fieldId)?.text || '未命名字段';
 
@@ -865,6 +864,24 @@ export function TanaTableToolbarControls({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button aria-label="添加表格字段列" className="inline-flex h-7 items-center rounded px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">添加列</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>添加已有字段</DropdownMenuLabel>
+          {Array.from(index.nodesById.values()).filter((node) => node.fieldDefinition).map((field) => (
+            <DropdownMenuItem key={field.id} onSelect={() => editor.getTransforms(TanaViewPlugin).view.update(view.id, {
+              visibleFieldIds: visibleFields.includes(field.id) ? [...visibleFields] : [...visibleFields, field.id],
+            })}>{field.text || '未命名字段'}</DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => {
+            const fieldId = editor.getTransforms(TanaFieldPlugin).field.createDefinition('新字段', { type: 'plain' });
+            if (fieldId) editor.getTransforms(TanaViewPlugin).view.update(view.id, { visibleFieldIds: [...visibleFields, fieldId] });
+          }}>创建字段定义</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <Select
         value={activeSort ? `${activeSort.fieldId}:${activeSort.direction}` : undefined}
@@ -877,10 +894,10 @@ export function TanaTableToolbarControls({
 
           if ((direction === 'asc' || direction === 'desc') && fieldId) {
             editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-              sort: {
+              sort: [{
                 direction,
                 fieldId: fieldId === TITLE_SORT ? TITLE_SORT : (fieldId as NodeId),
-              },
+              }],
             });
           }
         }}
@@ -901,26 +918,29 @@ export function TanaTableToolbarControls({
           ))}
         </SelectContent>
       </Select>
-
       <Select
-        value={activeGroupFieldId ?? NO_GROUP}
-        onValueChange={(value) =>
-          editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-            groupFieldId: value === NO_GROUP ? undefined : value,
-          })
-        }
+        value="__add__"
+        onValueChange={(value) => {
+          if (value === '__add__') return;
+          const [fieldId, direction] = value.split(':');
+          if ((direction !== 'asc' && direction !== 'desc') || !fieldId) return;
+          const criterion = {
+            direction,
+            fieldId: fieldId === TITLE_SORT ? TITLE_SORT : fieldId as NodeId,
+          } as const;
+          const withoutSameField = configuredSort.filter((current) => current.fieldId !== criterion.fieldId);
+          editor.getTransforms(TanaViewPlugin).view.update(view.id, { sort: [...withoutSameField, criterion] });
+        }}
       >
-        <SelectTrigger aria-label="按字段分组" className="h-7 w-30 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
-          <GroupIcon className="size-3.5" />
-          <SelectValue />
-        </SelectTrigger>
+        <SelectTrigger aria-label="添加排序条件" className="h-7 w-24 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value={NO_GROUP}>不分组</SelectItem>
-          {fieldIds.map((fieldId) => (
-            <SelectItem key={fieldId} value={fieldId}>
-              按{fieldName(fieldId)}分组
-            </SelectItem>
-          ))}
+          <SelectItem value="__add__">添加排序</SelectItem>
+          <SelectItem value={`${TITLE_SORT}:asc`}>标题 A → Z</SelectItem>
+          <SelectItem value={`${TITLE_SORT}:desc`}>标题 Z → A</SelectItem>
+          {fieldIds.map((fieldId) => <React.Fragment key={fieldId}>
+            <SelectItem value={`${fieldId}:asc`}>{fieldName(fieldId)} ↑</SelectItem>
+            <SelectItem value={`${fieldId}:desc`}>{fieldName(fieldId)} ↓</SelectItem>
+          </React.Fragment>)}
         </SelectContent>
       </Select>
     </>

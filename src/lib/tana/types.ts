@@ -125,14 +125,36 @@ export type TanaSearchDefinition = {
 };
 
 /** View presentation never owns Search results or canonical Node data. */
+export type TanaViewFilterClause =
+  | { kind: 'text-contains'; text: string }
+  | { fieldId: NodeId; kind: 'field-set' | 'field-not-set' }
+  | { fieldId: NodeId; kind: 'field-equals'; value: FieldValue }
+  | { kind: 'has-supertag'; supertagId: NodeId };
+
+/** A View filter is deliberately small and separate from the Search AST. */
+export type TanaViewFilter = {
+  clauses: readonly TanaViewFilterClause[];
+  mode: 'and' | 'or';
+};
+
+export type TanaViewSortCriterion = {
+  direction: 'asc' | 'desc';
+  fieldId: NodeId | '$title';
+};
+
+export type TanaViewPagination = {
+  page?: number;
+  pageSize?: number;
+};
+
 export type TanaViewDefinition = {
-  calendarDateFieldId?: NodeId;
+  calendarDateFieldIds?: readonly NodeId[];
+  filter?: TanaViewFilter;
   groupFieldId?: NodeId;
-  sort?: {
-    direction: 'asc' | 'desc';
-    fieldId: NodeId | '$title';
-  };
-  type: 'calendar' | 'cards' | 'outline' | 'table';
+  pagination?: TanaViewPagination;
+  sort?: readonly TanaViewSortCriterion[];
+  toolbarVisible?: boolean;
+  type: 'calendar' | 'cards' | 'list' | 'outline' | 'side-menu' | 'table' | 'tabs';
   visibleFieldIds?: readonly NodeId[];
 };
 

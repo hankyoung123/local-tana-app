@@ -11,7 +11,13 @@ export const TANA_VIEW_PLUGIN_KEY = 'tanaView' as const;
 type TanaViewPresentationPatch = Partial<
   Pick<
     TanaViewDefinition,
-    'calendarDateFieldId' | 'groupFieldId' | 'sort' | 'visibleFieldIds'
+    | 'calendarDateFieldIds'
+    | 'filter'
+    | 'groupFieldId'
+    | 'pagination'
+    | 'sort'
+    | 'toolbarVisible'
+    | 'visibleFieldIds'
   >
 >;
 

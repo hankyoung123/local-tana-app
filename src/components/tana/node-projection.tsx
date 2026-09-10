@@ -153,6 +153,7 @@ export function ProjectionTitleInput({
   title,
   displayTitle = title,
   displaySegments,
+  onEnter,
   onExitEdit,
   readOnly = false,
   autoFocus = false,
@@ -162,6 +163,7 @@ export function ProjectionTitleInput({
   title: string;
   displayTitle?: string;
   displaySegments?: readonly TanaTitleExpressionSegment[];
+  onEnter?: () => void;
   onExitEdit?: () => void;
   readOnly?: boolean;
 }) {
@@ -199,7 +201,10 @@ export function ProjectionTitleInput({
           onExitEdit?.();
           return;
         }
-        if (event.key === 'Enter') event.preventDefault();
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onEnter?.();
+        }
       }}
     />
   );

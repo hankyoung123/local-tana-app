@@ -337,7 +337,10 @@ const NodeIntegrityValidators: Partial<
     node.tanaViewDefinition?.type === 'outline' ||
     node.tanaViewDefinition?.type === 'table' ||
     node.tanaViewDefinition?.type === 'calendar' ||
-    node.tanaViewDefinition?.type === 'cards'
+    node.tanaViewDefinition?.type === 'cards' ||
+    node.tanaViewDefinition?.type === 'list' ||
+    node.tanaViewDefinition?.type === 'tabs' ||
+    node.tanaViewDefinition?.type === 'side-menu'
       ? undefined
       : 'invalid-view-definition',
 };

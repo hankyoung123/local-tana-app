@@ -67,7 +67,7 @@ describe('Tana Table View', () => {
 
     assert.deepEqual(getTanaTableFieldIds(index, nodes), ['status']);
     assert.deepEqual(
-      sortTanaTableNodes(index, nodes, { direction: 'asc', fieldId: 'status' }).map(
+      sortTanaTableNodes(index, nodes, [{ direction: 'asc', fieldId: 'status' }]).map(
         (node) => node.id
       ),
       ['beta', 'alpha']

@@ -73,6 +73,70 @@ function isElement(value: Descendant): value is TElement {
   return 'children' in value && Array.isArray(value.children);
 }
 
+function isTanaNodeIdList(value: unknown): value is readonly string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === 'string' && item.length > 0) &&
+    new Set(value).size === value.length
+  );
+}
+
+function isPersistedFieldValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+
+  const record = value as { type?: unknown; value?: unknown };
+  if (Object.keys(record).length !== 2 || typeof record.type !== 'string') return false;
+
+  switch (record.type) {
+    case 'checkbox':
+      return typeof record.value === 'boolean';
+    case 'number':
+      return typeof record.value === 'number' && Number.isFinite(record.value);
+    case 'date':
+    case 'email':
+    case 'plain':
+    case 'url':
+      return typeof record.value === 'string';
+    case 'from-supertag':
+    case 'options':
+      return typeof record.value === 'string' && record.value.length > 0;
+    default:
+      return false;
+  }
+}
+
+function isPersistedViewFilter(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const filter = value as { clauses?: unknown; mode?: unknown };
+
+  if (
+    Object.keys(filter).length !== 2 ||
+    (filter.mode !== 'and' && filter.mode !== 'or') ||
+    !Array.isArray(filter.clauses)
+  ) {
+    return false;
+  }
+
+  return filter.clauses.every((clause) => {
+    if (!clause || typeof clause !== 'object' || Array.isArray(clause)) return false;
+    const candidate = clause as Record<string, unknown>;
+
+    if (candidate.kind === 'text-contains') {
+      return Object.keys(candidate).length === 2 && typeof candidate.text === 'string' && candidate.text.trim().length > 0;
+    }
+    if (candidate.kind === 'has-supertag') {
+      return Object.keys(candidate).length === 2 && typeof candidate.supertagId === 'string' && candidate.supertagId.length > 0;
+    }
+    if (candidate.kind === 'field-set' || candidate.kind === 'field-not-set') {
+      return Object.keys(candidate).length === 2 && typeof candidate.fieldId === 'string' && candidate.fieldId.length > 0;
+    }
+    if (candidate.kind === 'field-equals') {
+      return Object.keys(candidate).length === 3 && typeof candidate.fieldId === 'string' && candidate.fieldId.length > 0 && isPersistedFieldValue(candidate.value);
+    }
+    return false;
+  });
+}
+
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaDoneState?: unknown;
@@ -258,42 +322,55 @@ function hasValidSemanticData(element: TElement): boolean {
   if (semantic.tanaViewDefinition !== undefined) {
     const definition = semantic.tanaViewDefinition as Record<string, unknown>;
     const visibleFieldIds = definition?.visibleFieldIds;
+    const calendarDateFieldIds = definition?.calendarDateFieldIds;
     const sort = definition?.sort;
+    const pagination = definition?.pagination;
 
     if (
       !definition ||
       (definition.type !== 'outline' &&
         definition.type !== 'table' &&
         definition.type !== 'calendar' &&
-        definition.type !== 'cards') ||
+        definition.type !== 'cards' &&
+        definition.type !== 'list' &&
+        definition.type !== 'tabs' &&
+        definition.type !== 'side-menu') ||
       !Object.keys(definition).every((key) =>
         [
-          'calendarDateFieldId',
+          'calendarDateFieldIds',
+          'filter',
           'groupFieldId',
+          'pagination',
           'sort',
+          'toolbarVisible',
           'type',
           'visibleFieldIds',
         ].includes(key)
       ) ||
-      (visibleFieldIds !== undefined &&
-        (!Array.isArray(visibleFieldIds) ||
-          !visibleFieldIds.every(
-            (fieldId) => typeof fieldId === 'string' && fieldId.length > 0
-          ) ||
-          new Set(visibleFieldIds).size !== visibleFieldIds.length)) ||
+      (visibleFieldIds !== undefined && !isTanaNodeIdList(visibleFieldIds)) ||
+      (calendarDateFieldIds !== undefined && !isTanaNodeIdList(calendarDateFieldIds)) ||
+      (definition.filter !== undefined && !isPersistedViewFilter(definition.filter)) ||
       (definition.groupFieldId !== undefined &&
         (typeof definition.groupFieldId !== 'string' || definition.groupFieldId.length === 0)) ||
-      (definition.calendarDateFieldId !== undefined &&
-        (typeof definition.calendarDateFieldId !== 'string' ||
-          definition.calendarDateFieldId.length === 0)) ||
+      (definition.toolbarVisible !== undefined && typeof definition.toolbarVisible !== 'boolean') ||
+      (pagination !== undefined &&
+        (!pagination || typeof pagination !== 'object' || Array.isArray(pagination) ||
+          !Object.keys(pagination as object).every((key) => key === 'page' || key === 'pageSize') ||
+          ((pagination as { page?: unknown }).page !== undefined &&
+            (!Number.isInteger((pagination as { page?: number }).page) || (pagination as { page: number }).page < 0)) ||
+          ((pagination as { pageSize?: unknown }).pageSize !== undefined &&
+            (!Number.isInteger((pagination as { pageSize?: number }).pageSize) ||
+              (pagination as { pageSize: number }).pageSize < 1 ||
+              (pagination as { pageSize: number }).pageSize > 100)))) ||
       (sort !== undefined &&
-        (!sort ||
-          typeof sort !== 'object' ||
-          !Object.keys(sort).every((key) => key === 'direction' || key === 'fieldId') ||
-          (sort as { direction?: unknown }).direction !== 'asc' &&
-            (sort as { direction?: unknown }).direction !== 'desc' ||
-          typeof (sort as { fieldId?: unknown }).fieldId !== 'string' ||
-          (sort as { fieldId: string }).fieldId.length === 0))
+        (!Array.isArray(sort) ||
+          !sort.every((criterion) =>
+            !!criterion && typeof criterion === 'object' && !Array.isArray(criterion) &&
+            Object.keys(criterion as object).every((key) => key === 'direction' || key === 'fieldId') &&
+            ((criterion as { direction?: unknown }).direction === 'asc' || (criterion as { direction?: unknown }).direction === 'desc') &&
+            typeof (criterion as { fieldId?: unknown }).fieldId === 'string' &&
+            (criterion as { fieldId: string }).fieldId.length > 0
+          )))
     ) {
       return false;
     }
