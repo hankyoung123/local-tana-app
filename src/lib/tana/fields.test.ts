@@ -23,6 +23,7 @@ import {
   isSupertagFieldInputNode,
   getFieldValueCandidates,
   prioritizeFieldDefinitionCandidates,
+  resolveTanaFieldInitializer,
 } from './fields';
 import { buildTanaIndex } from './index';
 import { getTanaNodePath, isTanaNodeInteractable } from './outliner';
@@ -48,6 +49,33 @@ function field(editor: ReturnType<typeof createEditor>) {
 }
 
 describe('Field occurrence Nodes', () => {
+  test('evaluates current-date only from the supplied apply-time context', () => {
+    assert.deepEqual(
+      resolveTanaFieldInitializer(
+        { kind: 'current-date' },
+        { type: 'date' },
+        { appliedAt: new Date(2026, 8, 10, 12) }
+      ),
+      { type: 'date', value: '2026-09-10' }
+    );
+    assert.deepEqual(
+      resolveTanaFieldInitializer(
+        { kind: 'current-date' },
+        { type: 'date' },
+        { appliedAt: new Date(2026, 8, 11, 12) }
+      ),
+      { type: 'date', value: '2026-09-11' }
+    );
+    assert.equal(
+      resolveTanaFieldInitializer(
+        { kind: 'current-date' },
+        { type: 'plain' },
+        { appliedAt: new Date(2026, 8, 10, 12) }
+      ),
+      undefined
+    );
+  });
+
   test('keeps Field and Value Nodes structurally atomic while ordinary Nodes use Plate transforms', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },

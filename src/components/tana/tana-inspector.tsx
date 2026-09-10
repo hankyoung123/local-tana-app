@@ -291,6 +291,14 @@ function TemplateFieldOptionalSection({
 }) {
   const editor = useEditorRef();
   const index = useTanaIndex();
+  const templateNode = index.nodesById.get(templateNodeId);
+  const templateElement = templateNode?.node as TanaBlockElement | undefined;
+  const definition = templateNode?.fieldDefinition ??
+    (templateElement?.tanaFieldId
+      ? index.nodesById.get(templateElement.tanaFieldId)?.fieldDefinition
+      : undefined);
+  const hasCurrentDateInitializer =
+    templateElement?.tanaFieldInitializer?.kind === 'current-date';
 
   return (
     <FieldSection title="模板字段">
@@ -320,6 +328,23 @@ function TemplateFieldOptionalSection({
         />
         在实例中置顶显示
       </label>
+      {definition?.type === 'date' && (
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--tana-text-secondary)]">
+          <Checkbox
+            aria-label="应用时填入当天"
+            checked={hasCurrentDateInitializer}
+            onCheckedChange={(checked) => {
+              if (typeof checked === 'boolean') {
+                editor.getTransforms(TanaFieldPlugin).field.setInitializer(
+                  templateNodeId,
+                  checked ? { kind: 'current-date' } : undefined
+                );
+              }
+            }}
+          />
+          应用标签时填入当天
+        </label>
+      )}
     </FieldSection>
   );
 }

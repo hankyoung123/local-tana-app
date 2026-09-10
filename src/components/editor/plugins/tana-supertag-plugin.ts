@@ -6,7 +6,10 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
-import { getSupertagTemplateFields } from '@/lib/tana/fields';
+import {
+  getSupertagTemplateFields,
+  resolveTanaFieldInitializer,
+} from '@/lib/tana/fields';
 import {
   buildTanaIndex,
   getTanaProjectionTarget,
@@ -135,6 +138,7 @@ function materializeTemplateChildren(
       delete clone.tanaSystemNode;
       delete clone.tanaFieldOptional;
       delete clone.tanaFieldPinned;
+      delete clone.tanaFieldInitializer;
 
       // Local Field Definition/occurrence relations follow the fresh cloned
       // identity. Reference targets and Supertag/Search definitions remain
@@ -404,6 +408,7 @@ function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression:
 }
 
 function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
+  const appliedAt = new Date();
   const initialIndex = buildTanaIndex(editor.children);
   const canonicalTarget = getTanaProjectionTarget(initialIndex, nodeId);
 
@@ -439,7 +444,15 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
     fieldTransforms.materialize(canonicalTarget.id, template.fieldId);
-    if (template.values.length > 0) {
+    const initializedValue = resolveTanaFieldInitializer(
+      template.initializer,
+      template.definition,
+      { appliedAt }
+    );
+
+    if (initializedValue) {
+      fieldTransforms.applyDefault(canonicalTarget.id, template.fieldId, initializedValue);
+    } else if (template.values.length > 0) {
       if (fieldTransforms.applyDefault(canonicalTarget.id, template.fieldId, template.values[0]!)) {
         template.values.slice(1).forEach((value) => {
           fieldTransforms.addValue(canonicalTarget.id, template.fieldId, value);

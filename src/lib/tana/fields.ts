@@ -20,6 +20,7 @@ import {
 } from './outliner';
 import type {
   FieldDefinition,
+  TanaFieldInitializer,
   FieldVisibilityPolicy,
   FieldValue,
   NodeId,
@@ -33,12 +34,39 @@ export type ResolvedSupertagTemplateField = {
   definition: FieldDefinition;
   fieldId: NodeId;
   field: TanaNode;
+  /** A one-shot initializer belongs to this binding, never to an instance. */
+  initializer?: TanaFieldInitializer;
   optional: boolean;
   /** Pinned is a template presentation preference, derived by instances. */
   pinned: boolean;
   /** Explicit template defaults live on real Value child Nodes in document order. */
   values: readonly FieldValue[];
 };
+
+export type TanaFieldInitializerContext = {
+  appliedAt: Date;
+};
+
+/**
+ * Resolves a configured initializer only from the moment a Supertag is
+ * applied. Callers write the returned value through the normal Field writer;
+ * this function never stores a second value or observes future clock changes.
+ */
+export function resolveTanaFieldInitializer(
+  initializer: TanaFieldInitializer | undefined,
+  definition: FieldDefinition,
+  { appliedAt }: TanaFieldInitializerContext
+): FieldValue | undefined {
+  if (!initializer || initializer.kind !== 'current-date' || definition.type !== 'date') {
+    return;
+  }
+
+  const year = appliedAt.getFullYear();
+  const month = String(appliedAt.getMonth() + 1).padStart(2, '0');
+  const day = String(appliedAt.getDate()).padStart(2, '0');
+
+  return { type: 'date', value: `${year}-${month}-${day}` };
+}
 
 export type FieldDefinitionCandidate = Pick<
   TanaNode,
@@ -440,6 +468,7 @@ function getDirectSupertagTemplateFields(
         definition: child.fieldDefinition,
         field: child,
         fieldId: child.id,
+        initializer: (child.node as TanaBlockElement).tanaFieldInitializer,
         optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
         pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
         values: [],
@@ -461,6 +490,7 @@ function getDirectSupertagTemplateFields(
       definition: field.fieldDefinition,
       field,
       fieldId: template.fieldId,
+      initializer: (child.node as TanaBlockElement).tanaFieldInitializer,
       optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
       pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
       values: template.values,

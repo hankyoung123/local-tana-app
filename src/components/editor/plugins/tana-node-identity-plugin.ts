@@ -25,6 +25,7 @@ export const TANA_NODE_IDENTITY_PLUGIN_KEY = 'tanaNodeIdentity' as const;
 const TANA_SEMANTIC_KEYS = [
   'tanaFieldDefinition',
   'tanaFieldId',
+  'tanaFieldInitializer',
   'tanaFieldOptional',
   'tanaFieldPinned',
   'tanaFieldValueType',

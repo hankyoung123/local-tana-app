@@ -78,6 +78,7 @@ function hasValidSemanticData(element: TElement): boolean {
     listStyleType?: unknown;
     tanaFieldDefinition?: unknown;
     tanaFieldId?: unknown;
+    tanaFieldInitializer?: unknown;
     tanaFieldOptional?: unknown;
     tanaFieldPinned?: unknown;
     tanaFieldValueType?: unknown;
@@ -117,6 +118,13 @@ function hasValidSemanticData(element: TElement): boolean {
   if (
     semantic.tanaFieldId !== undefined &&
     (typeof semantic.tanaFieldId !== 'string' || semantic.tanaFieldId.length === 0)
+  ) {
+    return false;
+  }
+
+  if (
+    semantic.tanaFieldInitializer !== undefined &&
+    !isTanaFieldInitializer(semantic.tanaFieldInitializer)
   ) {
     return false;
   }
@@ -369,6 +377,15 @@ function isFieldDefinition(value: unknown): value is {
   );
 }
 
+function isTanaFieldInitializer(value: unknown): value is { kind: 'current-date' } {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value as { kind?: unknown }).kind === 'current-date' &&
+    Object.keys(value).every((key) => key === 'kind')
+  );
+}
+
 function isFieldType(value: unknown): value is string {
   return [
     'checkbox',
@@ -403,6 +420,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaDoneState?: unknown;
       tanaFieldDefinition?: unknown;
       tanaFieldId?: unknown;
+      tanaFieldInitializer?: unknown;
       tanaFieldOptional?: unknown;
       tanaFieldPinned?: unknown;
       tanaFieldValueType?: unknown;
@@ -421,6 +439,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaDoneState !== undefined ||
       semantic.tanaFieldDefinition !== undefined ||
       semantic.tanaFieldId !== undefined ||
+      semantic.tanaFieldInitializer !== undefined ||
       semantic.tanaFieldOptional !== undefined ||
       semantic.tanaFieldPinned !== undefined ||
       semantic.tanaFieldValueType !== undefined ||
@@ -560,6 +579,21 @@ export function isValidTanaDocument(value: unknown): value is Value {
     }
 
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;
+
+    if (node.tanaFieldInitializer !== undefined) {
+      const parentPath = getTanaParentPath(value, path);
+      const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
+      const definition = node.tanaFieldDefinition ??
+        (node.tanaFieldId ? fieldDefinitions.get(node.tanaFieldId) : undefined);
+
+      if (
+        !parent?.tanaSupertagDefinition ||
+        (!node.tanaFieldDefinition && !node.tanaFieldId) ||
+        definition?.type !== 'date'
+      ) {
+        return false;
+      }
+    }
 
     // Reference occurrences are projections only. Their canonical target owns
     // semantic Supertag membership; the occurrence cannot persist a second

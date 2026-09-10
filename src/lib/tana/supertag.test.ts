@@ -156,6 +156,89 @@ describe('Tana Supertag operations', () => {
     );
   });
 
+  test('runs a current-date initializer once through canonical Supertag apply', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      {
+        children: [{ text: '' }],
+        id: 'template-due',
+        indent: 1,
+        tanaFieldId: 'due',
+        tanaFieldInitializer: { kind: 'current-date' },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: '' }],
+        id: 'template-optional-due',
+        indent: 1,
+        tanaFieldId: 'optional-due',
+        tanaFieldInitializer: { kind: 'current-date' },
+        tanaFieldOptional: true,
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      { children: [{ text: 'Optional due' }], id: 'optional-due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      { children: [{ text: 'Fresh' }], id: 'fresh', type: KEYS.p },
+      { children: [{ text: 'Existing' }], id: 'existing', type: KEYS.p },
+      { children: [{ text: 'Canonical' }], id: 'canonical', type: KEYS.p },
+      { children: [{ text: 'Canonical occurrence' }], id: 'reference', tanaReferenceTargetId: 'canonical', type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+    const fields = editor.getTransforms(TanaFieldPlugin).field;
+
+    fields.materialize('existing', 'due');
+    fields.setValue('existing', 'due', { type: 'date', value: '2001-02-03' });
+    const beforeFreshApply = structuredClone(editor.children);
+
+    assert.equal(supertag.apply('fresh', 'project'), true);
+    const afterFreshApply = structuredClone(editor.children);
+    let index = buildTanaIndex(editor.children);
+    const freshDue = index.fieldNodesByParent.get('fresh')?.find(({ fieldId }) => fieldId === 'due');
+
+    assert.ok(freshDue?.valueNodeId);
+    assert.match(freshDue?.value?.type === 'date' ? freshDue.value.value : '', /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(
+      (index.nodesById.get(freshDue!.valueNodeId!)?.node as TElement).tanaFieldValueType,
+      'date'
+    );
+    assert.equal(
+      index.fieldNodesByParent.get('fresh')?.some(({ fieldId }) => fieldId === 'optional-due'),
+      false
+    );
+
+    editor.tf.undo();
+    assert.deepEqual(editor.children, beforeFreshApply);
+    editor.tf.redo();
+    assert.deepEqual(editor.children, afterFreshApply);
+
+    assert.equal(supertag.apply('existing', 'project'), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('existing'), new Map([
+      ['due', { type: 'date', value: '2001-02-03' }],
+    ]));
+
+    assert.equal(supertag.apply('reference', 'project'), true);
+    index = buildTanaIndex(editor.children);
+    const canonicalDue = index.fieldValues.get('canonical')?.get('due');
+    assert.equal(canonicalDue?.type, 'date');
+    assert.match(
+      canonicalDue?.type === 'date' ? canonicalDue.value : '',
+      /^\d{4}-\d{2}-\d{2}$/
+    );
+    assert.equal(index.fieldNodesByParent.get('reference'), undefined);
+
+    assert.equal(fields.setInitializer('template-due', undefined), true);
+    const freshPath = buildTanaIndex(editor.children).nodesById.get('fresh')!.path;
+    editor.tf.moveNodes({ at: freshPath, to: [editor.children.length] });
+    assert.equal(supertag.apply('fresh', 'project'), false);
+    index = buildTanaIndex(editor.children);
+    const movedFreshDue = index.fieldValues.get('fresh')?.get('due');
+    assert.equal(movedFreshDue?.type, 'date');
+    assert.match(
+      movedFreshDue?.type === 'date' ? movedFreshDue.value : '',
+      /^\d{4}-\d{2}-\d{2}$/
+    );
+  });
+
   test('initializes every real list-template Value Node without a default-value map', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },

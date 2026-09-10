@@ -26,6 +26,7 @@ import type {
   FieldValue,
   NodeId,
   TanaBlockElement,
+  TanaFieldInitializer,
   TanaFieldNode
 } from '@/lib/tana/types';
 
@@ -784,6 +785,51 @@ function setPinned(editor: PlateEditor, templateNodeId: NodeId, pinned: boolean)
   return true;
 }
 
+/**
+ * An initializer is configured on one direct template binding. It is not a
+ * Field Definition default and it never writes an instance-side marker.
+ */
+function setInitializer(
+  editor: PlateEditor,
+  templateNodeId: NodeId,
+  initializer: TanaFieldInitializer | undefined
+) {
+  const entry = getTanaNodeEntry(editor, templateNodeId);
+  const parentPath = entry && getTanaParentPath(editor.children, entry[1]);
+  const parent = parentPath
+    ? (editor.api.node(parentPath)?.[0] as TanaBlockElement | undefined)
+    : undefined;
+
+  if (
+    !entry ||
+    !parent?.tanaSupertagDefinition ||
+    (entry[0].tanaFieldDefinition === undefined && entry[0].tanaFieldId === undefined)
+  ) {
+    return false;
+  }
+
+  const definition = entry[0].tanaFieldDefinition ??
+    (entry[0].tanaFieldId
+      ? getLiveFieldDefinitionEntry(editor, entry[0].tanaFieldId)?.[0].tanaFieldDefinition
+      : undefined);
+
+  if (initializer?.kind === 'current-date' && definition?.type !== 'date') {
+    return false;
+  }
+
+  if (initializer?.kind === entry[0].tanaFieldInitializer?.kind) return false;
+
+  if (initializer) {
+    editor.tf.setNodes({ tanaFieldInitializer: initializer }, { at: entry[1] });
+  } else if (entry[0].tanaFieldInitializer !== undefined) {
+    editor.tf.unsetNodes('tanaFieldInitializer', { at: entry[1] });
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
 function createOption(editor: PlateEditor, fieldId: NodeId, name: string) {
   const normalizedName = name.trim();
   const fieldEntry = getLiveFieldDefinitionEntry(editor, fieldId);
@@ -1127,6 +1173,13 @@ export const TanaFieldPlugin = createPlatePlugin({
         withFieldHistoryBatch(editor, () => setOptional(editor, templateNodeId, optional)),
       setPinned: (fieldNodeId: NodeId, pinned: boolean) =>
         withFieldHistoryBatch(editor, () => setPinned(editor, fieldNodeId, pinned)),
+      setInitializer: (
+        templateNodeId: NodeId,
+        initializer: TanaFieldInitializer | undefined
+      ) =>
+        withFieldHistoryBatch(editor, () =>
+          setInitializer(editor, templateNodeId, initializer)
+        ),
       updateDefinition: (fieldId: NodeId, definition: FieldDefinition) =>
         withFieldHistoryBatch(editor, () => updateDefinition(editor, fieldId, definition))
     }

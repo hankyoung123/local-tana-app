@@ -73,6 +73,13 @@ export type FieldValue =
   | { type: 'url'; value: string };
 
 /**
+ * A template binding can compute one initial value during Supertag apply.
+ * The result is written as a normal Value Node; this configuration never
+ * creates instance-level state or a reactive derived value.
+ */
+export type TanaFieldInitializer = { kind: 'current-date' };
+
+/**
  * Validation is a read-only interpretation of an existing Value Node. It is
  * deliberately not persisted: invalid input remains canonical document data.
  */
@@ -154,6 +161,8 @@ export type TanaBlockElement = TElement & {
   tanaFieldOptional?: true;
   /** Applies only to a Field template directly beneath a Supertag definition. */
   tanaFieldPinned?: true;
+  /** Applies only to a Field template directly beneath a Supertag definition. */
+  tanaFieldInitializer?: TanaFieldInitializer;
   /** A Field occurrence is still an ordinary top-level Tana Node. */
   tanaFieldId?: FieldId;
   /**

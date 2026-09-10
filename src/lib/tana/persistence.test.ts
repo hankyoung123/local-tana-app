@@ -256,6 +256,38 @@ describe('Plate document persistence', () => {
     );
   });
 
+  test('accepts only a date initializer on a direct Supertag template binding', () => {
+    const valid = withWorkspace([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: 'p' },
+      {
+        children: [{ text: '' }],
+        id: 'template-due',
+        indent: 1,
+        tanaFieldId: 'due',
+        tanaFieldInitializer: { kind: 'current-date' },
+        type: 'p',
+      },
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    ]);
+
+    assert.equal(isValidTanaDocument(valid), true);
+
+    const invalidKind = structuredClone(valid) as Value;
+    (invalidKind.find((node) => node.id === 'template-due') as Record<string, unknown>)
+      .tanaFieldInitializer = { kind: 'tomorrow' };
+    assert.equal(isValidTanaDocument(invalidKind), false);
+
+    const invalidDefinitionType = structuredClone(valid) as Value;
+    (invalidDefinitionType.find((node) => node.id === 'due') as Record<string, unknown>)
+      .tanaFieldDefinition = { type: 'plain' };
+    assert.equal(isValidTanaDocument(invalidDefinitionType), false);
+
+    const invalidPlacement = structuredClone(valid) as Value;
+    (invalidPlacement.find((node) => node.id === 'project') as Record<string, unknown>)
+      .tanaFieldInitializer = { kind: 'current-date' };
+    assert.equal(isValidTanaDocument(invalidPlacement), false);
+  });
+
   test('rejects duplicate and single Field structure while retaining invalid historical values', () => {
     const historical = withWorkspace([
       { children: [{ text: 'When' }], id: 'when', tanaFieldDefinition: { type: 'date' }, type: 'p' },
