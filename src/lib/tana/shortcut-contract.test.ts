@@ -111,11 +111,8 @@ test('duplicate shortcut includes descendants with fresh identities', () => {
   assert.equal(new Set(editor.children.map(n => n.id)).size, editor.children.length);
 });
 
-test('duplicate remaps subtree-local relations and preserves external relations', () => {
+test('duplicate keeps direct Reference targets external while preserving the copied subtree', () => {
   const editor = fixture();
-  editor.tf.setNodes({
-    tanaReferenceTargetId: 'b-child',
-  }, { at: [3] });
   editor.tf.setNodes({ tanaReferenceTargetId: 'external' }, { at: [4] });
   run(editor, 'duplicate');
   const copiedRoot = editor.children.find((node) =>
@@ -126,7 +123,6 @@ test('duplicate remaps subtree-local relations and preserves external relations'
     node.id !== 'b-child' && node.children[0].text === 'b-child'
   );
   assert.ok(copiedChild);
-  assert.equal(copiedRoot.tanaReferenceTargetId, copiedChild.id);
   assert.equal(
     editor.children.find((node) => node.id === copiedChild.id)?.tanaReferenceTargetId,
     'external'

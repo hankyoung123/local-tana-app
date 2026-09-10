@@ -7,6 +7,7 @@ import { createPlateEditor } from "platejs/react";
 import { EditorKit } from "@/components/editor/editor-kit";
 import { isTanaNodeElement } from "@/lib/tana/constants";
 import { buildTanaIndex } from "@/lib/tana/index";
+import { isValidTanaDocument } from "@/lib/tana/persistence";
 import { runTanaQuery } from "@/lib/tana/query";
 
 import { TanaSearchPlugin } from "./tana-search-plugin";
@@ -236,8 +237,13 @@ test('Add result creates one canonical Daily child and only reports a match afte
   assert.equal(matched.matches, true);
   const index = buildTanaIndex(editor.children);
   const created = index.nodesById.get(matched.nodeId);
+  const createdNode = editor.children.find((node) => node.id === matched.nodeId);
   assert.equal(index.parentNodeIds.get(matched.nodeId), matched.dayNodeId);
   assert.equal(created?.doneState, 'todo');
+  assert.equal(createdNode?.tanaDoneState, 'todo');
+  assert.equal(createdNode?.checked, false);
+  assert.equal(createdNode?.listStyleType, 'todo');
+  assert.equal(isValidTanaDocument(editor.children), true);
   assert.deepEqual(created?.supertagIds, ['project']);
   assert.deepEqual(index.fieldNodesByParent.get(matched.nodeId)?.[0]?.values, [
     { type: 'plain', value: 'ready' },

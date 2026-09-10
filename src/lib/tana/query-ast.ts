@@ -8,12 +8,100 @@ const id = (value: unknown): value is string =>
 const keys = (value: Record<string, unknown>, expected: string[]) =>
   Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 
+type RegexGroup = {
+  hasAlternation: boolean;
+  hasQuantifier: boolean;
+  justOpened: boolean;
+};
+
+function quantifierEnd(source: string, offset: number): number | undefined {
+  const end = source.indexOf('}', offset + 1);
+  if (end < 0) return;
+  return /^\{\d+(?:,\d*)?\}$/u.test(source.slice(offset, end + 1)) ? end : undefined;
+}
+
+/**
+ * JavaScript RegExp has no timeout. Reject the small family of expressions
+ * whose nested repetition or ambiguous repeated alternation can blow up on
+ * ordinary title text before the runtime ever constructs a RegExp.
+ */
+function isSafeTanaQueryRegExp(source: string): boolean {
+  if (/\\[1-9]/u.test(source)) return false;
+
+  const groups: RegexGroup[] = [{ hasAlternation: false, hasQuantifier: false, justOpened: false }];
+  let lastClosed: RegexGroup | undefined;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]!;
+
+    if (character === '\\') {
+      index += 1;
+      lastClosed = undefined;
+      continue;
+    }
+
+    if (character === '[') {
+      index += 1;
+      while (index < source.length && source[index] !== ']') {
+        if (source[index] === '\\') index += 1;
+        index += 1;
+      }
+      lastClosed = undefined;
+      continue;
+    }
+
+    if (character === '(') {
+      groups.push({ hasAlternation: false, hasQuantifier: false, justOpened: true });
+      lastClosed = undefined;
+      continue;
+    }
+
+    if (character === ')') {
+      if (groups.length === 1) return false;
+      const closed = groups.pop()!;
+      const parent = groups.at(-1)!;
+      if (closed.hasQuantifier) parent.hasQuantifier = true;
+      if (closed.hasAlternation) parent.hasAlternation = true;
+      lastClosed = closed;
+      continue;
+    }
+
+    const current = groups.at(-1)!;
+    if (character === '?' && current.justOpened) {
+      current.justOpened = false;
+      lastClosed = undefined;
+      continue;
+    }
+    current.justOpened = false;
+
+    if (character === '|') {
+      current.hasAlternation = true;
+      lastClosed = undefined;
+      continue;
+    }
+
+    const braceEnd = character === '{' ? quantifierEnd(source, index) : undefined;
+    if (character === '*' || character === '+' || character === '?' || braceEnd !== undefined) {
+      if (lastClosed && (lastClosed.hasQuantifier || lastClosed.hasAlternation)) return false;
+      current.hasQuantifier = true;
+      lastClosed = undefined;
+      if (braceEnd !== undefined) index = braceEnd;
+      continue;
+    }
+
+    lastClosed = undefined;
+  }
+
+  return groups.length === 1;
+}
+
 /** Accept the UI's familiar `/pattern/` form while retaining plain regex input. */
 export function createTanaQueryRegExp(pattern: string): RegExp {
   const slashDelimited = /^\/([\s\S]*)\/$/u.exec(pattern);
   const source = slashDelimited ? slashDelimited[1]! : pattern;
 
   if (source.length === 0) throw new Error('Empty regular expression');
+  if (!isSafeTanaQueryRegExp(source)) throw new Error('Unsafe regular expression');
 
   return new RegExp(source, 'iu');
 }

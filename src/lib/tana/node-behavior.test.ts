@@ -108,6 +108,12 @@ describe('Node behavior runtime', () => {
       tanaReferenceTargetId: 'task',
       type: KEYS.p,
     } as TElement;
+    const search = {
+      children: [{ text: 'Search' }],
+      id: 'search',
+      tanaSearchDefinition: { query: { children: [], type: 'and' } },
+      type: KEYS.p,
+    } as TElement;
 
     assert.equal(canSelect(nodeAt([0]), { document, path: [0] }), true);
     assert.equal(canSelect(nodeAt([2]), { document, path: [2] }), false);
@@ -124,7 +130,9 @@ describe('Node behavior runtime', () => {
     assert.equal(canIndent(nodeAt([2]), { document, path: [2] }), false);
     assert.equal(canOutdent(system), false);
     assert.equal(canOwnTanaCanonicalChildren(reference), false);
+    assert.equal(canOwnTanaCanonicalChildren(search), false);
     assert.equal(canDrop(nodeAt([0]), reference), false);
+    assert.equal(canDrop(nodeAt([0]), search), false);
 
     assert.equal(canTurnInto(nodeAt([0]), { document, path: [0] }), true);
     assert.equal(canTurnInto(nodeAt([2]), { document, path: [2] }), false);

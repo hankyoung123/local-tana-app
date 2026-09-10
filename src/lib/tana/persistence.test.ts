@@ -547,7 +547,7 @@ test('rejects malformed Query AST and illegal flat indent at the persistence bou
   assert.equal(isPlateDocument([{ text: 'top-level text' }]), false);
 });
 
-test('rejects canonical children beneath Reference occurrences at the persistence boundary', () => {
+test('rejects canonical children beneath Reference occurrences and Search definitions at the persistence boundary', () => {
   const target = {
     children: [{ text: 'Canonical target' }],
     id: 'canonical-target',
@@ -568,6 +568,22 @@ test('rejects canonical children beneath Reference occurrences at the persistenc
         target,
         reference,
         { children: [{ text: 'Invalid direct child' }], id: 'reference-child', indent: 3, type: 'p' },
+      ])
+    ),
+    false
+  );
+
+  assert.equal(
+    isValidTanaDocument(
+      withHomeNodes([
+        {
+          children: [{ text: 'Search' }],
+          id: 'search',
+          indent: 2,
+          tanaSearchDefinition: { query: { children: [], type: 'and' } },
+          type: 'p',
+        },
+        { children: [{ text: 'Invalid Search child' }], id: 'search-child', indent: 3, type: 'p' },
       ])
     ),
     false

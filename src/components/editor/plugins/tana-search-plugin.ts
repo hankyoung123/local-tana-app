@@ -22,6 +22,7 @@ import type {
 } from "@/lib/tana/types";
 
 import { TanaFieldPlugin } from "./tana-field-plugin";
+import { TanaNodeIdentityPlugin } from "./tana-node-identity-plugin";
 import { TanaSupertagPlugin } from "./tana-supertag-plugin";
 import { TanaTimePlugin } from "./tana-time-plugin";
 import { TanaZoomPlugin } from "./tana-zoom-plugin";
@@ -237,7 +238,8 @@ function materializeSearchPredicate(
       const entry = getTanaNodeEntry(editor, nodeId);
 
       if (entry && entry[0].tanaDoneState !== predicate.state) {
-        editor.tf.setNodes({ tanaDoneState: predicate.state }, { at: entry[1] });
+        editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity
+          .setDoneState(nodeId, predicate.state);
       }
       return;
     }
@@ -315,6 +317,11 @@ function addResult(
 
     if (!nodeId) return;
 
+    // The newly-created Daily child becomes the active Plate surface before
+    // any semantic writer runs, so the existing Done transform keeps its
+    // normal interactability boundary as well as its checkbox adapter.
+    editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
+
     getMaterializablePredicates(definition.query).forEach((predicate) =>
       materializeSearchPredicate(editor, nodeId, predicate),
     );
@@ -327,7 +334,6 @@ function addResult(
         .some((node) => node.id === nodeId),
       nodeId,
     };
-    editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
   }));
 
   return outcome;

@@ -9,6 +9,7 @@ import {
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import { isTanaFieldHostNode } from './fields';
+import { canOwnTanaCanonicalChildren } from './node-behavior';
 import { isTanaSearchQueryAst } from './query-ast';
 import { isTanaSearchHost } from './search-host';
 import { isTanaDay } from './time';
@@ -704,10 +705,10 @@ export function isValidTanaDocument(value: unknown): value is Value {
     const parentPath = getTanaParentPath(value, path);
     const parent = parentPath ? elementsByPath.get(parentPath[0]) : undefined;
 
-    // Reference occurrences project a canonical target and cannot own a
-    // canonical subtree of their own. The parent is derived from the flat
-    // indent document here; no parent relation is persisted.
-    if (parent?.tanaReferenceTargetId !== undefined) return false;
+    // Reference occurrences and Search definitions are projections. Their
+    // rows never become canonical subtree containers; parenthood remains
+    // derived from the flat indent document rather than persisted.
+    if (parent && !canOwnTanaCanonicalChildren(parent)) return false;
 
     const parentId =
       parent && typeof parent.id === 'string' ? parent.id : undefined;

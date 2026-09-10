@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import type { Value } from "platejs";
+import { KEYS, type Value } from "platejs";
 import type { TanaQueryPredicate } from './types';
 
 import { buildTanaIndex } from "./index";
@@ -271,7 +271,7 @@ describe("runTanaQuery", () => {
         },
         type: "not",
       }).some(({ id }) => id === "alpha"),
-      false,
+      true,
     );
     assert.deepEqual(
       runTanaQuery(index, {
@@ -341,6 +341,57 @@ describe("runTanaQuery", () => {
     assert.deepEqual(
       runTanaQuery(
         referenceIndex,
+        createAndQuery([{ kind: "references", nodeId: "target" }]),
+      ).map(({ id }) => id),
+      ["target"],
+    );
+  });
+
+  test("matches a Reference occurrence in its own context before returning its canonical target once", () => {
+    const occurrenceIndex = buildTanaIndex([
+      { children: [{ text: "Target elsewhere" }], id: "target", type: "p" },
+      { children: [{ text: "Parent" }], id: "parent", type: "p" },
+      { children: [{ text: "Branch" }], id: "branch", indent: 1, type: "p" },
+      {
+        children: [{ text: "First occurrence" }],
+        id: "occurrence-one",
+        indent: 2,
+        tanaReferenceTargetId: "target",
+        type: "p",
+      },
+      {
+        children: [{ text: "Second occurrence" }],
+        id: "occurrence-two",
+        indent: 2,
+        tanaReferenceTargetId: "target",
+        type: "p",
+      },
+    ]);
+
+    assert.deepEqual(
+      runTanaQuery(
+        occurrenceIndex,
+        createAndQuery([{ kind: "child-of", nodeId: "branch" }]),
+      ).map(({ id }) => id),
+      ["target"],
+    );
+    assert.deepEqual(
+      runTanaQuery(
+        occurrenceIndex,
+        createAndQuery([{ kind: "descendant-of", nodeId: "parent" }]),
+      ).map(({ id }) => id),
+      ["branch", "target"],
+    );
+    assert.deepEqual(
+      runTanaQuery(
+        occurrenceIndex,
+        createAndQuery([{ kind: "grandchild-of", nodeId: "parent" }]),
+      ).map(({ id }) => id),
+      ["target"],
+    );
+    assert.deepEqual(
+      runTanaQuery(
+        occurrenceIndex,
         createAndQuery([{ kind: "references", nodeId: "target" }]),
       ).map(({ id }) => id),
       ["target"],
@@ -526,6 +577,14 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
     { children: [{ text: '' }], id: 'release-when', indent: 3, tanaFieldId: 'when', type: 'p' },
     { children: [{ text: '2026-09-10' }], id: 'release-when-value', indent: 4, tanaFieldValueType: 'date', type: 'p' },
     { children: [{ text: '2026-09-11' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-11' }, type: 'p' },
+    {
+      children: [
+        { text: 'Discussed on ' },
+        { children: [{ text: '' }], key: 'day', type: KEYS.mention },
+      ],
+      id: 'inline-day-mention',
+      type: 'p',
+    },
     { children: [{ text: 'Todo item' }], id: 'todo', tanaDoneState: 'todo', type: 'p' },
     { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: createAndQuery() }, type: 'p' },
   ]);
@@ -549,7 +608,9 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
   }).map(({ id }) => id);
   assert.equal(notDone.includes('todo'), true);
   assert.equal(notDone.includes('release'), false);
+  assert.equal(notDone.includes('search'), true);
   assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
+  assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), ['day', 'inline-day-mention']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
   assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '/^Release\\s+\\d+$/' }), ['release']);

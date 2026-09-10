@@ -80,7 +80,7 @@ function indents(
   });
 }
 
-function referenceParentFixture() {
+function referenceParentFixture(container: 'reference' | 'search' = 'reference') {
   const editor = createPlateEditor({
     nodeId: { filter: isTanaNodeElement },
     plugins: EditorKit,
@@ -88,7 +88,9 @@ function referenceParentFixture() {
       { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
       { children: [{ text: 'A' }], id: 'a', indent: 1, type: KEYS.p },
       { children: [{ text: 'A child' }], id: 'a-child', indent: 2, type: KEYS.p },
-      { children: [{ text: 'A occurrence' }], id: 'reference', indent: 1, tanaReferenceTargetId: 'a', type: KEYS.p },
+      container === 'reference'
+        ? { children: [{ text: 'A occurrence' }], id: 'reference', indent: 1, tanaReferenceTargetId: 'a', type: KEYS.p }
+        : { children: [{ text: 'Search' }], id: 'search', indent: 1, tanaSearchDefinition: { query: { children: [], type: 'and' } }, type: KEYS.p },
       { children: [{ text: 'B' }], id: 'b', indent: 1, type: KEYS.p },
       { children: [{ text: 'Tail' }], id: 'tail', indent: 1, type: KEYS.p },
     ] as Value,
@@ -218,4 +220,20 @@ test('DnD cannot place canonical Nodes under a Reference occurrence while the oc
   assert.equal(completeTanaDndDrop(editor, ['reference'], [5], 2), true);
   assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('reference'), 'b');
   assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('a-child'), 'a');
+});
+
+test('DnD cannot place canonical Nodes under a Search definition', async () => {
+  const { buildTanaIndex } = await import('@/lib/tana/index');
+  const editor = referenceParentFixture('search');
+  const search = editor.api.node({ at: [], id: 'search' }) as NodeEntry<TElement>;
+  const b = editor.api.node({ at: [], id: 'b' }) as NodeEntry<TElement>;
+
+  assert.equal(canDropOnInteractableTanaNode({
+    dragEntry: b,
+    dragItem: { editorId: editor.id, element: b[0], id: 'b' },
+    dropEntry: search,
+    editor,
+  }), false);
+  assert.equal(completeTanaDndDrop(editor, ['b'], [5], 2), false);
+  assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('b'), 'workspace');
 });

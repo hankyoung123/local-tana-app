@@ -12,6 +12,7 @@ test('runtime AST rejects unknown kinds, invalid IDs, values and recursion', () 
     { type: 'predicate', predicate: { kind: 'child-of', nodeId: 7 } },
     { type: 'predicate', predicate: { kind: 'field-equals', fieldId: 'f', value: { type: 'number', value: '2' } } },
     { type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '(' } },
+    { type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '^(a+)+$' } },
     { type: 'predicate', predicate: { kind: 'done-state', state: 'later' } },
     { type: 'and', children: [], extra: true }];
   const cycle = { type: 'not', child: null as unknown }; cycle.child = cycle;
@@ -23,6 +24,7 @@ test('runtime AST rejects unknown kinds, invalid IDs, values and recursion', () 
   }
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '^ok$' } }), true);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '/^ok$/' } }), true);
+  assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '^(a|aa)+$' } }), false);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '//' } }), false);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'field-greater-than', fieldId: 'field', value: { type: 'number', value: 1 } } }), true);
   assert.equal(isTanaQueryAst({ type: 'and', children: [] }), true);

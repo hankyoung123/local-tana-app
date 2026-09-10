@@ -298,6 +298,23 @@ function isInTanaDay(index: TanaIndex, nodeId: NodeId, date: string): boolean {
   return false;
 }
 
+function hasDateFieldValue(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+  return (index.fieldNodesByParent.get(nodeId) ?? []).some((field) =>
+    field.values.some((value) => value.type === 'date' && value.value === date),
+  );
+}
+
+/** Direct mention/reference edges supply date context without chasing references. */
+function hasReferencedDateContext(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+  return index.references.some((reference) => {
+    if (reference.sourceNodeId !== nodeId) return false;
+    const target = getTanaProjectionTarget(index, reference.targetNodeId);
+
+    return !!target && (isInTanaDay(index, target.id, date) ||
+      hasDateFieldValue(index, target.id, date));
+  });
+}
+
 export function matchesTanaQueryPredicate(
   node: TanaNode,
   index: TanaIndex,
@@ -323,9 +340,8 @@ export function matchesTanaQueryPredicate(
       return node.doneState === predicate.state;
     case 'date-is':
       return isInTanaDay(index, node.id, predicate.date) ||
-        (index.fieldNodesByParent.get(node.id) ?? []).some((field) =>
-          field.values.some((value) => value.type === 'date' && value.value === predicate.date),
-        );
+        hasDateFieldValue(index, node.id, predicate.date) ||
+        hasReferencedDateContext(index, node.id, predicate.date);
     case 'is-semantic':
       return predicate.semantic === 'calendar-node'
         ? node.time !== undefined
@@ -343,14 +359,14 @@ export function matchesTanaQueryPredicate(
     case 'references':
       return index.references.some(
         (reference) =>
-          getTanaProjectionTarget(index, reference.sourceNodeId)?.id === node.id &&
+          reference.sourceNodeId === node.id &&
           reference.targetNodeId === predicate.nodeId,
       );
     case 'referenced-by':
       return index.references.some(
         (reference) =>
           reference.targetNodeId === node.id &&
-          getTanaProjectionTarget(index, reference.sourceNodeId)?.id === predicate.nodeId,
+          reference.sourceNodeId === predicate.nodeId,
       );
   }
 }
@@ -386,10 +402,13 @@ export function runTanaQuery(
   const seen = new Set<NodeId>();
   const results: TanaNode[] = [];
   for (const candidate of index.nodesById.values()) {
+    // An occurrence's physical hierarchy and direct reference edges are its
+    // own query context. Only after that context matches do we project the
+    // result to its one live canonical owner.
+    if (!matchesTanaQueryExpression(candidate, index, query)) continue;
     const target = getTanaProjectionTarget(index, candidate.id);
     if (!target || target.id === options.excludeNodeId || seen.has(target.id)) continue;
     seen.add(target.id);
-    if (!matchesTanaQueryExpression(target, index, query)) continue;
     results.push(target);
     if (results.length >= limit) break;
   }

@@ -115,7 +115,7 @@ test('outdenting multiple siblings keeps their order and remaining sibling owner
   ]);
 });
 
-test('Tab and generic structural moves cannot make a Reference occurrence a canonical parent', () => {
+test('Tab, insert and generic structural moves cannot make a Reference or Search a canonical parent', () => {
   const editor = createPlateEditor({
     plugins: EditorKit,
     nodeId: { filter: isTanaNodeElement },
@@ -147,4 +147,41 @@ test('Tab and generic structural moves cannot make a Reference occurrence a cano
   generic.getApi(TogglePlugin).toggle.toggleIds(generic.children.map((node) => String(node.id)), true);
   assert.equal(generic.tf.moveNodes({ at: [2], to: [4] }), false);
   assert.equal(buildTanaIndex(generic.children).parentNodeIds.get('b'), 'a');
+
+  const search = createPlateEditor({
+    plugins: EditorKit,
+    nodeId: { filter: isTanaNodeElement },
+    value: [
+      { id: 'workspace', type: KEYS.p, tanaSystemNode: 'workspace', children: [{ text: 'Workspace' }] },
+      { id: 'search', type: KEYS.p, indent: 1, tanaSearchDefinition: { query: { children: [], type: 'and' } }, children: [{ text: 'Search' }] },
+      { id: 'b', type: KEYS.p, indent: 1, children: [{ text: 'B' }] },
+      { id: 'tail', type: KEYS.p, indent: 1, children: [{ text: 'Tail' }] },
+    ] as Value,
+  });
+  search.getApi(TogglePlugin).toggle.toggleIds(search.children.map((node) => String(node.id)), true);
+
+  search.tf.select({ path: [2, 0], offset: 0 });
+  assert.equal(search.tf.tab({ reverse: false }), true);
+  assert.equal(buildTanaIndex(search.children).parentNodeIds.get('b'), 'workspace');
+  assert.equal(search.tf.insertNodes({
+    children: [{ text: 'Inserted' }],
+    id: 'inserted',
+    indent: 2,
+    type: KEYS.p,
+  }, { at: [2] }), false);
+  assert.equal(buildTanaIndex(search.children).nodesById.has('inserted'), false);
+  const searchMove = createPlateEditor({
+    plugins: EditorKit,
+    nodeId: { filter: isTanaNodeElement },
+    value: [
+      { id: 'workspace', type: KEYS.p, tanaSystemNode: 'workspace', children: [{ text: 'Workspace' }] },
+      { id: 'a', type: KEYS.p, indent: 1, children: [{ text: 'A' }] },
+      { id: 'b', type: KEYS.p, indent: 2, children: [{ text: 'B' }] },
+      { id: 'search', type: KEYS.p, indent: 1, tanaSearchDefinition: { query: { children: [], type: 'and' } }, children: [{ text: 'Search' }] },
+      { id: 'tail', type: KEYS.p, indent: 1, children: [{ text: 'Tail' }] },
+    ] as Value,
+  });
+  searchMove.getApi(TogglePlugin).toggle.toggleIds(searchMove.children.map((node) => String(node.id)), true);
+  assert.equal(searchMove.tf.moveNodes({ at: [2], to: [4] }), false);
+  assert.equal(buildTanaIndex(searchMove.children).parentNodeIds.get('b'), 'a');
 });

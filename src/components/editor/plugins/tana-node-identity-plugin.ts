@@ -189,7 +189,7 @@ export function shiftTanaSubtreeIndent(editor: PlateEditor, rootPath: Path, delt
  * Node after the selected ranges are removed. Reference edges are never part
  * of this scan: it considers only physical Plate hierarchy.
  */
-function wouldCreateReferenceParent(
+function wouldCreateNonOwningParent(
   editor: PlateEditor,
   removedPaths: readonly Path[],
   insertAt: number,
@@ -212,6 +212,31 @@ function wouldCreateReferenceParent(
   }
 
   return false;
+}
+
+/** Reject generic structural insertion beneath a derived Reference/Search parent. */
+function wouldInsertUnderNonOwningParent(
+  editor: PlateEditor,
+  nodes: unknown,
+  options: { at?: unknown }
+): boolean {
+  if (!Array.isArray(options.at) || options.at.length !== 1) return false;
+  const insertAt = options.at[0];
+  if (!Number.isInteger(insertAt) || insertAt < 0 || insertAt > editor.children.length) return false;
+
+  const incoming = (Array.isArray(nodes) ? nodes : [nodes]).filter(ElementApi.isElement);
+  if (incoming.length === 0) return false;
+  const proposed = [...editor.children];
+  proposed.splice(insertAt, 0, ...incoming);
+
+  return incoming.some((node, offset) => {
+    const path: Path = [insertAt + offset];
+    if (!isTanaNodeElement(node, path)) return false;
+    const parentPath = getTanaParentPath(proposed, path);
+    const parent = parentPath ? proposed[parentPath[0]] : undefined;
+
+    return !!parent && ElementApi.isElement(parent) && !canOwnTanaCanonicalChildren(parent);
+  });
 }
 
 function getTanaDndRootPaths(editor: PlateEditor, draggedIds: readonly string[]): Path[] {
@@ -271,7 +296,7 @@ export function moveTanaDndSubtrees(
   });
   const insertAt = to[0] - paths.filter((path) => path[0] < to[0]).length;
 
-  if (wouldCreateReferenceParent(editor, paths, insertAt, targetIndent)) return false;
+  if (wouldCreateNonOwningParent(editor, paths, insertAt, targetIndent)) return false;
 
   let relocated = false;
 
@@ -327,7 +352,11 @@ export function setTanaDoneState(
 
   if (!entry || !canMutateTanaNode(editor, entry[1], canIndent)) return false;
 
-  editor.tf.withNewBatch(() => applyTanaDoneState(editor, entry[1], state));
+  if (editor.api.isMerging()) {
+    applyTanaDoneState(editor, entry[1], state);
+  } else {
+    editor.tf.withNewBatch(() => applyTanaDoneState(editor, entry[1], state));
+  }
   return true;
 }
 
@@ -520,7 +549,7 @@ function moveTanaSubtree(
     ? destination - subtreePaths.length
     : destination;
 
-  if (wouldCreateReferenceParent(editor, subtreePaths, insertAt, sourceIndent)) {
+  if (wouldCreateNonOwningParent(editor, subtreePaths, insertAt, sourceIndent)) {
     return false;
   }
 
@@ -795,6 +824,7 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       if (incoming.some(node => containsTanaSoftLineBreak(NodeApi.string(node)))) {
         throw new Error('Tana Nodes cannot contain soft line breaks');
       }
+      if (wouldInsertUnderNonOwningParent(editor, nodes, options ?? {})) return false;
       return insertNodes(nodes, options);
     },
     insertFragment(fragment, options) {

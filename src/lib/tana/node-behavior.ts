@@ -46,9 +46,15 @@ function isSystemNode(node: TElement): boolean {
   return (node as TElement & { tanaSystemNode?: unknown }).tanaSystemNode !== undefined;
 }
 
-/** A Reference occurrence may be moved, but never becomes a canonical parent. */
+/** References and Search definitions project data; neither owns canonical children. */
 export function canOwnTanaCanonicalChildren(node: TElement): boolean {
-  return (node as TElement & { tanaReferenceTargetId?: unknown }).tanaReferenceTargetId === undefined;
+  const semantic = node as TElement & {
+    tanaReferenceTargetId?: unknown;
+    tanaSearchDefinition?: unknown;
+  };
+
+  return semantic.tanaReferenceTargetId === undefined &&
+    semantic.tanaSearchDefinition === undefined;
 }
 
 function hasGenericStructuralProtection(
