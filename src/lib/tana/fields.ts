@@ -28,6 +28,7 @@ import type {
   TanaIndex,
   TanaNode,
 } from './types';
+import { getTanaDayForDate, isTanaDay } from './time';
 
 /** A Supertag template is its real direct child Field occurrence Node. */
 export type ResolvedSupertagTemplateField = {
@@ -45,6 +46,8 @@ export type ResolvedSupertagTemplateField = {
 
 export type TanaFieldInitializerContext = {
   appliedAt: Date;
+  workspaceTimeZone?: string;
+  ancestorCalendarDay?: string;
 };
 
 /**
@@ -55,17 +58,18 @@ export type TanaFieldInitializerContext = {
 export function resolveTanaFieldInitializer(
   initializer: TanaFieldInitializer | undefined,
   definition: FieldDefinition,
-  { appliedAt }: TanaFieldInitializerContext
+  { appliedAt, workspaceTimeZone = 'UTC', ancestorCalendarDay }: TanaFieldInitializerContext
 ): FieldValue | undefined {
-  if (!initializer || initializer.kind !== 'current-date' || definition.type !== 'date') {
+  if (!initializer || definition.type !== 'date') {
     return;
   }
-
-  const year = appliedAt.getFullYear();
-  const month = String(appliedAt.getMonth() + 1).padStart(2, '0');
-  const day = String(appliedAt.getDate()).padStart(2, '0');
-
-  return { type: 'date', value: `${year}-${month}-${day}` };
+  if (initializer.kind === 'ancestor-calendar-day' && isTanaDay(ancestorCalendarDay)) {
+    return { type: 'date', value: ancestorCalendarDay };
+  }
+  if (initializer.kind === 'current-date') {
+    return { type: 'date', value: getTanaDayForDate(appliedAt, workspaceTimeZone) };
+  }
+  return;
 }
 
 export type FieldDefinitionCandidate = Pick<

@@ -28,12 +28,13 @@ import {
   formatTanaDay,
   getTanaToday,
   getTanaWeekStart,
-  isTanaDay,
+  parseTanaDateValue,
   type TanaDay,
 } from '@/lib/tana/time';
 import {
   getTanaProjectionTarget,
   getTanaViewFieldValueLabel,
+  isTanaNodeActive,
   resolveTanaNodeTitle,
   resolveTanaViewProjection,
   type NodeId,
@@ -99,13 +100,16 @@ export function createTanaCalendarNode(
 export function getTanaDateFieldIds(index: TanaIndex, results: readonly TanaNode[]) {
   const ids = new Set<NodeId>();
   for (const node of index.nodesById.values()) {
-    if (node.fieldDefinition?.type === 'date') ids.add(node.id);
+    if (node.fieldDefinition?.type === 'date' && isTanaNodeActive(index, node.id)) ids.add(node.id);
   }
   for (const occurrence of results) {
     const target = getTanaProjectionTarget(index, occurrence.id);
     if (!target) continue;
     for (const field of index.fieldNodesByParent.get(target.id) ?? []) {
-      if (index.nodesById.get(field.fieldId)?.fieldDefinition?.type === 'date') ids.add(field.fieldId);
+      if (
+        index.nodesById.get(field.fieldId)?.fieldDefinition?.type === 'date' &&
+        isTanaNodeActive(index, field.fieldId)
+      ) ids.add(field.fieldId);
     }
   }
   return [...ids];
@@ -127,14 +131,28 @@ export function getTanaCalendarEntries(
     const target = getTanaProjectionTarget(index, node.id);
     if (!target) continue;
     for (const field of index.fieldNodesByParent.get(target.id) ?? []) {
-      if (index.nodesById.get(field.fieldId)?.fieldDefinition?.type !== 'date') continue;
+      if (
+        index.nodesById.get(field.fieldId)?.fieldDefinition?.type !== 'date' ||
+        !isTanaNodeActive(index, field.fieldId)
+      ) continue;
       if (selected && !selected.has(field.fieldId)) continue;
       for (const value of field.values) {
-        if (value.type !== 'date' || !isTanaDay(value.value)) continue;
-        const key = `${value.value}:${node.id}:${field.fieldId}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        entries.push({ day: value.value, fieldId: field.fieldId, node, target });
+        if (value.type !== 'date') continue;
+        const interval = parseTanaDateValue(value.value);
+        // A clock-only value has no calendar day to place; keep it as a valid
+        // Date Field value while leaving the source in the undated bucket.
+        if (!interval || interval.granularity === 'time') continue;
+        const cursor = new Date(interval.start);
+        const end = interval.end.getTime();
+        while (cursor.getTime() <= end) {
+          const day = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}-${String(cursor.getUTCDate()).padStart(2, '0')}` as TanaDay;
+          const key = `${day}:${node.id}:${field.fieldId}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            entries.push({ day, fieldId: field.fieldId, node, target });
+          }
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
       }
     }
   }
@@ -153,7 +171,8 @@ export function getTanaCalendarMonth(day: TanaDay): string {
 export function addTanaCalendarMonths(month: string, delta: number): string {
   const parsed = /^(\d{4})-(\d{2})$/.exec(month);
   if (!parsed) return getTanaCalendarMonth(getTanaToday());
-  const date = new Date(Date.UTC(Number(parsed[1]), Number(parsed[2]) - 1 + delta, 1));
+  const date = new Date(0);
+  date.setUTCFullYear(Number(parsed[1]), Number(parsed[2]) - 1 + delta, 1);
   return `${date.getUTCFullYear().toString().padStart(4, '0')}-${(date.getUTCMonth() + 1).toString().padStart(2, '0')}`;
 }
 
@@ -209,11 +228,14 @@ export function TanaCalendarView({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
+  const workspaceId = index.systemNodeIds.get('workspace');
+  const workspace = workspaceId ? index.nodesById.get(workspaceId)?.node as { tanaWorkspaceTimeZone?: unknown } | undefined : undefined;
+  const today = getTanaToday(typeof workspace?.tanaWorkspaceTimeZone === 'string' ? workspace.tanaWorkspaceTimeZone : 'UTC');
   const resolved = projection ?? resolveTanaViewProjection(index, view, results);
   const activeDateFieldIds = selectCalendarDateFieldIds(index, view, resolved.items.map(({ occurrence }) => occurrence));
   const entries = getTanaCalendarEntries(index, resolved.items.map(({ occurrence }) => occurrence), activeDateFieldIds);
   const [mode, setMode] = React.useState<CalendarMode>('month');
-  const [cursor, setCursor] = React.useState<TanaDay>(entries[0]?.day ?? getTanaToday());
+  const [cursor, setCursor] = React.useState<TanaDay>(entries[0]?.day ?? today);
   const days = calendarDays(mode, cursor, entries);
   const datedIds = new Set(entries.map(({ node }) => node.id));
   const undated = resolved.items.filter(({ occurrence }) => !datedIds.has(occurrence.id));
@@ -244,7 +266,7 @@ export function TanaCalendarView({
             {mode === 'month' ? formatTanaCalendarMonth(getTanaCalendarMonth(cursor)) : formatTanaDay(cursor)}
           </span>
           <Button aria-label="下一个日期范围" size="icon" type="button" variant="ghost" onClick={() => go(1)}><ArrowRightIcon /></Button>
-          <Button className="ml-1" size="sm" type="button" variant="outline" onClick={() => setCursor(getTanaToday())}>今天</Button>
+          <Button className="ml-1" size="sm" type="button" variant="outline" onClick={() => setCursor(today)}>今天</Button>
         </div>
       </div>
 

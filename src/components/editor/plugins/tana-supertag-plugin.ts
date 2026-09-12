@@ -447,7 +447,23 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     const initializedValue = resolveTanaFieldInitializer(
       template.initializer,
       template.definition,
-      { appliedAt }
+      {
+        appliedAt,
+        workspaceTimeZone: (() => {
+          const workspaceId = updatedIndex.systemNodeIds.get('workspace');
+          const workspace = workspaceId ? updatedIndex.nodesById.get(workspaceId)?.node as TanaBlockElement | undefined : undefined;
+          return workspace?.tanaWorkspaceTimeZone;
+        })(),
+        ancestorCalendarDay: (() => {
+          let current = updatedIndex.parentNodeIds.get(canonicalTarget.id);
+          while (current) {
+            const time = updatedIndex.nodesById.get(current)?.time;
+            if (time?.unit === 'day') return time.value;
+            current = updatedIndex.parentNodeIds.get(current);
+          }
+          return undefined;
+        })(),
+      }
     );
 
     if (initializedValue) {

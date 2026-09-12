@@ -5,7 +5,7 @@ import type {
   FieldValue,
   NodeId,
 } from './types';
-import { isTanaDay } from './time';
+import { isTanaDateValue } from './time';
 
 /** URL fields intentionally accept only explicit http(s) URLs. */
 export function isTanaUrl(value: string): boolean {
@@ -52,7 +52,7 @@ export function getFieldValueValidationIssues(
   if (definition.type !== value.type) return ['incompatible-type'];
 
   if (definition.type === 'date' && value.type === 'date') {
-    return isTanaDay(value.value) ? [] : ['invalid-date'];
+    return isTanaDateValue(value.value) ? [] : ['invalid-date'];
   }
 
   if (definition.type === 'email' && value.type === 'email') {

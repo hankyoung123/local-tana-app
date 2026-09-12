@@ -73,6 +73,27 @@ describe('Tana Calendar View', () => {
     assert.deepEqual(getTanaCalendarEntries(index, results, []), []);
   });
 
+  test('projects a canonical date range over its derived day cells', () => {
+    const value: Value = [
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-due', indent: 1, tanaFieldId: 'due', type: KEYS.p },
+      { children: [{ text: '2026-02-28/2026-03-01' }], id: 'task-due-value', indent: 2, tanaFieldValueType: 'date', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(value);
+    assert.deepEqual(getTanaCalendarEntries(index, [index.nodesById.get('task')!]).map(({ day }) => day), ['2026-02-28', '2026-03-01']);
+  });
+
+  test('keeps a clock-only Date Field value valid but undated', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-due', indent: 1, tanaFieldId: 'due', type: KEYS.p },
+      { children: [{ text: '09:30' }], id: 'task-due-value', indent: 2, tanaFieldValueType: 'date', type: KEYS.p },
+    ]);
+    assert.equal(getTanaCalendarEntries(index, [index.nodesById.get('task')!]).length, 0);
+  });
+
   test('navigates calendar months across year boundaries', () => {
     assert.equal(getTanaCalendarMonth('2026-03-02'), '2026-03');
     assert.equal(addTanaCalendarMonths('2026-01', -1), '2025-12');

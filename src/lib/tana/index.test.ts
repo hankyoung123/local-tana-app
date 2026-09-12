@@ -5,6 +5,8 @@ import type { Value } from 'platejs';
 
 import {
   buildTanaIndex,
+  getTanaCalendarDateReferences,
+  getTanaCalendarReferenceNodeIds,
   getNodeReferenceCandidatesFromIndex,
   getTanaReferenceTargetResolution,
   searchTanaNodes,
@@ -149,6 +151,48 @@ describe('buildTanaIndex', () => {
       { kind: 'inline', sourceNodeId: 'task', targetNodeId: 'project' },
     ]);
     assert.equal(index.backlinks.get('project')?.length, 2);
+  });
+
+  test('derives Date Object and Date Field calendar references without persisting Calendar links', () => {
+    const value: Value = [
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+      { children: [{ text: '2026' }], id: 'year', tanaTime: { unit: 'year', value: '2026' }, type: 'p' },
+      { children: [{ text: 'Week 9' }], id: 'week', indent: 1, tanaTime: { unit: 'week', value: '2026-W09' }, type: 'p' },
+      { children: [{ text: '2026-02-27' }], id: 'day', indent: 2, tanaTime: { unit: 'day', value: '2026-02-27' }, type: 'p' },
+      { children: [{ text: 'February' }], id: 'month', tanaTime: { unit: 'month', value: '2026-02' }, type: 'p' },
+      {
+        children: [
+          { text: 'Meet on ' },
+          { children: [{ text: '' }], tanaDateValue: '2026-02-27', type: 'tana_date_object' },
+        ],
+        id: 'task',
+        type: 'p',
+      },
+      { children: [{ text: '' }], id: 'task-due', indent: 1, tanaFieldId: 'due', type: 'p' },
+      { children: [{ text: '2026-02-28/2026-03-01' }], id: 'task-due-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+    ];
+    const before = structuredClone(value);
+    const index = buildTanaIndex(value);
+
+    assert.deepEqual(getTanaCalendarReferenceNodeIds(index, '2026-02-27'), [
+      'year', 'week', 'day', 'month',
+    ]);
+    assert.deepEqual(getTanaCalendarReferenceNodeIds(index, '2026-02-28/2026-03-01'), [
+      'year', 'week', 'month',
+    ]);
+    assert.deepEqual(
+      getTanaCalendarDateReferences(index).map((reference) => [
+        reference.sourceNodeId,
+        reference.value,
+        reference.calendarNodeIds,
+      ]),
+      [
+        ['task', '2026-02-27', ['year', 'week', 'day', 'month']],
+        ['task-due-value', '2026-02-28/2026-03-01', ['year', 'week', 'month']],
+      ]
+    );
+    assert.equal('calendarNodeIds' in (value[5]!.children[1] as object), false);
+    assert.deepEqual(value, before);
   });
 
   test('keeps a dangling Field Definition readable as a broken derived relation', () => {

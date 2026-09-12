@@ -5,6 +5,7 @@ import { KEYS, NodeApi } from 'platejs';
 
 import {
   isTanaNodeElement,
+  TANA_DATE_OBJECT_KEY,
   TANA_SUPERTAG_KEY,
 } from './constants';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
@@ -12,7 +13,7 @@ import { isTanaFieldHostNode } from './fields';
 import { canOwnTanaCanonicalChildren } from './node-behavior';
 import { isTanaSearchQueryAst } from './query-ast';
 import { isTanaSearchHost } from './search-host';
-import { isTanaDay } from './time';
+import { getTanaWeekForDay, isTanaDateValue, isTanaDay, isTanaTime } from './time';
 import { containsTanaSoftLineBreak } from './single-line';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
@@ -93,6 +94,7 @@ function isPersistedFieldValue(value: unknown): boolean {
     case 'number':
       return typeof record.value === 'number' && Number.isFinite(record.value);
     case 'date':
+      return isTanaDateValue(record.value);
     case 'email':
     case 'plain':
     case 'url':
@@ -156,7 +158,11 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaSupertagIds?: unknown;
     tanaSupertagDefinition?: unknown;
     tanaSystemNode?: unknown;
+    tanaWorkspaceTimeZone?: unknown;
     tanaTime?: unknown;
+    tanaCreatedAt?: unknown;
+    tanaLastEditedAt?: unknown;
+    tanaDoneAt?: unknown;
     tanaViewDefinition?: unknown;
   };
 
@@ -232,8 +238,15 @@ function hasValidSemanticData(element: TElement): boolean {
 
   if (semantic.tanaTime !== undefined) {
     const time = semantic.tanaTime as { unit?: unknown; value?: unknown };
+    if (!isTanaTime(time) || Object.keys(time).some((key) => key !== 'unit' && key !== 'value')) return false;
+  }
 
-    if (!time || time.unit !== 'day' || !isTanaDay(time.value)) return false;
+  if (semantic.tanaWorkspaceTimeZone !== undefined) {
+    if (typeof semantic.tanaWorkspaceTimeZone !== 'string' || semantic.tanaWorkspaceTimeZone.length === 0) return false;
+    try { new Intl.DateTimeFormat('en', { timeZone: semantic.tanaWorkspaceTimeZone }).format(); } catch { return false; }
+  }
+  for (const key of ['tanaCreatedAt', 'tanaLastEditedAt', 'tanaDoneAt'] as const) {
+    if (semantic[key] !== undefined && (typeof semantic[key] !== 'string' || Number.isNaN(Date.parse(semantic[key])))) return false;
   }
 
   // Field-as-Node is a schema break. Parent value maps and the previous
@@ -464,7 +477,7 @@ function isTanaFieldInitializer(value: unknown): value is { kind: 'current-date'
   return (
     !!value &&
     typeof value === 'object' &&
-    (value as { kind?: unknown }).kind === 'current-date' &&
+    ((value as { kind?: unknown }).kind === 'current-date' || (value as { kind?: unknown }).kind === 'ancestor-calendar-day') &&
     Object.keys(value).every((key) => key === 'kind')
   );
 }
@@ -515,7 +528,11 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaSupertagIds?: unknown;
       tanaSupertagDefinition?: unknown;
       tanaSystemNode?: unknown;
+      tanaWorkspaceTimeZone?: unknown;
       tanaTime?: unknown;
+      tanaCreatedAt?: unknown;
+      tanaLastEditedAt?: unknown;
+      tanaDoneAt?: unknown;
       tanaViewDefinition?: unknown;
     };
     const hasTanaMetadata =
@@ -534,7 +551,11 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaSupertagIds !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaSystemNode !== undefined ||
+      semantic.tanaWorkspaceTimeZone !== undefined ||
       semantic.tanaTime !== undefined ||
+      semantic.tanaCreatedAt !== undefined ||
+      semantic.tanaLastEditedAt !== undefined ||
+      semantic.tanaDoneAt !== undefined ||
       semantic.tanaViewDefinition !== undefined;
 
     if (isTanaNode) {
@@ -559,6 +580,19 @@ export function isValidTanaDocument(value: unknown): value is Value {
       return;
     }
 
+    if (descendant.type === TANA_DATE_OBJECT_KEY) {
+      if (path.length === 1) {
+        // Date Objects are inline values and cannot become top-level
+        // canonical Nodes with an accidental NodeId.
+        valid = false;
+        return;
+      }
+      const dateValue = (descendant as TElement & { tanaDateValue?: unknown }).tanaDateValue;
+      if (typeof dateValue !== 'string' || !isTanaDateValue(dateValue) || Object.keys(descendant).some((key) => !['children', 'type', 'tanaDateValue'].includes(key))) {
+        valid = false;
+        return;
+      }
+    }
     if (
       (descendant.type === KEYS.mention ||
         descendant.type === TANA_SUPERTAG_KEY) &&
@@ -653,12 +687,10 @@ export function isValidTanaDocument(value: unknown): value is Value {
     }
 
     if (node.tanaTime) {
-      if (node.tanaTime.unit !== 'day' || !isTanaDay(node.tanaTime.value)) {
-        return false;
-      }
-      if (timeValues.has(node.tanaTime.value)) return false;
-      timeValues.add(node.tanaTime.value);
-
+      if (!isTanaTime(node.tanaTime)) return false;
+      const timeKey = `${node.tanaTime.unit}:${node.tanaTime.value}`;
+      if (timeValues.has(timeKey)) return false;
+      timeValues.add(timeKey);
     }
 
     if (node.tanaFieldDefinition && node.tanaFieldId) return false;
@@ -791,6 +823,48 @@ export function isValidTanaDocument(value: unknown): value is Value {
       parent && typeof parent.id === 'string' ? parent.id : undefined;
 
     if (typeof node.id === 'string') parentNodeIds.set(node.id, parentId);
+  }
+
+  // Calendar Nodes below Daily Notes have one canonical hierarchy.  This is
+  // derived from the same flat indent parent map used at runtime; persisted
+  // documents are rejected instead of being silently repaired.
+  const dailyNotesId = entries.find(([node]) => node.tanaSystemNode === 'daily-notes')?.[0].id;
+  if (dailyNotesId) {
+    const isUnderDailyNotes = (nodeId: NodeId): boolean => {
+      const seen = new Set<NodeId>();
+      let parent = parentNodeIds.get(nodeId);
+      while (parent && !seen.has(parent)) {
+        if (parent === dailyNotesId) return true;
+        seen.add(parent);
+        parent = parentNodeIds.get(parent);
+      }
+      return false;
+    };
+
+    for (const [node] of entries) {
+      const time = node.tanaTime;
+      if (!time || typeof node.id !== 'string' || !isUnderDailyNotes(node.id)) continue;
+      const parentId = parentNodeIds.get(node.id);
+      const parent = parentId ? entriesById.get(parentId) : undefined;
+      const parentTime = parent?.tanaTime;
+
+      if (time.unit === 'year') {
+        if (parentId !== dailyNotesId) return false;
+      } else if (time.unit === 'week') {
+        if (
+          !parentTime || parentTime.unit !== 'year' ||
+          parentTime.value !== time.value.slice(0, 4)
+        ) return false;
+      } else if (time.unit === 'day') {
+        if (
+          !parentTime || parentTime.unit !== 'week' ||
+          !isTanaDay(time.value) ||
+          getTanaWeekForDay(time.value) !== parentTime.value
+        ) return false;
+      } else if (time.unit === 'month' && parentId !== dailyNotesId) {
+        return false;
+      }
+    }
   }
 
   if (!validateWorkspaceStructure(value, { parentNodeIds })) return false;

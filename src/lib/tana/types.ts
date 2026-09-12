@@ -1,37 +1,39 @@
-import type { Path, TElement, Value } from 'platejs';
+import type { Path, TElement, Value } from "platejs";
 
-import type { TanaNodeSemanticType } from './node-semantic';
+import type { TanaNodeSemanticType } from "./node-semantic";
 
 export type NodeId = string;
 export type FieldId = NodeId;
-export type TanaDoneState = 'todo' | 'done';
+export type TanaDoneState = "todo" | "done";
 
 /**
  * Time is a Node semantic, not a separate calendar record. `day` uses the
  * exact same YYYY-MM-DD identity accepted by Date Field values; year/month/
  * week are derived views of that identity in the first Calendar iteration.
  */
+/**
+ * A Calendar Node is an ordinary canonical Plate Node.  `value` is always a
+ * value accepted by the date core for the corresponding granularity.  Ranges
+ * deliberately use one value rather than a pair of NodeIds: dates are values,
+ * never links to Calendar Nodes.
+ */
 export type TanaTime = {
-  unit: 'day';
+  unit: "year" | "month" | "week" | "day" | "datetime" | "time" | "range";
   value: string;
 };
 
 /** Stable identities for the workspace's ordinary system Nodes. */
 export type TanaSystemNode =
-  | 'daily-notes'
-  | 'home'
-  | 'library'
-  | 'schema'
-  | 'settings'
-  | 'trash'
-  | 'workspace';
+  | "daily-notes"
+  | "home"
+  | "library"
+  | "schema"
+  | "settings"
+  | "trash"
+  | "workspace";
 
 export type FieldVisibilityPolicy =
-  | 'always'
-  | 'never'
-  | 'when-empty'
-  | 'when-non-empty'
-  | 'when-default';
+  "always" | "never" | "when-empty" | "when-non-empty" | "when-default";
 
 type FieldDefinitionBase = {
   cardinality?: FieldCardinality;
@@ -40,84 +42,91 @@ type FieldDefinitionBase = {
   visibility?: FieldVisibilityPolicy;
 };
 
-export type FieldDefinition = FieldDefinitionBase & (
-  | { type: 'checkbox' }
-  | { type: 'date' }
-  | { type: 'email' }
-  | {
-      sourceSupertagId: NodeId | null;
-      type: 'from-supertag';
-    }
-  | {
-      max?: number;
-      min?: number;
-      type: 'number';
-    }
-  /** Option candidates are ordered direct child Nodes of this definition. */
-  | { type: 'options' }
-  | { type: 'plain' }
-  | { type: 'url' }
-);
+export type FieldDefinition = FieldDefinitionBase &
+  (
+    | { type: "checkbox" }
+    | { type: "date" }
+    | { type: "email" }
+    | {
+        sourceSupertagId: NodeId | null;
+        type: "from-supertag";
+      }
+    | {
+        max?: number;
+        min?: number;
+        type: "number";
+      }
+    /** Option candidates are ordered direct child Nodes of this definition. */
+    | { type: "options" }
+    | { type: "plain" }
+    | { type: "url" }
+  );
 
-export type FieldType = FieldDefinition['type'];
-export type FieldCardinality = 'list' | 'single';
+export type FieldType = FieldDefinition["type"];
+export type FieldCardinality = "list" | "single";
 
 export type FieldValue =
-  | { type: 'checkbox'; value: boolean }
-  | { type: 'date'; value: string }
-  | { type: 'email'; value: string }
-  | { type: 'from-supertag'; value: NodeId }
-  | { type: 'number'; value: number }
-  | { type: 'options'; value: NodeId }
-  | { type: 'plain'; value: string }
-  | { type: 'url'; value: string };
+  | { type: "checkbox"; value: boolean }
+  | { type: "date"; value: string }
+  | { type: "email"; value: string }
+  | { type: "from-supertag"; value: NodeId }
+  | { type: "number"; value: number }
+  | { type: "options"; value: NodeId }
+  | { type: "plain"; value: string }
+  | { type: "url"; value: string };
 
 /**
  * A template binding can compute one initial value during Supertag apply.
  * The result is written as a normal Value Node; this configuration never
  * creates instance-level state or a reactive derived value.
  */
-export type TanaFieldInitializer = { kind: 'current-date' };
+export type TanaFieldInitializer =
+  { kind: "current-date" } | { kind: "ancestor-calendar-day" };
 
 /**
  * Validation is a read-only interpretation of an existing Value Node. It is
  * deliberately not persisted: invalid input remains canonical document data.
  */
 export type FieldValidationIssue =
-  | 'incompatible-type'
-  | 'invalid-checkbox'
-  | 'invalid-date'
-  | 'invalid-email'
-  | 'invalid-number'
-  | 'invalid-option'
-  | 'invalid-url'
-  | 'missing-required'
-  | 'missing-reference';
+  | "incompatible-type"
+  | "invalid-checkbox"
+  | "invalid-date"
+  | "invalid-email"
+  | "invalid-number"
+  | "invalid-option"
+  | "invalid-url"
+  | "missing-required"
+  | "missing-reference";
 
 export type TanaQueryClause =
-  | { kind: 'field-equals' | 'field-greater-than' | 'field-less-than'; fieldId: FieldId; value: FieldValue }
-  | { kind: 'field-defined' | 'field-exists' | 'has-field'; fieldId: FieldId }
-  | { kind: 'has-supertag' | 'has-tag'; supertagId: NodeId }
-  | { kind: 'done-state'; state: TanaDoneState }
-  | { kind: 'date-is'; date: string }
-  | { kind: 'is-semantic'; semantic: 'calendar-node' | 'field' | 'search' }
-  | { kind: 'text-contains'; text: string }
-  | { kind: 'text-matches-regex'; pattern: string };
+  | {
+      kind: "field-equals" | "field-greater-than" | "field-less-than";
+      fieldId: FieldId;
+      value: FieldValue;
+    }
+  | { kind: "field-defined" | "field-exists" | "has-field"; fieldId: FieldId }
+  | { kind: "has-supertag" | "has-tag"; supertagId: NodeId }
+  | { kind: "done-state"; state: TanaDoneState }
+  | { kind: "date-is"; date: string }
+  | { kind: "on-day-node"; date: string }
+  | { kind: "is-semantic"; semantic: "calendar-node" | "field" | "search" }
+  | { kind: "text-contains"; text: string }
+  | { kind: "text-matches-regex"; pattern: string };
 
 export type TanaGraphQueryClause =
-  | { kind: 'child-of'; nodeId: NodeId }
-  | { kind: 'descendant-of'; nodeId: NodeId }
-  | { kind: 'grandchild-of'; nodeId: NodeId }
-  | { kind: 'references'; nodeId: NodeId }
-  | { kind: 'referenced-by'; nodeId: NodeId };
+  | { kind: "child-of"; nodeId: NodeId }
+  | { kind: "descendant-of"; nodeId: NodeId }
+  | { kind: "grandchild-of"; nodeId: NodeId }
+  | { kind: "references"; nodeId: NodeId }
+  | { kind: "referenced-by"; nodeId: NodeId };
 
 export type TanaQueryPredicate = TanaQueryClause | TanaGraphQueryClause;
 
 /** A persisted Search expression; results are always derived from this AST. */
 export type TanaQueryExpression =
-  | { children: readonly TanaQueryExpression[]; type: 'and' | 'or' }
-  | { child: TanaQueryExpression; type: 'not' }
-  | { predicate: TanaQueryPredicate; type: 'predicate' };
+  | { children: readonly TanaQueryExpression[]; type: "and" | "or" }
+  | { child: TanaQueryExpression; type: "not" }
+  | { predicate: TanaQueryPredicate; type: "predicate" };
 
 /** A Search owns the result set independently of how that set is rendered. */
 export type TanaSearchDefinition = {
@@ -126,20 +135,20 @@ export type TanaSearchDefinition = {
 
 /** View presentation never owns Search results or canonical Node data. */
 export type TanaViewFilterClause =
-  | { kind: 'text-contains'; text: string }
-  | { fieldId: NodeId; kind: 'field-set' | 'field-not-set' }
-  | { fieldId: NodeId; kind: 'field-equals'; value: FieldValue }
-  | { kind: 'has-supertag'; supertagId: NodeId };
+  | { kind: "text-contains"; text: string }
+  | { fieldId: NodeId; kind: "field-set" | "field-not-set" }
+  | { fieldId: NodeId; kind: "field-equals"; value: FieldValue }
+  | { kind: "has-supertag"; supertagId: NodeId };
 
 /** A View filter is deliberately small and separate from the Search AST. */
 export type TanaViewFilter = {
   clauses: readonly TanaViewFilterClause[];
-  mode: 'and' | 'or';
+  mode: "and" | "or";
 };
 
 export type TanaViewSortCriterion = {
-  direction: 'asc' | 'desc';
-  fieldId: NodeId | '$title';
+  direction: "asc" | "desc";
+  fieldId: NodeId | "$title";
 };
 
 export type TanaViewPagination = {
@@ -154,7 +163,8 @@ export type TanaViewDefinition = {
   pagination?: TanaViewPagination;
   sort?: readonly TanaViewSortCriterion[];
   toolbarVisible?: boolean;
-  type: 'calendar' | 'cards' | 'list' | 'outline' | 'side-menu' | 'table' | 'tabs';
+  type:
+    "calendar" | "cards" | "list" | "outline" | "side-menu" | "table" | "tabs";
   visibleFieldIds?: readonly NodeId[];
 };
 
@@ -209,7 +219,13 @@ export type TanaBlockElement = TElement & {
   /** Per-node counterpart of a Supertag's default child configuration. */
   tanaDefaultChildSupertagId?: NodeId;
   tanaSystemNode?: TanaSystemNode;
+  /** Workspace-owned timezone for Today and one-shot time initializers. */
+  tanaWorkspaceTimeZone?: string;
   tanaTime?: TanaTime;
+  /** Created/edited/done times are Node facts, not a date projection cache. */
+  tanaCreatedAt?: string;
+  tanaLastEditedAt?: string;
+  tanaDoneAt?: string;
   tanaViewDefinition?: TanaViewDefinition;
 };
 
@@ -235,6 +251,9 @@ export type TanaNode = {
   supertagIds: readonly NodeId[];
   systemNode?: TanaSystemNode;
   time?: TanaTime;
+  createdAt?: string;
+  lastEditedAt?: string;
+  doneAt?: string;
   viewDefinition?: TanaViewDefinition;
 };
 
@@ -254,7 +273,10 @@ export type TanaFieldNode = {
   /** Read-only decoded value lookup by real Value NodeId, including list Fields. */
   valueByNodeId: ReadonlyMap<NodeId, FieldValue>;
   /** Derived warnings by stored Value NodeId; never document state. */
-  validationIssuesByValueNodeId: ReadonlyMap<NodeId, readonly FieldValidationIssue[]>;
+  validationIssuesByValueNodeId: ReadonlyMap<
+    NodeId,
+    readonly FieldValidationIssue[]
+  >;
   /** A required unset warning is field-level because no Value Node owns it. */
   validationIssues: readonly FieldValidationIssue[];
   valueNodeId?: NodeId;
@@ -267,10 +289,24 @@ export type TanaFieldNode = {
 };
 
 export type ReferenceRelation = {
-  kind: 'inline' | 'node';
+  kind: "inline" | "node";
   path: Path;
   sourceNodeId: NodeId;
   targetNodeId: NodeId;
+};
+
+export type TanaDateObject = {
+  path: Path;
+  sourceNodeId: NodeId;
+  value: string;
+};
+
+/** A derived relation from a Date Object or Date Field Value to Calendar Nodes. */
+export type TanaCalendarDateReference = {
+  sourceNodeId: NodeId;
+  sourcePath: Path;
+  value: string;
+  calendarNodeIds: readonly NodeId[];
 };
 
 export type TanaIndex = {
@@ -283,6 +319,8 @@ export type TanaIndex = {
   childrenByParent: ReadonlyMap<NodeId, readonly NodeId[]>;
   /** The unchanged Plate document from which every index entry is derived. */
   document: Value;
+  /** Inline Date Objects are derived mentions, never Calendar Node links. */
+  dateObjects: readonly TanaDateObject[];
   nodesById: ReadonlyMap<NodeId, TanaNode>;
   /** Parent ownership derived solely from flat indent and document order. */
   parentNodeIds: ReadonlyMap<NodeId, NodeId | undefined>;
@@ -298,8 +336,8 @@ export type TanaIndex = {
 };
 
 export function getNodeId(node: TElement): NodeId {
-  if (typeof node.id !== 'string' || node.id.length === 0) {
-    throw new Error('Plate block is missing its NodeId');
+  if (typeof node.id !== "string" || node.id.length === 0) {
+    throw new Error("Plate block is missing its NodeId");
   }
 
   return node.id;

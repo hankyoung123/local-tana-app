@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { TANA_SUPERTAG_KEY } from '@/lib/tana/constants';
+import { getTanaToday } from '@/lib/tana/time';
 import {
   getNodeDisplayNameFromIndex,
   getFieldValueCandidates,
@@ -30,6 +31,7 @@ import {
   type NodeId,
   type TanaFieldNode,
   type FieldValue,
+  type TanaBlockElement,
   type TanaIndex,
   type TanaNode,
   type TanaTitleExpressionSegment,
@@ -442,6 +444,13 @@ function ProjectionFieldValueControl({
   const editor = useEditorRef();
   const transforms = editor.getTransforms(TanaFieldPlugin).field;
   const value = field.valueByNodeId.get(valueNodeId);
+  const workspaceId = index.systemNodeIds.get('workspace');
+  const workspace = workspaceId
+    ? index.nodesById.get(workspaceId)?.node as TanaBlockElement | undefined
+    : undefined;
+  const workspaceTimeZone = typeof workspace?.tanaWorkspaceTimeZone === 'string'
+    ? workspace.tanaWorkspaceTimeZone
+    : 'UTC';
   const warning = (field.validationIssuesByValueNodeId.get(valueNodeId) ?? []).length > 0;
   const warningId = `projection-field-warning-${valueNodeId}`;
   const clear = () => definition.cardinality === 'list'
@@ -525,6 +534,14 @@ function ProjectionFieldValueControl({
           }
         }}
       />
+      {definition.type === 'date' && !value && (
+        <button
+          aria-label="设置今天"
+          className="rounded px-1 text-[10px] text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+          type="button"
+          onClick={() => set({ type: 'date', value: getTanaToday(workspaceTimeZone) })}
+        >今天</button>
+      )}
       <button aria-label="清除字段值" className="rounded px-1 hover:bg-[var(--tana-hover)]" type="button" onClick={clear}>清除</button>
       <ProjectionFieldWarning id={warningId} warning={warning} />
     </span>

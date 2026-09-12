@@ -12,7 +12,7 @@ import { useEditorRef } from 'platejs/react';
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
-import { getTanaDayParts, type TanaDay } from '@/lib/tana/time';
+import { getTanaDayParts, getTanaWeekForDay, isTanaDay, type TanaDay } from '@/lib/tana/time';
 import { resolveTanaNodeTitle } from '@/lib/tana/title';
 import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana/types';
 
@@ -21,18 +21,30 @@ export type TanaDailyNotesGroup = {
   nodes: readonly TanaNode[];
 };
 
-/** Groups only canonical Day Nodes; the labels are a read-only projection. */
+/** Groups canonical Day Nodes below Daily Notes through Year/Week parents. */
 export function getTanaDailyNotesGroups(
   index: TanaIndex,
   dailyNotesId: NodeId
 ): TanaDailyNotesGroup[] {
   const groups = new Map<string, TanaNode[]>();
 
-  for (const childId of index.childrenByParent.get(dailyNotesId) ?? []) {
-    const node = index.nodesById.get(childId);
+  for (const node of index.nodesById.values()) {
     const day = node?.time?.unit === 'day' ? node.time.value : undefined;
 
-    if (!node || !day) continue;
+    if (!node || !day || !isTanaDay(day)) continue;
+    const weekId = index.parentNodeIds.get(node.id);
+    const yearId = weekId ? index.parentNodeIds.get(weekId) : undefined;
+    const week = weekId ? index.nodesById.get(weekId)?.time : undefined;
+    const yearTime = yearId ? index.nodesById.get(yearId)?.time : undefined;
+    if (
+      !weekId ||
+      !yearId ||
+      week?.unit !== 'week' ||
+      week.value !== getTanaWeekForDay(day) ||
+      yearTime?.unit !== 'year' ||
+      yearTime.value !== week.value.slice(0, 4) ||
+      index.parentNodeIds.get(yearId) !== dailyNotesId
+    ) continue;
 
     const { month, year } = getTanaDayParts(day as TanaDay);
     const label = `${year} 年 ${month} 月`;

@@ -3,7 +3,7 @@ import type { Descendant, Path, TElement, Value } from 'platejs';
 
 import { KEYS, TextApi } from 'platejs';
 
-import { isTanaNodeElement, TANA_SUPERTAG_KEY } from './constants';
+import { isTanaNodeElement, TANA_DATE_OBJECT_KEY, TANA_SUPERTAG_KEY } from './constants';
 import { getFieldValueValidationIssues } from './field-value';
 import { resolveFieldValueCandidates } from './field-candidates';
 import { runTanaQuery } from './query';
@@ -13,11 +13,18 @@ import {
   hasNodeSemantic,
 } from './node-semantic';
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
-import { getTanaTimeKey } from './time';
+import {
+  getTanaCalendarReferenceTimes,
+  getTanaDayParts,
+  getTanaTimeKey,
+  parseTanaDateValue,
+} from './time';
 import type {
   FieldId,
   FieldValidationIssue,
   FieldValue,
+  TanaCalendarDateReference,
+  TanaDateObject,
   NodeId,
   ReferenceRelation,
   SupertagDefinition,
@@ -219,6 +226,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const parentNodeIds = new Map<NodeId, NodeId | undefined>();
   const systemNodeIds = new Map<TanaSystemNode, NodeId>();
   const timeNodeIds = new Map<string, NodeId>();
+  const dateObjects: TanaDateObject[] = [];
   const orderedNodes: TanaNode[] = [];
 
   document.forEach((descendant, index) => {
@@ -249,6 +257,9 @@ export function buildTanaIndex(document: Value): TanaIndex {
         : [],
       systemNode: tanaNode.tanaSystemNode,
       time: tanaNode.tanaTime,
+      createdAt: tanaNode.tanaCreatedAt,
+      lastEditedAt: tanaNode.tanaLastEditedAt,
+      doneAt: tanaNode.tanaDoneAt,
       rawText: '',
       text: '',
       viewDefinition: tanaNode.tanaViewDefinition,
@@ -287,6 +298,11 @@ export function buildTanaIndex(document: Value): TanaIndex {
           // `#` is presentation for semantic membership. It never belongs in
           // canonical title/search text; `tanaSupertagIds` is the only truth.
           return '';
+        }
+
+        if (child.type === TANA_DATE_OBJECT_KEY) {
+          const dateValue = (child as TElement & { tanaDateValue?: unknown }).tanaDateValue;
+          return typeof dateValue === 'string' ? dateValue : '';
         }
 
         if (child.type === KEYS.mention) {
@@ -403,6 +419,11 @@ export function buildTanaIndex(document: Value): TanaIndex {
     sourceNodeId: NodeId
   ): void {
     if (!isElement(descendant)) return;
+
+    if (descendant.type === TANA_DATE_OBJECT_KEY) {
+      const value = (descendant as TElement & { tanaDateValue?: unknown }).tanaDateValue;
+      if (typeof value === 'string') dateObjects.push({ path, sourceNodeId, value });
+    }
 
     const targetNodeId = getReferenceTarget(descendant);
 
@@ -526,6 +547,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
   const index: TanaIndex = {
     backlinks,
     childrenByParent,
+    dateObjects,
     document,
     fieldNodesById,
     fieldNodesByParent,
@@ -614,6 +636,7 @@ export function getNodeReferenceCandidatesFromIndex(
         node.referenceTargetId === undefined &&
         !node.semanticTypes.includes('field') &&
         !node.semanticTypes.includes('value') &&
+        node.time === undefined &&
         node.text.length > 0
     )
     .map(({ id, text }) => ({ id, text }));
@@ -652,6 +675,128 @@ export function isTanaNodeActive(index: TanaIndex, nodeId: NodeId): boolean {
   return (
     !!node && node.systemNode === undefined && !isTanaNodeInTrash(index, nodeId)
   );
+}
+
+function comparePaths(left: Path, right: Path): number {
+  const length = Math.min(left.length, right.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const difference = left[index]! - right[index]!;
+
+    if (difference !== 0) return difference;
+  }
+
+  return left.length - right.length;
+}
+
+/**
+ * Calendar Year Nodes use an ISO week-year because they own Week Nodes.
+ * Their interval therefore begins with ISO week 01 rather than on Jan 1.
+ * Other Calendar Node units retain the shared date-value interval.
+ */
+function getCalendarNodeInterval(time: TanaNode['time']) {
+  if (!time || !['day', 'week', 'month', 'year'].includes(time.unit)) return;
+
+  if (time.unit !== 'year') return parseTanaDateValue(time.value);
+
+  const firstWeek = parseTanaDateValue(`${time.value}-W01`);
+  const lastWeekNumber = getTanaDayParts(`${time.value}-12-28` as `${number}-${number}-${number}`).week;
+  const lastWeek = parseTanaDateValue(
+    `${time.value}-W${String(lastWeekNumber).padStart(2, '0')}`
+  );
+
+  return firstWeek && lastWeek
+    ? { ...firstWeek, end: lastWeek.end }
+    : undefined;
+}
+
+/**
+ * Resolves a date value to already-existing, live Calendar Nodes. It is a
+ * read-only relation: source values retain date strings and Calendar Nodes
+ * retain their own NodeIds, so neither side gains a persisted link.
+ */
+export function getTanaCalendarReferenceNodeIds(
+  index: TanaIndex,
+  value: string
+): readonly NodeId[] {
+  const interval = parseTanaDateValue(value);
+
+  if (!interval) return [];
+
+  const directKeys = new Set(
+    getTanaCalendarReferenceTimes(value).map((time) => getTanaTimeKey(time))
+  );
+  const references: NodeId[] = [];
+
+  for (const node of index.nodesById.values()) {
+    if (!node.time || !isTanaNodeActive(index, node.id)) continue;
+    if (!['day', 'week', 'month', 'year'].includes(node.time.unit)) continue;
+
+    const key = getTanaTimeKey(node.time);
+    const calendarInterval = getCalendarNodeInterval(node.time);
+    const overlaps =
+      interval.granularity === 'range' &&
+      !!calendarInterval &&
+      calendarInterval.start <= interval.end &&
+      interval.start <= calendarInterval.end;
+
+    if (directKeys.has(key) || overlaps) references.push(node.id);
+  }
+
+  return references;
+}
+
+/**
+ * Derives Date Object and Date Field Value relations to Calendar Nodes without
+ * turning those values into ordinary node backlinks. The result is ordered by
+ * its real Plate source location and carries no independent cache or state.
+ */
+export function getTanaCalendarDateReferences(
+  index: TanaIndex
+): readonly TanaCalendarDateReference[] {
+  const references: TanaCalendarDateReference[] = [];
+
+  index.dateObjects.forEach((dateObject) => {
+    if (!isTanaNodeActive(index, dateObject.sourceNodeId) || !parseTanaDateValue(dateObject.value)) return;
+    references.push({
+      sourceNodeId: dateObject.sourceNodeId,
+      sourcePath: dateObject.path,
+      value: dateObject.value,
+      calendarNodeIds: getTanaCalendarReferenceNodeIds(index, dateObject.value),
+    });
+  });
+
+  for (const fields of index.fieldNodesByParent.values()) {
+    for (const field of fields) {
+      if (index.nodesById.get(field.fieldId)?.fieldDefinition?.type !== 'date') {
+        continue;
+      }
+
+      for (const valueNodeId of field.valueNodeIds) {
+        const value = field.valueByNodeId.get(valueNodeId);
+        const valueNode = index.nodesById.get(valueNodeId);
+
+        if (
+          !valueNode ||
+          !isTanaNodeActive(index, field.parentNodeId) ||
+          !isTanaNodeActive(index, valueNode.id) ||
+          value?.type !== 'date' ||
+          !parseTanaDateValue(value.value)
+        ) {
+          continue;
+        }
+
+        references.push({
+          sourceNodeId: valueNodeId,
+          sourcePath: valueNode.path,
+          value: value.value,
+          calendarNodeIds: getTanaCalendarReferenceNodeIds(index, value.value),
+        });
+      }
+    }
+  }
+
+  return references.sort((left, right) => comparePaths(left.sourcePath, right.sourcePath));
 }
 
 /**

@@ -1,5 +1,5 @@
 import type { TanaQueryExpression, TanaQueryPredicate } from './types';
-import { isTanaDay } from './time';
+import { isTanaDateValue, isTanaDay } from './time';
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -121,6 +121,8 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     case 'done-state':
       return keys(value, ['kind', 'state']) && (value.state === 'todo' || value.state === 'done');
     case 'date-is':
+      return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDateValue(value.date);
+    case 'on-day-node':
       return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDay(value.date);
     case 'is-semantic':
       return keys(value, ['kind', 'semantic']) &&
@@ -139,9 +141,9 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
         case 'options':
         case 'from-supertag': return id(field.value);
         case 'plain':
-        case 'date':
         case 'email':
         case 'url': return typeof field.value === 'string';
+        case 'date': return isTanaDateValue(field.value);
         default: return false;
       }
     }

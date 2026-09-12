@@ -14,6 +14,7 @@ import { TanaIndexProvider } from '@/components/tana/tana-index-context';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   getInlineReferenceExpansionRows,
+  insertTanaDateObject,
   insertTanaInlineReference,
 } from './mention-node';
 import {
@@ -153,6 +154,18 @@ test('selected text plus @ becomes an Inline Reference alias without changing th
   }, 'Sprint'));
   assert.match(markup, /aria-label="打开引用 Sprint（Project）"/);
   assert.match(markup, />Sprint</);
+});
+
+test('@today inserts a Date Object value and never a Node Reference', () => {
+  const editor = createPlateEditor({ plugins: EditorKit, value: [
+    { children: [{ text: 'Today ' }], id: 'host', type: KEYS.p },
+  ] as Value });
+  editor.tf.select({ anchor: { path: [0, 0], offset: 6 }, focus: { path: [0, 0], offset: 6 } });
+  assert.equal(insertTanaDateObject(editor, '2026-09-11'), true);
+  const child = editor.children[0].children.find((item) => 'type' in item && item.type === 'tana_date_object') as any;
+  assert.equal(child?.tanaDateValue, '2026-09-11');
+  assert.equal(child?.key, undefined);
+  assert.equal(editor.children[0].children.some((item) => 'type' in item && item.type === KEYS.mention), false);
 });
 
 test('Inline Mention follows target Trash, restore, permanent delete, and replacement lifecycle without rebinding', () => {

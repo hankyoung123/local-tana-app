@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import type { Value } from 'platejs';
+import type { TanaBlockElement } from './types';
 
 import {
   createDocumentSaveController,
@@ -41,6 +42,22 @@ const withHomeNodes = (nodes: Value): Value => {
 };
 
 describe('Plate document persistence', () => {
+  test('validates inline Date Objects as values, without Calendar Node links', () => {
+    const document = minimalWorkspace();
+    document.splice(2, 0, {
+      children: [{ text: 'Meeting ' }, { type: 'tana_date_object', tanaDateValue: '2026-02-28', children: [{ text: '' }] }],
+      id: 'date-host', indent: 2, type: 'p',
+    } as unknown as Value[number]);
+    assert.equal(isValidTanaDocument(document), true);
+    const invalid = structuredClone(document) as Value;
+    (invalid[2].children[1] as unknown as { tanaDateValue: string }).tanaDateValue = '2026-02-30';
+    assert.equal(isValidTanaDocument(invalid), false);
+    const topLevelDateObject = minimalWorkspace();
+    topLevelDateObject.splice(2, 0, {
+      children: [{ text: '' }], id: 'date-object', indent: 2, tanaDateValue: '2026-02-01', type: 'tana_date_object',
+    });
+    assert.equal(isValidTanaDocument(topLevelDateObject), false);
+  });
   test('validates Plate structure and Tana node invariants', () => {
     assert.equal(isPlateDocument(value('A')), true);
     // A bare Node is valid Plate but not a valid Tana workspace document.
@@ -464,31 +481,43 @@ describe('Plate document persistence', () => {
   test('accepts one valid Day Node and rejects duplicate or invalid time identity', () => {
     const document = minimalWorkspace();
 
-    document.splice(3, 0, {
-      children: [{ text: 'Day' }],
-      id: 'day',
-      indent: 2,
-      tanaTime: { unit: 'day', value: '2026-03-01' },
-      type: 'p',
-    });
+    document.splice(3, 0,
+      { children: [{ text: '2026' }], id: 'year', indent: 2, tanaTime: { unit: 'year', value: '2026' }, type: 'p' },
+      { children: [{ text: '2026-W09' }], id: 'week', indent: 3, tanaTime: { unit: 'week', value: '2026-W09' }, type: 'p' },
+      { children: [{ text: 'Day' }], id: 'day', indent: 4, tanaTime: { unit: 'day', value: '2026-03-01' }, type: 'p' },
+    );
     assert.equal(isValidTanaDocument(document), true);
 
     const duplicate = structuredClone(document);
-    duplicate.splice(4, 0, {
+    duplicate.splice(6, 0, {
       children: [{ text: 'Same day' }],
       id: 'same-day',
-      indent: 2,
+      indent: 4,
       tanaTime: { unit: 'day', value: '2026-03-01' },
       type: 'p',
     });
     assert.equal(isValidTanaDocument(duplicate), false);
 
     const invalidDay = structuredClone(document);
-    invalidDay[3] = {
-      ...invalidDay[3],
+    invalidDay[5] = {
+      ...invalidDay[5],
       tanaTime: { unit: 'day', value: '2026-02-29' },
     };
     assert.equal(isValidTanaDocument(invalidDay), false);
+
+    const directDay = minimalWorkspace();
+    directDay.splice(3, 0, {
+      children: [{ text: 'Direct Day' }],
+      id: 'direct-day',
+      indent: 2,
+      tanaTime: { unit: 'day', value: '2026-03-01' },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(directDay), false);
+
+    const mismatchedWeek = structuredClone(document);
+    (mismatchedWeek[4] as TanaBlockElement).tanaTime = { unit: 'week', value: '2025-W09' };
+    assert.equal(isValidTanaDocument(mismatchedWeek), false);
   });
 
   test('flushes a debounced final edit before close', async () => {

@@ -9,6 +9,7 @@ export const initialDocument = normalizeStaticValue([
     children: [{ text: 'Local Tana' }],
     id: 'workspace-root',
     tanaSystemNode: 'workspace',
+    tanaWorkspaceTimeZone: 'UTC',
     type: 'p',
   },
   {

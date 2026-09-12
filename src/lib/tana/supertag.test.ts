@@ -239,6 +239,22 @@ describe('Tana Supertag operations', () => {
     );
   });
 
+  test('initializes a Date Field from the canonical ancestor Calendar Day', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-due', indent: 1, tanaFieldId: 'due', tanaFieldInitializer: { kind: 'ancestor-calendar-day' }, type: KEYS.p },
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+      { children: [{ text: 'Day' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-12' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', indent: 1, type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    assert.equal(supertag.apply('task', 'project'), true);
+    assert.deepEqual(buildTanaIndex(editor.children).fieldValues.get('task'), new Map([
+      ['due', { type: 'date', value: '2026-09-12' }],
+    ]));
+  });
+
   test('initializes every real list-template Value Node without a default-value map', () => {
     const editor = createEditor([
       { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },

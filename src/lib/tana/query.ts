@@ -15,6 +15,8 @@ import type {
 } from './types';
 import { isFieldDefined, isFieldValueCompatible } from './fields';
 import { getTanaProjectionTarget, isTanaNodeActive } from './index';
+import { compareTanaDateValues, tanaDateValuesOverlap } from './time';
+import { TANA_DATE_OBJECT_KEY } from './constants';
 
 type FieldComparisonPredicate = {
   fieldId: FieldId;
@@ -113,6 +115,7 @@ function diagnosePredicate(
     case 'text-matches-regex':
     case 'done-state':
     case 'date-is':
+    case 'on-day-node':
     case 'is-semantic':
       return undefined;
     case 'child-of':
@@ -198,6 +201,8 @@ export function describeTanaQueryClause(
       return clause.state === 'done' ? '已完成' : '待完成';
     case 'date-is':
       return `日期为 ${clause.date}`;
+    case 'on-day-node':
+      return `位于日期节点 ${clause.date}`;
     case 'is-semantic':
       return clause.semantic === 'calendar-node'
         ? '是日历节点'
@@ -249,7 +254,11 @@ function fieldValuesEqual(
 ) {
   return index.fieldNodesByParent.get(node.id)?.some(
     (field) => field.fieldId === predicate.fieldId && field.values.some(
-      (actual) => actual.type === predicate.value.type && actual.value === predicate.value.value,
+      (actual) => actual.type === predicate.value.type && (
+        actual.type === 'date'
+          ? tanaDateValuesOverlap(actual.value, predicate.value.value as string)
+          : actual.value === predicate.value.value
+      ),
     ),
   ) ?? false;
 }
@@ -263,9 +272,11 @@ function fieldValuesCompare(
   return index.fieldNodesByParent.get(node.id)?.some((field) =>
     field.fieldId === predicate.fieldId && field.values.some((actual) => {
       if (actual.type !== predicate.value.type) return false;
-      return predicate.kind === 'field-greater-than'
-        ? actual.value > predicate.value.value
-        : actual.value < predicate.value.value;
+      if (actual.type === 'date') {
+        const compared = compareTanaDateValues(actual.value, predicate.value.value as string);
+        return compared === undefined ? false : predicate.kind === 'field-greater-than' ? compared > 0 : compared < 0;
+      }
+      return predicate.kind === 'field-greater-than' ? actual.value > predicate.value.value : actual.value < predicate.value.value;
     }),
   ) ?? false;
 }
@@ -291,7 +302,11 @@ function isInTanaDay(index: TanaIndex, nodeId: NodeId, date: string): boolean {
 
   while (currentId && !visited.has(currentId)) {
     visited.add(currentId);
-    if (index.nodesById.get(currentId)?.time?.value === date) return true;
+    const time = index.nodesById.get(currentId)?.time;
+    // A node's calendar context is established by its Day ancestor. Year,
+    // Month, and Week Nodes describe ranges for navigation, but must not make
+    // every descendant match an arbitrary day in that range.
+    if (time?.unit === 'day' && tanaDateValuesOverlap(time.value, date)) return true;
     currentId = index.parentNodeIds.get(currentId);
   }
 
@@ -300,18 +315,44 @@ function isInTanaDay(index: TanaIndex, nodeId: NodeId, date: string): boolean {
 
 function hasDateFieldValue(index: TanaIndex, nodeId: NodeId, date: string): boolean {
   return (index.fieldNodesByParent.get(nodeId) ?? []).some((field) =>
-    field.values.some((value) => value.type === 'date' && value.value === date),
+    field.values.some((value) => value.type === 'date' && tanaDateValuesOverlap(value.value, date)),
   );
 }
 
+function hasDateObjectValue(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+  const node = index.nodesById.get(nodeId);
+  if (!node) return false;
+  const visit = (element: { type?: unknown; children?: readonly unknown[]; tanaDateValue?: unknown }): boolean => {
+    if (element.type === TANA_DATE_OBJECT_KEY && typeof element.tanaDateValue === 'string' && tanaDateValuesOverlap(element.tanaDateValue, date)) return true;
+    return Array.isArray(element.children) && element.children.some((child) => !!child && typeof child === 'object' && visit(child as { type?: unknown; children?: readonly unknown[]; tanaDateValue?: unknown }));
+  };
+  return visit(node.node as { type?: unknown; children?: readonly unknown[]; tanaDateValue?: unknown });
+}
+
+function hasCalendarNodeDateValue(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+  const time = index.nodesById.get(nodeId)?.time;
+  return !!time && tanaDateValuesOverlap(time.value, date);
+}
+
 /** Direct mention/reference edges supply date context without chasing references. */
-function hasReferencedDateContext(index: TanaIndex, nodeId: NodeId, date: string): boolean {
+function hasReferencedDateContext(
+  index: TanaIndex,
+  nodeId: NodeId,
+  date: string,
+  includeValueContext = true,
+): boolean {
   return index.references.some((reference) => {
     if (reference.sourceNodeId !== nodeId) return false;
     const target = getTanaProjectionTarget(index, reference.targetNodeId);
 
-    return !!target && (isInTanaDay(index, target.id, date) ||
-      hasDateFieldValue(index, target.id, date));
+    return !!target && (
+      isInTanaDay(index, target.id, date) ||
+      (includeValueContext && (
+        hasCalendarNodeDateValue(index, target.id, date) ||
+        hasDateFieldValue(index, target.id, date) ||
+        hasDateObjectValue(index, target.id, date)
+      ))
+    );
   });
 }
 
@@ -340,10 +381,20 @@ export function matchesTanaQueryPredicate(
     case 'done-state':
       return contentNode.doneState === predicate.state;
     case 'date-is':
-      return isInTanaDay(index, contextNode.id, predicate.date) ||
+      return hasCalendarNodeDateValue(index, contextNode.id, predicate.date) ||
+        isInTanaDay(index, contextNode.id, predicate.date) ||
+        hasDateObjectValue(index, contextNode.id, predicate.date) ||
         hasReferencedDateContext(index, contextNode.id, predicate.date) ||
+        hasCalendarNodeDateValue(index, contentNode.id, predicate.date) ||
         isInTanaDay(index, contentNode.id, predicate.date) ||
-        hasDateFieldValue(index, contentNode.id, predicate.date);
+        hasDateFieldValue(index, contentNode.id, predicate.date) ||
+        hasDateObjectValue(index, contentNode.id, predicate.date);
+    case 'on-day-node':
+      // This is hierarchy context only. Date Fields and Date Objects are
+      // independent values matched by `date-is`, not implicit Daily pages.
+      return isInTanaDay(index, contextNode.id, predicate.date) ||
+        hasReferencedDateContext(index, contextNode.id, predicate.date, false) ||
+        isInTanaDay(index, contentNode.id, predicate.date);
     case 'is-semantic':
       return predicate.semantic === 'calendar-node'
         ? contentNode.time !== undefined

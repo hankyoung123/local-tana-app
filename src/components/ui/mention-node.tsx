@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
+import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { canNavigate as canNavigateNode } from '@/lib/tana/node-behavior';
@@ -31,6 +32,14 @@ import {
 } from '@/lib/tana/index';
 import type { NodeId, TanaIndex } from '@/lib/tana/types';
 import { resolveTanaNodeTitle } from '@/lib/tana/title';
+import { TANA_DATE_OBJECT_KEY } from '@/lib/tana/constants';
+import {
+  getTanaToday,
+  getTanaDateGranularity,
+  parseTanaDateObjectInput,
+  parseTanaDateValue,
+  isTanaDay,
+} from '@/lib/tana/time';
 
 import {
   InlineCombobox,
@@ -45,6 +54,42 @@ export type InlineReferenceExpansionRow = {
   depth: number;
   id: NodeId;
 };
+
+export function DateObjectElement(props: PlateElementProps<any>) {
+  const { editor, element } = props;
+  const value = typeof element.tanaDateValue === 'string' ? element.tanaDateValue : '';
+  const parsed = parseTanaDateValue(value);
+  const day = parsed
+    ? `${parsed.start.getUTCFullYear()}-${String(parsed.start.getUTCMonth() + 1).padStart(2, '0')}-${String(parsed.start.getUTCDate()).padStart(2, '0')}`
+    : value.split('/')[0];
+  const openDate = () => {
+    const time = editor.getTransforms(TanaTimePlugin).time;
+    switch (getTanaDateGranularity(value)) {
+      case 'month':
+        time.goToMonth(value);
+        return;
+      case 'year':
+        time.goToYear(value);
+        return;
+      case 'week':
+        time.goToWeek(value);
+        return;
+      default:
+        if (isTanaDay(day)) time.goToDay(day);
+    }
+  };
+  return (
+    <PlateElement {...props} as="span" attributes={{ ...props.attributes, contentEditable: false }}>
+      <button
+        type="button"
+        className="inline rounded bg-muted px-1 text-sm"
+        aria-label={`打开日期 ${value}`}
+        onClick={openDate}
+      >{value}</button>
+      {props.children}
+    </PlateElement>
+  );
+}
 
 /** Expands only canonical hierarchy; a Reference edge is never traversed. */
 export function getInlineReferenceExpansionRows(
@@ -286,12 +331,28 @@ export function insertTanaInlineReference(
   return true;
 }
 
+export function insertTanaDateObject(
+  editor: PlateElementProps<TComboboxInputElement>['editor'],
+  value: string,
+): boolean {
+  const currentBlock = editor.api.block();
+  if (!currentBlock) return false;
+  editor.tf.insertNodes({ children: [{ text: '' }], tanaDateValue: value, type: TANA_DATE_OBJECT_KEY }, { select: true });
+  editor.tf.move({ unit: 'offset' });
+  return true;
+}
+
 export function MentionInputElement(
   props: PlateElementProps<TComboboxInputElement>
 ) {
   const { editor, element } = props;
   const [search, setSearch] = React.useState('');
-  const candidates = getNodeReferenceCandidatesFromIndex(useTanaIndex());
+  const index = useTanaIndex();
+  const candidates = getNodeReferenceCandidatesFromIndex(index);
+  const workspace = index.systemNodeIds.get('workspace');
+  const workspaceNode = workspace ? index.nodesById.get(workspace)?.node as any : undefined;
+  const today = getTanaToday(typeof workspaceNode?.tanaWorkspaceTimeZone === 'string' ? workspaceNode.tanaWorkspaceTimeZone : 'UTC');
+  const dateInput = parseTanaDateObjectInput(search, today);
 
   const insertReference = (targetNodeId: string) => {
     insertTanaInlineReference(editor, targetNodeId, search);
@@ -314,6 +375,11 @@ export function MentionInputElement(
           <InlineComboboxEmpty>没有结果</InlineComboboxEmpty>
 
           <InlineComboboxGroup>
+            {dateInput && (
+              <InlineComboboxItem value={search} onClick={() => insertTanaDateObject(editor, dateInput)}>
+                日期：{dateInput}
+              </InlineComboboxItem>
+            )}
             {candidates.map((candidate) => {
               const item = { key: candidate.id, text: candidate.text };
 

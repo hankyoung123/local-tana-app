@@ -13,6 +13,7 @@ import type { Path, TElement, TText } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
+import { buildTanaIndex, getTanaProjectionTarget } from '@/lib/tana/index';
 import { getTanaNodeDescendantPaths, getTanaAncestorPaths, getTanaParentPath } from '@/lib/tana/outliner';
 import { containsTanaSoftLineBreak, splitTanaNodeLines } from '@/lib/tana/single-line';
 import type { TanaBlockElement, TanaDoneState } from '@/lib/tana/types';
@@ -37,7 +38,11 @@ const TANA_SEMANTIC_KEYS = [
   'tanaSupertagIds',
   'tanaSupertagDefinition',
   'tanaSystemNode',
+  'tanaWorkspaceTimeZone',
   'tanaTime',
+  'tanaCreatedAt',
+  'tanaLastEditedAt',
+  'tanaDoneAt',
   'tanaViewDefinition'
 ] as const;
 
@@ -328,6 +333,7 @@ function applyTanaDoneState(
       editor.tf.unsetNodes('tanaDoneState', { at: path });
       editor.tf.unsetNodes('checked', { at: path });
       editor.tf.unsetNodes('listStyleType', { at: path });
+      editor.tf.unsetNodes('tanaDoneAt', { at: path });
       return;
     }
 
@@ -335,11 +341,21 @@ function applyTanaDoneState(
       editor.tf.setNodes({ tanaDoneState: state }, { at: path });
       editor.tf.unsetNodes('checked', { at: path });
       editor.tf.unsetNodes('listStyleType', { at: path });
+      if (state === 'done') editor.tf.setNodes({ tanaDoneAt: new Date().toISOString() }, { at: path });
+      else editor.tf.unsetNodes('tanaDoneAt', { at: path });
       return;
     }
 
     editor.tf.setNodes({ tanaDoneState: state, checked: state === 'done', listStyleType: 'todo' }, { at: path });
+    if (state === 'done') editor.tf.setNodes({ tanaDoneAt: new Date().toISOString() }, { at: path });
+    else editor.tf.unsetNodes('tanaDoneAt', { at: path });
   });
+}
+
+function touchTanaNode(editor: PlateEditor) {
+  const entry = editor.api.block<TanaBlockElement>();
+  if (!entry || !isTanaNodeElement(entry) || entry[0].tanaSystemNode !== undefined) return;
+  editor.tf.setNodes({ tanaLastEditedAt: new Date().toISOString() }, { at: entry[1] });
 }
 
 /** The only writable Done transform. Plate checkbox fields are its adapter. */
@@ -348,7 +364,10 @@ export function setTanaDoneState(
   nodeId: string,
   state: TanaDoneState | undefined
 ) {
-  const entry = editor.api.node<TanaBlockElement>({ at: [], id: nodeId });
+  const target = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+  const entry = target
+    ? editor.api.node<TanaBlockElement>({ at: [], id: target.id })
+    : undefined;
 
   if (!entry || !canMutateTanaNode(editor, entry[1], canIndent)) return false;
 
@@ -361,7 +380,10 @@ export function setTanaDoneState(
 }
 
 export function toggleTanaDone(editor: PlateEditor, nodeId: string) {
-  const entry = editor.api.node<TanaBlockElement>({ at: [], id: nodeId });
+  const target = getTanaProjectionTarget(buildTanaIndex(editor.children), nodeId);
+  const entry = target
+    ? editor.api.node<TanaBlockElement>({ at: [], id: target.id })
+    : undefined;
 
   if (!entry) return false;
 
@@ -820,12 +842,17 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
       return normalizeNode(entry);
     },
     insertNodes(nodes, options) {
-      const incoming = Array.isArray(nodes) ? nodes : [nodes];
+      const topLevelInsertion = Array.isArray(options?.at) && options.at.length === 1;
+      const incoming = (Array.isArray(nodes) ? nodes : [nodes]).map((node) =>
+        topLevelInsertion && ElementApi.isElement(node) && isTanaNodeElement(node, [0]) && (node as TanaBlockElement).tanaCreatedAt === undefined
+          ? { ...node, tanaCreatedAt: new Date().toISOString() }
+          : node
+      );
       if (incoming.some(node => containsTanaSoftLineBreak(NodeApi.string(node)))) {
         throw new Error('Tana Nodes cannot contain soft line breaks');
       }
       if (wouldInsertUnderNonOwningParent(editor, nodes, options ?? {})) return false;
-      return insertNodes(nodes, options);
+      return insertNodes(Array.isArray(nodes) ? incoming : incoming[0]!, options);
     },
     insertFragment(fragment, options) {
       const lines = fragment.flatMap(node => splitRichNodeLines(node).map((part, index) => {
@@ -840,20 +867,26 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
     },
     deleteBackward(unit) {
       if (hasSystemMergeBoundary(editor, 'start')) return;
-
-      return deleteBackward(unit);
+      const result = deleteBackward(unit);
+      touchTanaNode(editor);
+      return result;
     },
     deleteForward(unit) {
       if (hasSystemMergeBoundary(editor, 'end')) return;
-
-      return deleteForward(unit);
+      const result = deleteForward(unit);
+      touchTanaNode(editor);
+      return result;
     },
     insertSoftBreak() {
       const entry = getTanaNodeAtSingleNodeSelection(editor);
       if (entry) insertTanaSibling(editor, entry[0].id as string);
     },
     insertText(text, options) {
-      if (!containsTanaSoftLineBreak(text)) return insertText(text, options);
+      if (!containsTanaSoftLineBreak(text)) {
+        const result = insertText(text, options);
+        touchTanaNode(editor);
+        return result;
+      }
       if (options?.at) editor.tf.select(options.at);
       const blocks = editor.api.blocks();
       if (blocks.some(([node, path]) =>

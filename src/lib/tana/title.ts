@@ -1,4 +1,5 @@
 import type { FieldValue, NodeId, TanaIndex, TanaNode } from './types';
+import { isTanaDay } from './time';
 
 export type TanaTitleExpressionToken =
   | { kind: 'literal'; text: string; marks?: TanaTitleExpressionMarks }
@@ -269,7 +270,19 @@ function getSystemAttribute(
         return ownerId ? resolveTanaNodeTitleInternal(index, ownerId, resolving) : undefined;
       })();
     case 'datefromcalendarnode':
-      return readScalar('tanaDateFromCalendarNode', 'dateFromCalendarNode');
+      {
+        const ownTime = node.time;
+        if (ownTime?.unit === 'day' && isTanaDay(ownTime.value)) return ownTime.value;
+        let parent = index.parentNodeIds.get(node.id);
+        const seen = new Set<NodeId>();
+        while (parent && !seen.has(parent)) {
+          seen.add(parent);
+          const time = index.nodesById.get(parent)?.time;
+          if (time?.unit === 'day' && isTanaDay(time.value)) return time.value;
+          parent = index.parentNodeIds.get(parent);
+        }
+        return undefined;
+      }
     case 'createdat':
     case 'created':
       return readScalar('tanaCreatedAt', 'createdAt', 'created');

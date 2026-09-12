@@ -11,7 +11,7 @@ import {
 } from "@/lib/tana/query";
 import { isTanaQueryAst, isTanaQueryPredicateAst } from "@/lib/tana/query-ast";
 import { isTanaSearchHost } from "@/lib/tana/search-host";
-import { getTanaToday, isTanaDay } from "@/lib/tana/time";
+import { getTanaToday, isTanaDay, parseTanaDateValue } from "@/lib/tana/time";
 import { getTanaNodeDescendantPaths } from "@/lib/tana/outliner";
 import type {
   NodeId,
@@ -186,20 +186,27 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
  * deliberately not guessed: their result is still measured from the derived
  * index after the real Node is written.
  */
-function getSearchResultDay(query: TanaQueryExpression): string {
+function getSearchResultDay(query: TanaQueryExpression): string | undefined {
   const dates = new Set<string>();
   const visit = (expression: TanaQueryExpression) => {
     if (expression.type === "and") {
       expression.children.forEach(visit);
       return;
     }
-    if (expression.type === "predicate" && expression.predicate.kind === "date-is") {
+    if (expression.type === "predicate" && (expression.predicate.kind === "date-is" || expression.predicate.kind === "on-day-node")) {
       dates.add(expression.predicate.date);
     }
   };
 
   visit(query);
-  return dates.size === 1 ? [...dates][0]! : getTanaToday();
+  return dates.size === 1 ? [...dates][0]! : undefined;
+}
+
+function getWorkspaceTimeZone(editor: PlateEditor): string {
+  const index = buildTanaIndex(editor.children);
+  const id = index.systemNodeIds.get('workspace');
+  const zone = id ? (index.nodesById.get(id)?.node as TanaBlockElement | undefined)?.tanaWorkspaceTimeZone : undefined;
+  return typeof zone === 'string' && zone.length > 0 ? zone : 'UTC';
 }
 
 /** Only conjunctive predicates can be materialized without inventing truth. */
@@ -247,6 +254,7 @@ function materializeSearchPredicate(
     // parent context. Comparisons, graph predicates, regex/text, semantics,
     // and NOT/OR branches are never fabricated.
     case "date-is":
+    case "on-day-node":
     case "field-exists":
     case "field-greater-than":
     case "field-less-than":
@@ -286,8 +294,12 @@ function addResult(
     return;
   }
 
-  const day = getSearchResultDay(definition.query);
-  if (!isTanaDay(day)) return;
+  const selectedDate = getSearchResultDay(definition.query) || getTanaToday(getWorkspaceTimeZone(editor));
+  const parsedDate = parseTanaDateValue(selectedDate);
+  const day = parsedDate
+    ? `${parsedDate.start.getUTCFullYear()}-${String(parsedDate.start.getUTCMonth() + 1).padStart(2, '0')}-${String(parsedDate.start.getUTCDate()).padStart(2, '0')}`
+    : undefined;
+  if (!day || !isTanaDay(day)) return;
 
   let outcome: TanaSearchAddResultOutcome | undefined;
 

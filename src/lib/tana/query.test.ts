@@ -624,6 +624,17 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
       id: 'inline-day-mention',
       type: 'p',
     },
+    {
+      children: [
+        { text: 'Review on ' },
+        { children: [{ text: '' }], tanaDateValue: '2026-09-12', type: 'tana_date_object' },
+      ],
+      id: 'inline-date-object',
+      type: 'p',
+    },
+    { children: [{ text: 'Range task' }], id: 'range-task', type: 'p' },
+    { children: [{ text: '' }], id: 'range-task-when', indent: 1, tanaFieldId: 'when', type: 'p' },
+    { children: [{ text: '2026-09-11/2026-09-13' }], id: 'range-task-when-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
     { children: [{ text: 'Todo item' }], id: 'todo', tanaDoneState: 'todo', type: 'p' },
     { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: createAndQuery() }, type: 'p' },
   ]);
@@ -632,7 +643,7 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
 
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-greater-than', value: { type: 'number', value: 40 } }), ['release']);
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'field-less-than', value: { type: 'number', value: 50 } }), ['release']);
-  assert.deepEqual(ids({ fieldId: 'when', kind: 'field-greater-than', value: { type: 'date', value: '2026-09-09' } }), ['release']);
+  assert.deepEqual(ids({ fieldId: 'when', kind: 'field-greater-than', value: { type: 'date', value: '2026-09-09' } }), ['release', 'range-task']);
   assert.deepEqual(ids({ fieldId: 'when', kind: 'field-less-than', value: { type: 'date', value: '2026-09-11' } }), ['release']);
   assert.deepEqual(ids({ kind: 'done-state', state: 'done' }), ['release']);
   assert.deepEqual(ids({ kind: 'done-state', state: 'todo' }), ['todo']);
@@ -649,7 +660,13 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
   assert.equal(notDone.includes('release'), false);
   assert.equal(notDone.includes('search'), true);
   assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
-  assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), ['day', 'inline-day-mention']);
+  assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), ['day', 'inline-day-mention', 'range-task']);
+  assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-is' }), ['inline-date-object', 'range-task']);
+  assert.deepEqual(ids({ date: '2026-09-11', kind: 'on-day-node' }), ['day', 'inline-day-mention']);
+  assert.deepEqual(
+    ids({ fieldId: 'when', kind: 'field-equals', value: { type: 'date', value: '2026-09-12' } }),
+    ['range-task'],
+  );
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
   assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '/^Release\\s+\\d+$/' }), ['release']);

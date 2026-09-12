@@ -9,6 +9,7 @@ import {
   resolveTanaNodeTitleSegments,
 } from './index';
 import type { Value } from 'platejs';
+import type { TanaBlockElement } from './types';
 
 test('resolves name, Fields, truncation and system expressions without mutation', () => {
   const document: Value = [
@@ -151,7 +152,38 @@ test('resolves list values, limits, placeholders, and currently expressible syst
 
   assert.equal(
     resolveTanaNodeTitle(buildTanaIndex(document), 'task'),
-    'alpha, b… / ${Missing|?} / ${Missing|8…?} / 2026-09-01 08:00 2026-09-02 09:00 Description 2026-09-01T08:00:00Z 2026-09-02T09:00:00Z Ada Grace 2026-09-03 2026-09-04T10:00:00Z'
+    'alpha, b… / ${Missing|?} / ${Missing|8…?} / 2026-09-01 08:00 2026-09-02 09:00 Description 2026-09-01T08:00:00Z 2026-09-02T09:00:00Z Ada Grace  2026-09-04T10:00:00Z'
   );
   assert.deepEqual(document, before);
+});
+
+test('derives Date from calendar node from the current Day ancestor after a move', () => {
+  const tag = {
+    id: 'calendar-tag',
+    type: 'p',
+    tanaSupertagDefinition: { titleExpression: '${name} · ${sys:datefromcalendarnode}' },
+    children: [{ text: 'Calendar task' }],
+  } satisfies TanaBlockElement;
+  const firstDay = {
+    id: 'first-day',
+    type: 'p',
+    tanaTime: { unit: 'day', value: '2026-01-01' },
+    children: [{ text: '2026-01-01' }],
+  } satisfies TanaBlockElement;
+  const task = {
+    id: 'calendar-task',
+    type: 'p',
+    indent: 1,
+    tanaSupertagIds: ['calendar-tag'],
+    children: [{ text: 'Task' }],
+  } satisfies TanaBlockElement;
+  const secondDay = {
+    id: 'second-day',
+    type: 'p',
+    tanaTime: { unit: 'day', value: '2026-01-02' },
+    children: [{ text: '2026-01-02' }],
+  } satisfies TanaBlockElement;
+
+  assert.equal(resolveTanaNodeTitle(buildTanaIndex([tag, firstDay, task, secondDay]), 'calendar-task'), 'Task · 2026-01-01');
+  assert.equal(resolveTanaNodeTitle(buildTanaIndex([tag, firstDay, secondDay, task]), 'calendar-task'), 'Task · 2026-01-02');
 });
