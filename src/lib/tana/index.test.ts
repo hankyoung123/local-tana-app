@@ -191,6 +191,7 @@ describe('buildTanaIndex', () => {
         ['task-due-value', '2026-02-28/2026-03-01', ['year', 'week', 'month']],
       ]
     );
+    assert.equal(getTanaCalendarDateReferences(index).find((reference) => reference.sourceNodeId === 'task-due-value')?.ownerNodeId, 'task');
     assert.equal('calendarNodeIds' in (value[5]!.children[1] as object), false);
     assert.deepEqual(value, before);
   });

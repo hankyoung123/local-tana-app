@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getTanaViewFieldLabel, resolveTanaViewProjection, type NodeId, type TanaIndex, type TanaNode, type TanaViewDefinition } from '@/lib/tana';
+import { getTanaViewFieldLabel, resolveTanaViewProjection, TANA_SYSTEM_TIME_FIELD_IDS, type NodeId, type TanaIndex, type TanaNode, type TanaViewDefinition } from '@/lib/tana';
 
 const TITLE_SORT = '$title';
 type Criterion = NonNullable<TanaViewDefinition['sort']>[number];
@@ -46,7 +46,7 @@ export function TanaViewSortControls({ index, results, view }: { index: TanaInde
       ? { direction, fieldId: fieldId === TITLE_SORT ? TITLE_SORT : fieldId as NodeId }
       : undefined;
   };
-  const options = [TITLE_SORT, ...fieldIds];
+  const options = [TITLE_SORT, ...fieldIds, ...TANA_SYSTEM_TIME_FIELD_IDS.filter((fieldId) => !fieldIds.includes(fieldId))];
 
   return (
     <DropdownMenu>

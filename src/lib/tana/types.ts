@@ -309,6 +309,8 @@ export type TanaDateObject = {
 /** A derived relation from a Date Object or Date Field Value to Calendar Nodes. */
 export type TanaCalendarDateReference = {
   sourceNodeId: NodeId;
+  /** For Date Field Values, navigation/title resolve to this owning Node. */
+  ownerNodeId?: NodeId;
   sourcePath: Path;
   value: string;
   calendarNodeIds: readonly NodeId[];

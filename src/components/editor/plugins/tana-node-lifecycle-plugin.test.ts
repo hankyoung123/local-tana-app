@@ -319,9 +319,13 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
 
   const beforeEdit = structuredClone(editor.children);
   assert.equal(reference.setTargetTitle('child', 'Edited child'), true);
-  const expected = beforeEdit.map((node) => node.id === 'child'
-    ? { ...node, children: [{ text: 'Edited child', bold: true }] } : node);
-  assert.deepEqual(editor.children, expected);
+  const edited = editor.children.find((node) => node.id === 'child');
+  assert.deepEqual(edited?.children, [{ text: 'Edited child', bold: true }]);
+  assert.equal(typeof (edited as { tanaLastEditedAt?: unknown } | undefined)?.tanaLastEditedAt, 'string');
+  assert.deepEqual(
+    editor.children.filter((node) => node.id !== 'child'),
+    beforeEdit.filter((node) => node.id !== 'child'),
+  );
   const canonicalIds = ['project-node', 'project-status', 'project-status-value', 'child', 'grandchild'];
   const hierarchy = () => canonicalIds.map((id) => {
     const current = buildTanaIndex(editor.children);

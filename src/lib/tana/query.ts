@@ -15,7 +15,7 @@ import type {
 } from './types';
 import { getTanaSystemFieldDefinition, getTanaSystemFieldLabel, getTanaSystemFieldValue, isFieldDefined, isFieldValueCompatible } from './fields';
 import { getTanaProjectionTarget, isTanaNodeActive } from './index';
-import { compareTanaDateValues, parseTanaDateValue, tanaDateValuesOverlap } from './time';
+import { compareTanaDateValues, isTanaTime, parseTanaDateValue, tanaDateValuesOverlap } from './time';
 import { TANA_DATE_OBJECT_KEY } from './constants';
 
 type FieldComparisonPredicate = {
@@ -394,7 +394,7 @@ function getCalendarContextDate(
     ? parentId
     : parentId ? index.parentNodeIds.get(parentId) : undefined;
   const time = contextId ? index.nodesById.get(contextId)?.time : undefined;
-  if (!time) return;
+  if (!time || !isTanaTime(time)) return;
   if (offsetDays === 0) return time.value;
   const parsed = parseTanaDateValue(time.value);
   if (!parsed) return;

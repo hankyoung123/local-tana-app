@@ -103,6 +103,14 @@ const TANA_SYSTEM_TIME_FIELDS = new Set<TanaSystemFieldKey>([
   TANA_SYSTEM_FIELD_KEYS.calendarDate,
 ]);
 
+/** Virtual time fields are selectable presentation inputs, never persisted Nodes. */
+export const TANA_SYSTEM_TIME_FIELD_IDS: readonly TanaSystemFieldKey[] = [
+  TANA_SYSTEM_FIELD_KEYS.createdTime,
+  TANA_SYSTEM_FIELD_KEYS.lastModifiedTime,
+  TANA_SYSTEM_FIELD_KEYS.doneTime,
+  TANA_SYSTEM_FIELD_KEYS.calendarDate,
+];
+
 export function isTanaSystemTimeField(fieldId: NodeId): fieldId is TanaSystemFieldKey {
   return TANA_SYSTEM_TIME_FIELDS.has(fieldId as TanaSystemFieldKey);
 }

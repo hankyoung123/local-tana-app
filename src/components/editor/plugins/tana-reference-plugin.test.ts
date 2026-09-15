@@ -56,6 +56,8 @@ describe('Tana Reference projection mutations', () => {
     );
     assert.equal(editor.children[2].id, 'project-reference');
     assert.equal(editor.children[2].tanaReferenceTargetId, 'project');
+    assert.equal(typeof (editor.children[0] as { tanaLastEditedAt?: unknown }).tanaLastEditedAt, 'string');
+    assert.equal((editor.children[2] as { tanaLastEditedAt?: unknown }).tanaLastEditedAt, undefined);
     assert.equal(buildTanaIndex(editor.children).nodesById.get('project')?.text, 'Renamed project');
   });
 

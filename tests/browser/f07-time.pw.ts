@@ -40,4 +40,11 @@ test('Date Object input accepts tomorrow and yesterday without creating Node ref
   await expect(input).toBeFocused();
   await page.getByRole('option', { name: /日期：\d{4}-\d{2}-\d{2}/ }).click();
   await expect(page.getByRole('button', { name: /打开日期 \d{4}-\d{2}-\d{2}/ })).toBeVisible();
+
+  await editor.focus();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' @yesterday');
+  await expect(input).toBeFocused();
+  await page.getByRole('option', { name: /日期：\d{4}-\d{2}-\d{2}/ }).click();
+  await expect(page.getByRole('button', { name: /打开日期 \d{4}-\d{2}-\d{2}/ })).toHaveCount(2);
 });

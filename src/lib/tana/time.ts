@@ -241,6 +241,7 @@ export function getTanaDateGranularity(
 export function isTanaTime(value: unknown): value is TanaTime {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const time = value as { unit?: unknown; value?: unknown };
+  if (Object.keys(value).some((key) => key !== "unit" && key !== "value")) return false;
   if (typeof time.value !== "string" || typeof time.unit !== "string")
     return false;
   const interval = parseTanaDateValue(time.value);

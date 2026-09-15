@@ -884,7 +884,11 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
     insertText(text, options) {
       if (!containsTanaSoftLineBreak(text)) {
         const result = insertText(text, options);
-        touchTanaNode(editor);
+        // Explicit-at writes are used by canonical projection editors. Their
+        // target timestamp is written by that adapter; touching the current
+        // Plate selection here would incorrectly mutate a Reference
+        // occurrence's metadata.
+        if (!options?.at) touchTanaNode(editor);
         return result;
       }
       if (options?.at) editor.tf.select(options.at);

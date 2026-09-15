@@ -825,45 +825,61 @@ export function isValidTanaDocument(value: unknown): value is Value {
     if (typeof node.id === 'string') parentNodeIds.set(node.id, parentId);
   }
 
-  // Calendar Nodes below Daily Notes have one canonical hierarchy.  This is
-  // derived from the same flat indent parent map used at runtime; persisted
-  // documents are rejected instead of being silently repaired.
-  const dailyNotesId = entries.find(([node]) => node.tanaSystemNode === 'daily-notes')?.[0].id;
-  if (dailyNotesId) {
-    const isUnderDailyNotes = (nodeId: NodeId): boolean => {
-      const seen = new Set<NodeId>();
-      let parent = parentNodeIds.get(nodeId);
-      while (parent && !seen.has(parent)) {
-        if (parent === dailyNotesId) return true;
-        seen.add(parent);
-        parent = parentNodeIds.get(parent);
-      }
+  // Calendar Nodes have one canonical hierarchy. This is derived from the
+  // same flat indent parent map used at runtime; persisted documents are
+  // rejected instead of being silently repaired. A tanaTime marker outside
+  // Daily Notes (or its Trash quarantine) is not a Calendar Node and is
+  // therefore invalid in the current schema.
+  const dailyNotesCandidate = entries.find(([node]) => node.tanaSystemNode === 'daily-notes')?.[0].id;
+  const trashCandidate = entries.find(([node]) => node.tanaSystemNode === 'trash')?.[0].id;
+  const dailyNotesId = typeof dailyNotesCandidate === 'string' ? dailyNotesCandidate : undefined;
+  const trashId = typeof trashCandidate === 'string' ? trashCandidate : undefined;
+  const isInSubtree = (nodeId: NodeId, ancestorId: NodeId | undefined): boolean => {
+    if (!ancestorId) return false;
+    const seen = new Set<NodeId>();
+    let current: NodeId | undefined = nodeId;
+    while (current && !seen.has(current)) {
+      if (current === ancestorId) return true;
+      seen.add(current);
+      current = parentNodeIds.get(current);
+    }
+    return false;
+  };
+  const isUnderDailyNotes = (nodeId: NodeId): boolean => isInSubtree(nodeId, dailyNotesId);
+
+  for (const [node] of entries) {
+    const time = node.tanaTime;
+    if (!time || typeof node.id !== 'string') continue;
+
+    // Calendar identity and Reference identity are mutually exclusive. A
+    // Reference occurrence can never become a Calendar Node by decoration.
+    if (node.tanaReferenceTargetId !== undefined) return false;
+
+    // A trashed Calendar subtree is retained for restore, so its temporary
+    // Trash parent is allowed while its canonical identity stays validated by
+    // isTanaTime above.
+    if (isInSubtree(node.id, trashId)) continue;
+    if (!dailyNotesId || !isUnderDailyNotes(node.id)) return false;
+
+    const parentId = parentNodeIds.get(node.id);
+    const parent = parentId ? entriesById.get(parentId) : undefined;
+    const parentTime = parent?.tanaTime;
+
+    if (time.unit === 'year') {
+      if (parentId !== dailyNotesId) return false;
+    } else if (time.unit === 'week') {
+      if (
+        !parentTime || parentTime.unit !== 'year' ||
+        parentTime.value !== time.value.slice(0, 4)
+      ) return false;
+    } else if (time.unit === 'day') {
+      if (
+        !parentTime || parentTime.unit !== 'week' ||
+        !isTanaDay(time.value) ||
+        getTanaWeekForDay(time.value) !== parentTime.value
+      ) return false;
+    } else if (time.unit === 'month' && parentId !== dailyNotesId) {
       return false;
-    };
-
-    for (const [node] of entries) {
-      const time = node.tanaTime;
-      if (!time || typeof node.id !== 'string' || !isUnderDailyNotes(node.id)) continue;
-      const parentId = parentNodeIds.get(node.id);
-      const parent = parentId ? entriesById.get(parentId) : undefined;
-      const parentTime = parent?.tanaTime;
-
-      if (time.unit === 'year') {
-        if (parentId !== dailyNotesId) return false;
-      } else if (time.unit === 'week') {
-        if (
-          !parentTime || parentTime.unit !== 'year' ||
-          parentTime.value !== time.value.slice(0, 4)
-        ) return false;
-      } else if (time.unit === 'day') {
-        if (
-          !parentTime || parentTime.unit !== 'week' ||
-          !isTanaDay(time.value) ||
-          getTanaWeekForDay(time.value) !== parentTime.value
-        ) return false;
-      } else if (time.unit === 'month' && parentId !== dailyNotesId) {
-        return false;
-      }
     }
   }
 

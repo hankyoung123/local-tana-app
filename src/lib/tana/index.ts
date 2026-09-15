@@ -787,7 +787,10 @@ export function getTanaCalendarDateReferences(
         }
 
         references.push({
+          // Keep the stored Value Node as the relation identity while exposing
+          // its canonical owner for title and navigation in the UI.
           sourceNodeId: valueNodeId,
+          ownerNodeId: field.parentNodeId,
           sourcePath: valueNode.path,
           value: value.value,
           calendarNodeIds: getTanaCalendarReferenceNodeIds(index, value.value),

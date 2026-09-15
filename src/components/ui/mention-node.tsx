@@ -63,19 +63,13 @@ export function DateObjectElement(props: PlateElementProps<any>) {
     ? `${parsed.start.getUTCFullYear()}-${String(parsed.start.getUTCMonth() + 1).padStart(2, '0')}-${String(parsed.start.getUTCDate()).padStart(2, '0')}`
     : value.split('/')[0];
   const openDate = () => {
-    const time = editor.getTransforms(TanaTimePlugin).time;
-    switch (getTanaDateGranularity(value)) {
-      case 'month':
-        time.goToMonth(value);
-        return;
-      case 'year':
-        time.goToYear(value);
-        return;
-      case 'week':
-        time.goToWeek(value);
-        return;
-      default:
-        if (isTanaDay(day)) time.goToDay(day);
+    // Date Objects carry values, never Calendar NodeIds. Let the shared time
+    // transform derive/reuse the right Calendar Node for every granularity,
+    // including ranges and explicit datetimes.
+    if (getTanaDateGranularity(value)) {
+      editor.getTransforms(TanaTimePlugin).time.goToDate(value);
+    } else if (isTanaDay(day)) {
+      editor.getTransforms(TanaTimePlugin).time.goToDay(day);
     }
   };
   return (

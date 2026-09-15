@@ -515,6 +515,26 @@ describe('Plate document persistence', () => {
     });
     assert.equal(isValidTanaDocument(directDay), false);
 
+    const outsideDailyNotes = minimalWorkspace();
+    outsideDailyNotes.splice(2, 0, {
+      children: [{ text: 'Home year' }],
+      id: 'home-year',
+      indent: 2,
+      tanaTime: { unit: 'year', value: '2026' },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(outsideDailyNotes), false);
+
+    const trashedCalendar = minimalWorkspace();
+    trashedCalendar.push({
+      children: [{ text: 'Trashed day' }],
+      id: 'trashed-day',
+      indent: 2,
+      tanaTime: { unit: 'day', value: '2026-03-01' },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(trashedCalendar), true);
+
     const mismatchedWeek = structuredClone(document);
     (mismatchedWeek[4] as TanaBlockElement).tanaTime = { unit: 'week', value: '2025-W09' };
     assert.equal(isValidTanaDocument(mismatchedWeek), false);

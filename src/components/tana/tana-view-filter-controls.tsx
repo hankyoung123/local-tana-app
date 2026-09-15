@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   getTanaViewAvailableFieldIds,
   getTanaSystemFieldDefinition,
+  TANA_SYSTEM_TIME_FIELD_IDS,
   getTanaViewFieldLabel,
   getFieldValueCandidates,
   type FieldValue,
@@ -65,6 +66,7 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
   );
   const fields = Array.from(new Set([
     ...availableFields,
+    ...TANA_SYSTEM_TIME_FIELD_IDS,
     ...Array.from(index.nodesById.values())
       .filter((node) => node.fieldDefinition)
       .map((node) => node.id),

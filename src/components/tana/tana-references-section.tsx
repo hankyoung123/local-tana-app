@@ -251,14 +251,16 @@ export function TanaReferencesSection({
               <div className="space-y-0.5">
                 {calendarDateReferences.map((reference, position) => {
                   const source = index.nodesById.get(reference.sourceNodeId);
-                  const title = source ? resolveTanaNodeTitle(index, source.id) || '未命名节点' : '已删除的节点';
+                  const navigationNodeId = reference.ownerNodeId ?? reference.sourceNodeId;
+                  const titleSource = index.nodesById.get(navigationNodeId) ?? source;
+                  const title = titleSource ? resolveTanaNodeTitle(index, titleSource.id) || '未命名节点' : '已删除的节点';
                   return (
                     <button
                       key={`${reference.sourceNodeId}-${reference.sourcePath.join('.')}-${position}`}
                       className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 py-0.5 text-left text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]"
                       type="button"
                       onClick={() => {
-                        if (!editor.getTransforms(TanaZoomPlugin).zoom.to(reference.sourceNodeId)) return;
+                        if (!editor.getTransforms(TanaZoomPlugin).zoom.to(navigationNodeId)) return;
                         const point = editor.api.start(reference.sourcePath);
                         if (point) {
                           editor.tf.select(point);
@@ -267,7 +269,7 @@ export function TanaReferencesSection({
                       }}
                     >
                       <span className="grid size-6 shrink-0 place-items-center text-[var(--tana-node-bullet)]">
-                        <TanaNodeBullet semanticType={source?.semanticType ?? 'content'} />
+                        <TanaNodeBullet semanticType={titleSource?.semanticType ?? source?.semanticType ?? 'content'} />
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium text-[var(--tana-text)]">
                         {title} · {reference.value}

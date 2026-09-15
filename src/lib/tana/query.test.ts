@@ -692,6 +692,7 @@ test('keeps occurrence context separate from canonical date content', () => {
   assert.deepEqual(query({ kind: 'on-day-node' }), ['canonical']);
   assert.deepEqual(query({ ancestor: 'parent', kind: 'date-is-calendar-context' }), ['canonical']);
   assert.deepEqual(query({ ancestor: 'grandparent', kind: 'date-is-calendar-context' }), ['canonical']);
+  assert.deepEqual(query({ ancestor: 'parent', kind: 'date-is-calendar-context', offsetDays: 1 }), []);
   assert.deepEqual(
     runTanaQuery(contextIndex, createAndQuery([
       { kind: 'has-supertag', supertagId: 'project' },

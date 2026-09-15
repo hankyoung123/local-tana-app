@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getTanaViewFieldLabel, resolveTanaViewProjection, type TanaIndex, type TanaNode } from '@/lib/tana';
+import { getTanaViewFieldLabel, resolveTanaViewProjection, TANA_SYSTEM_TIME_FIELD_IDS, type TanaIndex, type TanaNode } from '@/lib/tana';
 
 /** A shared persisted `visibleFieldIds` editor for projection renderers. */
 export function TanaViewDisplayFieldsControl({
@@ -30,6 +30,7 @@ export function TanaViewDisplayFieldsControl({
   const projection = resolveTanaViewProjection(index, view, results);
   const configured = view.viewDefinition?.visibleFieldIds;
   const { availableFieldIds, visibleFieldIds } = projection;
+  const selectableFieldIds = Array.from(new Set([...availableFieldIds, ...TANA_SYSTEM_TIME_FIELD_IDS]));
 
   return (
     <DropdownMenu>
@@ -41,7 +42,7 @@ export function TanaViewDisplayFieldsControl({
       <DropdownMenuContent align="start">
         <DropdownMenuLabel>显示字段</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {availableFieldIds.length === 0 ? <p className="px-2 py-1 text-xs text-muted-foreground">当前结果没有字段</p> : availableFieldIds.map((fieldId) => (
+        {selectableFieldIds.length === 0 ? <p className="px-2 py-1 text-xs text-muted-foreground">当前结果没有字段</p> : selectableFieldIds.map((fieldId) => (
           <DropdownMenuCheckboxItem
             key={fieldId}
             checked={visibleFieldIds.includes(fieldId)}
@@ -50,7 +51,7 @@ export function TanaViewDisplayFieldsControl({
               if (checked) next.add(fieldId);
               else next.delete(fieldId);
               editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-                visibleFieldIds: availableFieldIds.filter((candidate) => next.has(candidate)),
+                visibleFieldIds: selectableFieldIds.filter((candidate) => next.has(candidate)),
               });
             }}
           >

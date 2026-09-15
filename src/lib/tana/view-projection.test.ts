@@ -4,8 +4,8 @@ import { describe, test } from 'node:test';
 import { KEYS, type Value } from 'platejs';
 
 import { buildTanaIndex } from './index';
-import { getTanaViewFieldValueLabel, resolveTanaViewProjection } from './view-projection';
-import { TANA_SYSTEM_FIELD_KEYS } from './fields';
+import { getTanaViewAvailableFieldIds, getTanaViewFieldValueLabel, resolveTanaViewProjection } from './view-projection';
+import { TANA_SYSTEM_FIELD_KEYS, TANA_SYSTEM_TIME_FIELD_IDS } from './fields';
 
 function itemIds(projection: ReturnType<typeof resolveTanaViewProjection>) {
   return projection.items.map(({ occurrence }) => occurrence.id);
@@ -154,5 +154,11 @@ describe('shared Tana View projection', () => {
     const index = buildTanaIndex(value);
     assert.equal(getTanaViewFieldValueLabel(index, 'task', TANA_SYSTEM_FIELD_KEYS.createdTime), '2026-09-13T10:00:00Z');
     assert.equal(getTanaViewFieldValueLabel(index, 'task', TANA_SYSTEM_FIELD_KEYS.calendarDate), '2026-09-14');
+    const view = index.nodesById.get('task')!;
+    const available = getTanaViewAvailableFieldIds(index, [{ occurrence: view, target: view }]);
+    assert.deepEqual(available, []);
+    const configured = getTanaViewAvailableFieldIds(index, [{ occurrence: view, target: view }], [TANA_SYSTEM_FIELD_KEYS.createdTime]);
+    assert.deepEqual(configured, [TANA_SYSTEM_FIELD_KEYS.createdTime]);
+    assert.deepEqual(TANA_SYSTEM_TIME_FIELD_IDS.includes(TANA_SYSTEM_FIELD_KEYS.calendarDate), true);
   });
 });

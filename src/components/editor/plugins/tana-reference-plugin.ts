@@ -374,6 +374,11 @@ function setTargetTitle(editor: PlateEditor, targetNodeId: NodeId, title: string
     editor.tf.insertNodes({ text: title }, { at: [...target[1], 0] });
   }
 
+  // Projection edits are canonical writes. Keep the occurrence untouched and
+  // record the edit on the target Node itself so the virtual Last modified
+  // field follows the same source of truth as ordinary title edits.
+  editor.tf.setNodes({ tanaLastEditedAt: new Date().toISOString() }, { at: target[1] });
+
   return true;
 }
 

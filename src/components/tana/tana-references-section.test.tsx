@@ -24,11 +24,17 @@ import {
 describe('Tana References section', () => {
   test('calendar pages expose derived Date Object and Date Field sources without backlink mutation', () => {
     const value: Value = [
+      { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
       { children: [{ text: 'Day' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-14' }, type: KEYS.p },
       { children: [{ text: 'Note with date' }, { children: [{ text: '' }], tanaDateValue: '2026-09-14', type: 'tana_date_object' }], id: 'note', type: KEYS.p },
+      { children: [{ text: '' }], id: 'note-due', indent: 1, tanaFieldId: 'due', type: KEYS.p },
+      { children: [{ text: '2026-09-14' }], id: 'note-due-value', indent: 2, tanaFieldValueType: 'date', type: KEYS.p },
     ];
     const index = buildTanaIndex(value);
-    assert.equal(getTanaCalendarDateReferenceEntries(index, 'day').length, 1);
+    const entries = getTanaCalendarDateReferenceEntries(index, 'day');
+    assert.equal(entries.length, 2);
+    assert.deepEqual(entries.map((entry) => entry.sourceNodeId), ['note', 'note-due-value']);
+    assert.equal(entries.find((entry) => entry.sourceNodeId === 'note-due-value')?.ownerNodeId, 'note');
     assert.equal(index.backlinks.get('day')?.length ?? 0, 0);
   });
 
