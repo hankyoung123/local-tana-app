@@ -4,7 +4,12 @@ import type { NodeId, TanaTime } from "./types";
 export type TanaDay = `${number}-${number}-${number}`;
 export type TanaMonth = `${number}-${number}`;
 export type TanaWeek = `${number}-W${number}`;
-export type TanaDateGranularity = TanaTime["unit"];
+/** Date values are richer than Calendar Nodes. */
+export type TanaDateGranularity =
+  | TanaTime["unit"]
+  | "datetime"
+  | "time"
+  | "range";
 
 export type TanaDateInterval = {
   end: Date;
@@ -239,7 +244,14 @@ export function isTanaTime(value: unknown): value is TanaTime {
   if (typeof time.value !== "string" || typeof time.unit !== "string")
     return false;
   const interval = parseTanaDateValue(time.value);
-  return !!interval && interval.granularity === time.unit;
+  return (
+    !!interval &&
+    (time.unit === "year" ||
+      time.unit === "month" ||
+      time.unit === "week" ||
+      time.unit === "day") &&
+    interval.granularity === time.unit
+  );
 }
 
 function addUtcDays(date: Date, amount: number): Date {
@@ -473,6 +485,8 @@ export function parseTanaDateObjectInput(
 ): string | undefined {
   const normalized = input.trim().toLowerCase();
   if (normalized === "today" || normalized === "今天") return today;
+  if (normalized === "tomorrow" || normalized === "明天") return addTanaDays(today, 1);
+  if (normalized === "yesterday" || normalized === "昨天") return addTanaDays(today, -1);
   const canonical = input.trim().replace(/\.\./g, "/");
   return isTanaDateValue(canonical) ? canonical : undefined;
 }

@@ -1061,6 +1061,18 @@ describe('Field occurrence Nodes', () => {
     assert.deepEqual(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values, []);
   });
 
+  test('accepts every canonical Date Field grammar through the same Value writer', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'When' }], id: 'when', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+    for (const value of ['2026-09-14', '2026-W38', '2026-09', '2026', '2026-09-14T12:30:00Z', '2026-09-14/2026-09-16']) {
+      assert.equal(transforms.setRawScalarValue('task', 'when', value), true);
+      assert.equal(buildTanaIndex(editor.children).fieldNodesByParent.get('task')?.[0]?.values[0]?.value, value);
+    }
+  });
+
   test('keeps required as a Definition-only unset hint without creating a second Field value', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },

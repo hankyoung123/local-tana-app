@@ -29,6 +29,7 @@ import {
 import type {
   FieldValue,
   FieldValidationIssue,
+  TanaBlockElement,
   NodeId,
   TanaIndex,
   TanaNode,
@@ -41,6 +42,7 @@ import {
   isTanaNodeInTrash,
   isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
+  getTanaToday,
 } from '@/lib/tana';
 
 import { OutlineNodeView } from './outline-node-view';
@@ -479,6 +481,9 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
 
   if (definition.type === 'date') {
     const value = index.nodesById.get(nodeId)?.text ?? '';
+    const workspaceId = index.systemNodeIds.get('workspace');
+    const workspace = workspaceId ? index.nodesById.get(workspaceId)?.node as TanaBlockElement | undefined : undefined;
+    const today = getTanaToday(typeof workspace?.tanaWorkspaceTimeZone === 'string' ? workspace.tanaWorkspaceTimeZone : 'UTC');
 
     return (
       <ValueControl>
@@ -488,7 +493,7 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
           aria-invalid={validationLabel ? true : undefined}
           className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[var(--tana-text-secondary)] outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
           data-plate-prevent-deselect
-          placeholder="YYYY-MM-DD"
+          placeholder="YYYY-MM-DD / YYYY-Www / YYYY-MM / range"
           type="text"
           value={value}
           onChange={(event) => {
@@ -506,6 +511,15 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
             }
           }}
         />
+        {!value && (
+          <button
+            aria-label="设置今天"
+            className="rounded px-1 text-[10px] text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
+            data-plate-prevent-deselect
+            type="button"
+            onClick={() => setValue({ type: 'date', value: today })}
+          >今天</button>
+        )}
         <FieldValueWarning id={warningId} label={validationLabel} />
       </ValueControl>
     );

@@ -1,5 +1,5 @@
 import { getTanaProjectionTarget } from './index';
-import { getSupertagTemplateFields } from './fields';
+import { getSupertagTemplateFields, getTanaSystemFieldLabel, getTanaSystemFieldValue, isTanaSystemTimeField } from './fields';
 import { resolveTanaNodeTitle } from './title';
 import type {
   FieldValue,
@@ -45,11 +45,14 @@ function fieldNodes(index: TanaIndex, targetId: NodeId, fieldId: NodeId) {
 }
 
 function fieldValues(index: TanaIndex, targetId: NodeId, fieldId: NodeId): FieldValue[] {
-  return fieldNodes(index, targetId, fieldId).flatMap((field) => field.values);
+  const stored = fieldNodes(index, targetId, fieldId).flatMap((field) => field.values);
+  const derived = getTanaSystemFieldValue(index, targetId, fieldId);
+  return derived ? [derived] : stored;
 }
 
 function hasStoredFieldValue(index: TanaIndex, targetId: NodeId, fieldId: NodeId): boolean {
-  return fieldNodes(index, targetId, fieldId).some((field) => field.hasStoredValue);
+  return getTanaSystemFieldValue(index, targetId, fieldId) !== undefined ||
+    fieldNodes(index, targetId, fieldId).some((field) => field.hasStoredValue);
 }
 
 function equalFieldValue(left: FieldValue, right: FieldValue): boolean {
@@ -57,7 +60,7 @@ function equalFieldValue(left: FieldValue, right: FieldValue): boolean {
 }
 
 function hasUsableField(index: TanaIndex, fieldId: NodeId): boolean {
-  return index.nodesById.get(fieldId)?.fieldDefinition !== undefined;
+  return index.nodesById.get(fieldId)?.fieldDefinition !== undefined || isTanaSystemTimeField(fieldId);
 }
 
 /** Missing field definitions disable the affected filter rather than corrupting a projection. */
@@ -107,6 +110,10 @@ export function getTanaViewFieldValueLabel(
         : String(value.value)
     )
     .join('、');
+}
+
+export function getTanaViewFieldLabel(index: TanaIndex, fieldId: NodeId): string {
+  return index.nodesById.get(fieldId)?.text || getTanaSystemFieldLabel(fieldId) || fieldId;
 }
 
 function compareValues(left: string, right: string): number {

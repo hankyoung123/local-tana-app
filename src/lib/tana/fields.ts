@@ -87,10 +87,63 @@ export const TANA_SYSTEM_FIELD_KEYS = {
   parent: '$system:parent',
   supertags: '$system:supertags',
   title: '$system:title',
+  createdTime: '$system:created-time',
+  lastModifiedTime: '$system:last-modified-time',
+  doneTime: '$system:done-time',
+  calendarDate: '$system:calendar-date',
 } as const;
 
 export type TanaSystemFieldKey =
   (typeof TANA_SYSTEM_FIELD_KEYS)[keyof typeof TANA_SYSTEM_FIELD_KEYS];
+
+const TANA_SYSTEM_TIME_FIELDS = new Set<TanaSystemFieldKey>([
+  TANA_SYSTEM_FIELD_KEYS.createdTime,
+  TANA_SYSTEM_FIELD_KEYS.lastModifiedTime,
+  TANA_SYSTEM_FIELD_KEYS.doneTime,
+  TANA_SYSTEM_FIELD_KEYS.calendarDate,
+]);
+
+export function isTanaSystemTimeField(fieldId: NodeId): fieldId is TanaSystemFieldKey {
+  return TANA_SYSTEM_TIME_FIELDS.has(fieldId as TanaSystemFieldKey);
+}
+
+export function getTanaSystemFieldLabel(fieldId: NodeId): string | undefined {
+  const labels: Partial<Record<TanaSystemFieldKey, string>> = {
+    [TANA_SYSTEM_FIELD_KEYS.createdTime]: '创建时间',
+    [TANA_SYSTEM_FIELD_KEYS.lastModifiedTime]: '最后修改时间',
+    [TANA_SYSTEM_FIELD_KEYS.doneTime]: '完成时间',
+    [TANA_SYSTEM_FIELD_KEYS.calendarDate]: '日历日期',
+  };
+  return labels[fieldId as TanaSystemFieldKey];
+}
+
+/** Virtual time Fields are derived from Node facts and hierarchy. */
+export function getTanaSystemFieldValue(
+  index: TanaIndex,
+  nodeId: NodeId,
+  fieldId: NodeId,
+): FieldValue | undefined {
+  const node = index.nodesById.get(nodeId);
+  if (!node || !isTanaSystemTimeField(fieldId)) return;
+  if (fieldId === TANA_SYSTEM_FIELD_KEYS.createdTime && node.createdAt) return { type: 'date', value: node.createdAt };
+  if (fieldId === TANA_SYSTEM_FIELD_KEYS.lastModifiedTime && node.lastEditedAt) return { type: 'date', value: node.lastEditedAt };
+  if (fieldId === TANA_SYSTEM_FIELD_KEYS.doneTime && node.doneAt) return { type: 'date', value: node.doneAt };
+  if (fieldId === TANA_SYSTEM_FIELD_KEYS.calendarDate) {
+    let current: NodeId | undefined = nodeId;
+    const visited = new Set<NodeId>();
+    while (current && !visited.has(current)) {
+      visited.add(current);
+      const time = index.nodesById.get(current)?.time;
+      if (time?.unit === 'day') return { type: 'date', value: time.value };
+      current = index.parentNodeIds.get(current);
+    }
+  }
+  return;
+}
+
+export function getTanaSystemFieldDefinition(fieldId: NodeId): FieldDefinition | undefined {
+  return isTanaSystemTimeField(fieldId) ? { type: 'date' } : undefined;
+}
 
 /**
  * A read-only UI description of a Node field. It never stores a second copy
@@ -636,6 +689,17 @@ export function getNodeFieldDescriptors(
       source: 'system',
       systemValue: `${index.backlinks.get(nodeId)?.length ?? 0} 个`,
     }),
+    ...[
+      [TANA_SYSTEM_FIELD_KEYS.createdTime, '创建时间', node.createdAt],
+      [TANA_SYSTEM_FIELD_KEYS.lastModifiedTime, '最后修改时间', node.lastEditedAt],
+      [TANA_SYSTEM_FIELD_KEYS.doneTime, '完成时间', node.doneAt],
+      [TANA_SYSTEM_FIELD_KEYS.calendarDate, '日历日期', getTanaSystemFieldValue(index, nodeId, TANA_SYSTEM_FIELD_KEYS.calendarDate)?.value],
+    ].map(([key, label, value]) => withVisibility({
+      key: key as TanaSystemFieldKey,
+      label: label as string,
+      source: 'system' as const,
+      systemValue: value ? String(value) : '—',
+    })),
   ];
   const fieldNodes = index.fieldNodesByParent.get(nodeId) ?? [];
 

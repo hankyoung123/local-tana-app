@@ -10,6 +10,7 @@ import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import {
   isTanaNodeActive,
   getTanaProjectionTarget,
+  getTanaCalendarDateReferences,
   resolveTanaNodeTitle,
   type NodeId,
   type ReferenceRelation,
@@ -27,6 +28,13 @@ type ReferenceGroup = {
 
 export function getTanaReferencesSectionId(nodeId: NodeId): string {
   return `tana-references-${nodeId}`;
+}
+
+/** Date Object and Date Field relations are derived alongside ordinary backlinks. */
+export function getTanaCalendarDateReferenceEntries(index: TanaIndex, nodeId: NodeId) {
+  return getTanaCalendarDateReferences(index).filter((reference) =>
+    reference.calendarNodeIds.includes(nodeId)
+  );
 }
 
 /** Zooms the owner, then locates the already-derived References surface. */
@@ -128,12 +136,13 @@ export function TanaReferencesSection({
 }) {
   const editor = useEditorRef();
   const groups = getTanaReferenceGroups(index, nodeId);
-  const referenceCount = groups.reduce((count, group) => count + group.relations.length, 0);
+  const calendarDateReferences = getTanaCalendarDateReferenceEntries(index, nodeId);
+  const referenceCount = groups.reduce((count, group) => count + group.relations.length, 0) + calendarDateReferences.length;
   const unlinkedMentions = findTanaUnlinkedMentions(index, nodeId);
   const [expanded, setExpanded] = React.useState(true);
   const contentId = React.useId();
 
-  if (referenceCount === 0 && unlinkedMentions.length === 0) return null;
+  if (referenceCount === 0 && unlinkedMentions.length === 0 && calendarDateReferences.length === 0) return null;
 
   return (
     <section
@@ -228,6 +237,42 @@ export function TanaReferencesSection({
                         关联
                       </button>
                     </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {calendarDateReferences.length > 0 && (
+            <section aria-label="日期引用">
+              <h3 className="mb-1 px-1.5 font-medium text-[10px] text-[var(--tana-text-tertiary)] uppercase tracking-[0.1em]">
+                日期引用
+              </h3>
+              <div className="space-y-0.5">
+                {calendarDateReferences.map((reference, position) => {
+                  const source = index.nodesById.get(reference.sourceNodeId);
+                  const title = source ? resolveTanaNodeTitle(index, source.id) || '未命名节点' : '已删除的节点';
+                  return (
+                    <button
+                      key={`${reference.sourceNodeId}-${reference.sourcePath.join('.')}-${position}`}
+                      className="flex min-h-8 w-full items-center gap-2 rounded px-1.5 py-0.5 text-left text-[13px] leading-5 text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)]"
+                      type="button"
+                      onClick={() => {
+                        if (!editor.getTransforms(TanaZoomPlugin).zoom.to(reference.sourceNodeId)) return;
+                        const point = editor.api.start(reference.sourcePath);
+                        if (point) {
+                          editor.tf.select(point);
+                          editor.tf.focus();
+                        }
+                      }}
+                    >
+                      <span className="grid size-6 shrink-0 place-items-center text-[var(--tana-node-bullet)]">
+                        <TanaNodeBullet semanticType={source?.semanticType ?? 'content'} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium text-[var(--tana-text)]">
+                        {title} · {reference.value}
+                      </span>
+                    </button>
                   );
                 })}
               </div>

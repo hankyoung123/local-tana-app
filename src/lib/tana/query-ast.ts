@@ -1,5 +1,5 @@
 import type { TanaQueryExpression, TanaQueryPredicate } from './types';
-import { isTanaDateValue, isTanaDay } from './time';
+import { isTanaDateValue } from './time';
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -121,9 +121,17 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     case 'done-state':
       return keys(value, ['kind', 'state']) && (value.state === 'todo' || value.state === 'done');
     case 'date-is':
+    case 'date-overlaps':
       return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDateValue(value.date);
     case 'on-day-node':
-      return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDay(value.date);
+      return keys(value, ['kind']);
+    case 'date-is-calendar-context':
+      return (
+        (keys(value, ['kind', 'ancestor']) || keys(value, ['kind', 'ancestor', 'offsetDays'])) &&
+        (value.ancestor === 'parent' || value.ancestor === 'grandparent') &&
+        (value.offsetDays === undefined ||
+          (typeof value.offsetDays === 'number' && Number.isInteger(value.offsetDays) && Math.abs(value.offsetDays) <= 36_600))
+      );
     case 'is-semantic':
       return keys(value, ['kind', 'semantic']) &&
         (value.semantic === 'calendar-node' || value.semantic === 'field' || value.semantic === 'search');

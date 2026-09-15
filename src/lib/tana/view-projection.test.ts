@@ -4,7 +4,8 @@ import { describe, test } from 'node:test';
 import { KEYS, type Value } from 'platejs';
 
 import { buildTanaIndex } from './index';
-import { resolveTanaViewProjection } from './view-projection';
+import { getTanaViewFieldValueLabel, resolveTanaViewProjection } from './view-projection';
+import { TANA_SYSTEM_FIELD_KEYS } from './fields';
 
 function itemIds(projection: ReturnType<typeof resolveTanaViewProjection>) {
   return projection.items.map(({ occurrence }) => occurrence.id);
@@ -143,5 +144,15 @@ describe('shared Tana View projection', () => {
     assert.equal(projection.total, 101);
     assert.equal(projection.pageCount, 2);
     assert.deepEqual(rows, before);
+  });
+
+  test('exposes derived system time fields through the shared field read path', () => {
+    const value: Value = [
+      { children: [{ text: 'Day' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-14' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', indent: 1, tanaCreatedAt: '2026-09-13T10:00:00Z', tanaLastEditedAt: '2026-09-14T11:00:00Z', tanaDoneAt: '2026-09-14T12:00:00Z', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(value);
+    assert.equal(getTanaViewFieldValueLabel(index, 'task', TANA_SYSTEM_FIELD_KEYS.createdTime), '2026-09-13T10:00:00Z');
+    assert.equal(getTanaViewFieldValueLabel(index, 'task', TANA_SYSTEM_FIELD_KEYS.calendarDate), '2026-09-14');
   });
 });

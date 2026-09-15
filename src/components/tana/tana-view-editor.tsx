@@ -20,6 +20,9 @@ import {
   describeTanaQueryClause,
   diagnoseTanaQuery,
   getTanaProjectionTarget,
+  getTanaSystemFieldDefinition,
+  getTanaSystemFieldLabel,
+  TANA_SYSTEM_FIELD_KEYS,
   getFieldValueCandidates,
   isTanaNodeActive,
   runTanaQuery,
@@ -555,6 +558,12 @@ function QueryPredicateForm({
   );
   const [fieldId, setFieldId] = React.useState(getPredicateFieldId(initial));
   const [rawValue, setRawValue] = React.useState(getPredicateRawValue(initial));
+  const [calendarAncestor, setCalendarAncestor] = React.useState(
+    initial?.kind === "date-is-calendar-context" ? initial.ancestor : "parent",
+  );
+  const [calendarOffset, setCalendarOffset] = React.useState(
+    initial?.kind === "date-is-calendar-context" ? String(initial.offsetDays ?? 0) : "0",
+  );
   const [supertagId, setSupertagId] = React.useState(
     initial?.kind === "has-supertag" || initial?.kind === "has-tag" ? initial.supertagId : "",
   );
@@ -583,18 +592,21 @@ function QueryPredicateForm({
       .map((item) => [item.id, item]),
   );
   const selectedField = fields.get(fieldId);
+  const selectedFieldDefinition = selectedField?.fieldDefinition ?? getTanaSystemFieldDefinition(fieldId);
   const nodeCandidates = Array.from(index.nodesById.values()).flatMap((candidate) => {
     const target = getTanaProjectionTarget(index, candidate.id);
     return target && target.id === candidate.id ? [target] : [];
   });
   const predicate = getDraftPredicate({
-    field: selectedField?.fieldDefinition,
+    field: selectedFieldDefinition,
     fieldId,
     kind,
     rawValue,
     supertagId,
     targetNodeId,
     text,
+    calendarAncestor,
+    calendarOffset,
   });
 
   return (
@@ -619,6 +631,9 @@ function QueryPredicateForm({
           <SelectItem value="text-matches-regex">文本匹配正则</SelectItem>
           <SelectItem value="done-state">完成状态</SelectItem>
           <SelectItem value="date-is">指定日期</SelectItem>
+          <SelectItem value="date-overlaps">日期重叠</SelectItem>
+          <SelectItem value="on-day-node">位于日期节点下</SelectItem>
+          <SelectItem value="date-is-calendar-context">匹配日历上下文</SelectItem>
           <SelectItem value="is-semantic">节点语义</SelectItem>
           <SelectItem value="child-of">是节点的直接子节点</SelectItem>
           <SelectItem value="descendant-of">属于节点后代</SelectItem>
@@ -654,14 +669,17 @@ function QueryPredicateForm({
                 {field.text || field.id}
               </SelectItem>
             ))}
+            {Object.values(TANA_SYSTEM_FIELD_KEYS).filter((key) => getTanaSystemFieldDefinition(key)).map((fieldId) => (
+              <SelectItem key={fieldId} value={fieldId}>{getTanaSystemFieldLabel(fieldId)}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       )}
 
-      {(kind === "field-equals" || kind === "field-greater-than" || kind === "field-less-than") && selectedField?.fieldDefinition && (
+      {(kind === "field-equals" || kind === "field-greater-than" || kind === "field-less-than") && selectedFieldDefinition && (
         <QueryValueInput
-          field={selectedField.fieldDefinition}
-          fieldId={selectedField.id}
+          field={selectedFieldDefinition}
+          fieldId={selectedField?.id ?? fieldId}
           index={index}
           value={rawValue}
           onChange={setRawValue}
@@ -683,8 +701,17 @@ function QueryPredicateForm({
           <SelectContent><SelectItem value="todo">待完成</SelectItem><SelectItem value="done">已完成</SelectItem></SelectContent>
         </Select>
       )}
-      {kind === "date-is" && (
+      {(kind === "date-is" || kind === "date-overlaps") && (
         <Input className="h-8 text-xs" type="date" value={rawValue} onChange={(event) => setRawValue(event.target.value)} />
+      )}
+      {kind === "date-is-calendar-context" && (
+        <div className="flex gap-1">
+          <Select value={calendarAncestor} onValueChange={(value) => setCalendarAncestor(value as "parent" | "grandparent")}>
+            <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="parent">父节点日期</SelectItem><SelectItem value="grandparent">祖父节点日期</SelectItem></SelectContent>
+          </Select>
+          <Input className="h-8 w-20 text-xs" type="number" value={calendarOffset} onChange={(event) => setCalendarOffset(event.target.value)} aria-label="相对天数" />
+        </div>
       )}
       {kind === "is-semantic" && (
         <Select value={rawValue} onValueChange={setRawValue}>
@@ -770,7 +797,7 @@ function getPredicateRawValue(
 ): string {
   if (predicate?.kind === "field-equals" || predicate?.kind === "field-greater-than" || predicate?.kind === "field-less-than") return String(predicate.value.value);
   if (predicate?.kind === "done-state") return predicate.state;
-  if (predicate?.kind === "date-is") return predicate.date;
+  if (predicate?.kind === "date-is" || predicate?.kind === "date-overlaps") return predicate.date;
   if (predicate?.kind === "is-semantic") return predicate.semantic;
   return "";
 }
@@ -789,6 +816,8 @@ function getDraftPredicate({
   supertagId,
   targetNodeId,
   text,
+  calendarAncestor,
+  calendarOffset,
 }: {
   field: FieldDefinition | undefined;
   fieldId: string;
@@ -797,6 +826,8 @@ function getDraftPredicate({
   supertagId: string;
   targetNodeId: string;
   text: string;
+  calendarAncestor: "parent" | "grandparent";
+  calendarOffset: string;
 }): TanaQueryPredicate | undefined {
   switch (kind) {
     case "has-supertag":
@@ -820,7 +851,16 @@ function getDraftPredicate({
     case "done-state":
       return rawValue === "todo" || rawValue === "done" ? { kind, state: rawValue } : undefined;
     case "date-is":
+    case "date-overlaps":
       return rawValue ? { date: rawValue, kind } : undefined;
+    case "on-day-node":
+      return { kind };
+    case "date-is-calendar-context": {
+      const offset = Number(calendarOffset);
+      return Number.isInteger(offset) && Math.abs(offset) <= 36600
+        ? { ancestor: calendarAncestor, kind, ...(offset === 0 ? {} : { offsetDays: offset }) }
+        : undefined;
+    }
     case "is-semantic":
       return rawValue === "field" || rawValue === "search" || rawValue === "calendar-node"
         ? { kind, semantic: rawValue }

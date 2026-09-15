@@ -519,7 +519,7 @@ function ProjectionFieldValueControl({
         className="h-6 min-w-24 rounded bg-transparent px-1 text-[11px] outline-none hover:bg-[var(--tana-hover)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
         defaultValue={index.nodesById.get(valueNodeId)?.text ?? ''}
         inputMode={definition.type === 'number' ? 'decimal' : undefined}
-        placeholder={definition.type === 'date' ? 'YYYY-MM-DD' : undefined}
+        placeholder={definition.type === 'date' ? 'YYYY-MM-DD / YYYY-Www / YYYY-MM / range' : undefined}
         type="text"
         onBlur={(event) => {
           const text = event.currentTarget.value;

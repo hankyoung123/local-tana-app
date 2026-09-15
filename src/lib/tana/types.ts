@@ -7,18 +7,13 @@ export type FieldId = NodeId;
 export type TanaDoneState = "todo" | "done";
 
 /**
- * Time is a Node semantic, not a separate calendar record. `day` uses the
- * exact same YYYY-MM-DD identity accepted by Date Field values; year/month/
- * week are derived views of that identity in the first Calendar iteration.
- */
-/**
- * A Calendar Node is an ordinary canonical Plate Node.  `value` is always a
- * value accepted by the date core for the corresponding granularity.  Ranges
- * deliberately use one value rather than a pair of NodeIds: dates are values,
- * never links to Calendar Nodes.
+ * A Calendar Node is an ordinary canonical Plate Node. Only navigable
+ * calendar granularities are Node semantics. Datetimes, clock times, and
+ * ranges are Date Object/Field values; persisting one on a Node would create
+ * a second, ambiguous calendar model.
  */
 export type TanaTime = {
-  unit: "year" | "month" | "week" | "day" | "datetime" | "time" | "range";
+  unit: "year" | "month" | "week" | "day";
   value: string;
 };
 
@@ -107,8 +102,18 @@ export type TanaQueryClause =
   | { kind: "field-defined" | "field-exists" | "has-field"; fieldId: FieldId }
   | { kind: "has-supertag" | "has-tag"; supertagId: NodeId }
   | { kind: "done-state"; state: TanaDoneState }
-  | { kind: "date-is"; date: string }
-  | { kind: "on-day-node"; date: string }
+  | { kind: "date-is" | "date-overlaps"; date: string }
+  /** Current occurrence is a direct canonical child of any Calendar Day. */
+  | { kind: "on-day-node" }
+  /**
+   * Compare canonical date content with the Calendar Node around the
+   * occurrence. This remains an AST rule, never a stored date result.
+   */
+  | {
+      kind: "date-is-calendar-context";
+      ancestor: "parent" | "grandparent";
+      offsetDays?: number;
+    }
   | { kind: "is-semantic"; semantic: "calendar-node" | "field" | "search" }
   | { kind: "text-contains"; text: string }
   | { kind: "text-matches-regex"; pattern: string };

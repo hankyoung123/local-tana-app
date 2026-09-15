@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { resolveTanaViewProjection, type TanaIndex, type TanaNode } from '@/lib/tana';
+import { getTanaViewFieldLabel, resolveTanaViewProjection, type TanaIndex, type TanaNode } from '@/lib/tana';
 
 /** A shared persisted `visibleFieldIds` editor for projection renderers. */
 export function TanaViewDisplayFieldsControl({
@@ -54,7 +54,7 @@ export function TanaViewDisplayFieldsControl({
               });
             }}
           >
-            {index.nodesById.get(fieldId)?.text || '未命名字段'}
+            {getTanaViewFieldLabel(index, fieldId)}
           </DropdownMenuCheckboxItem>
         ))}
       </DropdownMenuContent>

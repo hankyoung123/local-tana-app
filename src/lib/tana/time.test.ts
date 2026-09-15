@@ -9,6 +9,8 @@ import {
   getTanaToday,
   getTanaDateGranularity,
   isTanaDateValue,
+  isTanaTime,
+  parseTanaDateObjectInput,
   tanaDateValuesOverlap,
 } from "./time";
 
@@ -44,4 +46,8 @@ test("date parser preserves every supported granularity without rollover", () =>
   assert.equal(getTanaDateGranularity("2026-02-28/2026-03-01"), "range");
   assert.equal(isTanaDateValue("2026-W54"), false);
   assert.equal(isTanaDateValue("2026-02-30T12:00:00Z"), false);
+  assert.equal(isTanaTime({ unit: 'day', value: '2026-02-28' }), true);
+  assert.equal(isTanaTime({ unit: 'datetime', value: '2026-02-28T12:00:00Z' }), false);
+  assert.equal(parseTanaDateObjectInput('tomorrow', '2026-02-28'), '2026-03-01');
+  assert.equal(parseTanaDateObjectInput('昨天', '2026-03-01'), '2026-02-28');
 });

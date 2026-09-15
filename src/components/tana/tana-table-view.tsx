@@ -30,6 +30,8 @@ import {
 } from '@/components/ui/select';
 import {
   getFieldValueCandidates,
+  getTanaSystemFieldDefinition,
+  getTanaViewFieldLabel,
   getSupertagTemplateFields,
   isTanaTitleExpressionNameEditable,
   getTanaProjectionTarget,
@@ -166,7 +168,7 @@ export function getTanaTableAvailableFieldIds(
   const available: NodeId[] = [];
   const seen = new Set<NodeId>();
   const add = (fieldId: NodeId) => {
-    if (seen.has(fieldId) || !index.nodesById.get(fieldId)?.fieldDefinition) return;
+    if (seen.has(fieldId) || (!index.nodesById.get(fieldId)?.fieldDefinition && !getTanaSystemFieldDefinition(fieldId))) return;
 
     seen.add(fieldId);
     available.push(fieldId);
@@ -601,7 +603,7 @@ function ScalarFieldCell({
         aria-label={`${fieldLabel}字段值`}
         className="h-7 min-w-28 rounded bg-transparent px-1.5 text-xs outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)] aria-invalid:ring-1 aria-invalid:ring-destructive"
         inputMode={definition.type === 'number' ? 'decimal' : undefined}
-        placeholder={definition.type === 'date' ? 'YYYY-MM-DD' : undefined}
+        placeholder={definition.type === 'date' ? 'YYYY-MM-DD / YYYY-Www / YYYY-MM / range' : undefined}
         type="text"
         value={draft}
         onBlur={commit}
@@ -717,7 +719,7 @@ export function TanaTableView({
   const visibleFields = projection?.visibleFieldIds ?? (configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds);
-  const fieldName = (fieldId: NodeId) => index.nodesById.get(fieldId)?.text || '未命名字段';
+  const fieldName = (fieldId: NodeId) => getTanaViewFieldLabel(index, fieldId);
 
   return (
     <div className="min-w-0 max-w-full overflow-x-auto">
@@ -814,8 +816,7 @@ export function TanaTableToolbarControls({
   const visibleFields = configuredVisibleFieldIds
     ? fieldIds.filter((fieldId) => configuredVisibleFieldIds.includes(fieldId))
     : fieldIds;
-  const fieldName = (fieldId: NodeId) =>
-    index.nodesById.get(fieldId)?.text || '未命名字段';
+  const fieldName = (fieldId: NodeId) => getTanaViewFieldLabel(index, fieldId);
 
   return (
     <>

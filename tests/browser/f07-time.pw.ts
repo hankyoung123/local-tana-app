@@ -26,3 +26,18 @@ test('Today opens one canonical Day and @today inserts a Date Object that return
   await dateObject.click();
   await expect(breadcrumbs).toContainText(/\d{4}年\d{1,2}月\d{1,2}日/);
 });
+
+test('Date Object input accepts tomorrow and yesterday without creating Node references', async ({ page }) => {
+  await page.goto('/editor');
+  const editor = page.locator('[data-slate-editor]');
+  await expect(editor).toBeVisible();
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  const dayTitle = editor.getByText(/年\d{1,2}月\d{1,2}日 · 第\d{1,2}周$/, { exact: true });
+  await dayTitle.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' @tomorrow');
+  const input = page.locator('input[role="combobox"]');
+  await expect(input).toBeFocused();
+  await page.getByRole('option', { name: /日期：\d{4}-\d{2}-\d{2}/ }).click();
+  await expect(page.getByRole('button', { name: /打开日期 \d{4}-\d{2}-\d{2}/ })).toBeVisible();
+});

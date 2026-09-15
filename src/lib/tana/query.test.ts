@@ -662,14 +662,41 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
   assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
   assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), ['day', 'inline-day-mention', 'range-task']);
   assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-is' }), ['inline-date-object', 'range-task']);
-  assert.deepEqual(ids({ date: '2026-09-11', kind: 'on-day-node' }), ['day', 'inline-day-mention']);
+  assert.deepEqual(ids({ kind: 'on-day-node' }), []);
   assert.deepEqual(
     ids({ fieldId: 'when', kind: 'field-equals', value: { type: 'date', value: '2026-09-12' } }),
-    ['range-task'],
+    [],
   );
+  assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-overlaps' }), ['inline-date-object', 'range-task']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
   assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '/^Release\\s+\\d+$/' }), ['release']);
   assert.deepEqual(ids({ kind: 'grandchild-of', nodeId: 'grandparent' }), ['release']);
   assert.deepEqual(ids({ fieldId: 'estimate', kind: 'has-field' }), ['release']);
+});
+
+test('keeps occurrence context separate from canonical date content', () => {
+  const contextIndex = buildTanaIndex([
+    { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: 'p' },
+    { children: [{ text: 'Date' }], id: 'date', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Canonical A' }], id: 'canonical', tanaSupertagIds: ['project'], type: 'p' },
+    { children: [{ text: '' }], id: 'canonical-date', indent: 1, tanaFieldId: 'date', type: 'p' },
+    { children: [{ text: '2026-09-15' }], id: 'canonical-date-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+    { children: [{ text: 'Parent' }], id: 'parent', type: 'p' },
+    { children: [{ text: 'Day' }], id: 'day', indent: 1, tanaTime: { unit: 'day', value: '2026-09-15' }, type: 'p' },
+    { children: [{ text: 'Reference A' }], id: 'occurrence', indent: 2, tanaReferenceTargetId: 'canonical', type: 'p' },
+    { children: [{ text: 'Nested reference' }], id: 'nested', indent: 3, tanaReferenceTargetId: 'canonical', type: 'p' },
+  ]);
+  const query = (predicate: TanaQueryPredicate) => runTanaQuery(contextIndex, createAndQuery([predicate])).map((node) => node.id);
+
+  assert.deepEqual(query({ kind: 'on-day-node' }), ['canonical']);
+  assert.deepEqual(query({ ancestor: 'parent', kind: 'date-is-calendar-context' }), ['canonical']);
+  assert.deepEqual(query({ ancestor: 'grandparent', kind: 'date-is-calendar-context' }), ['canonical']);
+  assert.deepEqual(
+    runTanaQuery(contextIndex, createAndQuery([
+      { kind: 'has-supertag', supertagId: 'project' },
+      { kind: 'descendant-of', nodeId: 'day' },
+    ])).map((node) => node.id),
+    ['canonical'],
+  );
 });

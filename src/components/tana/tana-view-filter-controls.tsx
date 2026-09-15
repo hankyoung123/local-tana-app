@@ -17,6 +17,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   getTanaViewAvailableFieldIds,
+  getTanaSystemFieldDefinition,
+  getTanaViewFieldLabel,
   getFieldValueCandidates,
   type FieldValue,
   type NodeId,
@@ -28,7 +30,7 @@ import {
 function clauseLabel(index: TanaIndex, clause: TanaViewFilterClause) {
   if (clause.kind === 'text-contains') return `标题包含：${clause.text}`;
   if (clause.kind === 'has-supertag') return `有超级标签：${index.nodesById.get(clause.supertagId)?.text || '已删除标签'}`;
-  const field = index.nodesById.get(clause.fieldId)?.text || '已删除字段';
+  const field = getTanaViewFieldLabel(index, clause.fieldId) || '已删除字段';
   if (clause.kind === 'field-set') return `${field}：已设置`;
   if (clause.kind === 'field-not-set') return `${field}：未设置`;
   if (clause.kind === 'field-equals') return `${field}：${String(clause.value.value)}`;
@@ -84,7 +86,7 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
       filter: next.length ? { clauses: next, mode } : undefined,
     });
   };
-  const selectedDefinition = fieldId ? index.nodesById.get(fieldId)?.fieldDefinition : undefined;
+  const selectedDefinition = fieldId ? index.nodesById.get(fieldId)?.fieldDefinition ?? getTanaSystemFieldDefinition(fieldId) : undefined;
   const valueCandidates = fieldId && (selectedDefinition?.type === 'options' || selectedDefinition?.type === 'from-supertag')
     ? getFieldValueCandidates(index, fieldId)
     : [];
@@ -151,7 +153,7 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
           ) : <>
             <Select value={fieldId} onValueChange={(next) => setFieldId(next)}>
               <SelectTrigger aria-label="筛选字段" className="h-7 text-xs"><SelectValue placeholder="选择字段" /></SelectTrigger>
-              <SelectContent>{fields.map((id) => <SelectItem key={id} value={id}>{index.nodesById.get(id)?.text || '未命名字段'}</SelectItem>)}</SelectContent>
+              <SelectContent>{fields.map((id) => <SelectItem key={id} value={id}>{getTanaViewFieldLabel(index, id)}</SelectItem>)}</SelectContent>
             </Select>
             {kind === 'field-equals' && (selectedDefinition?.type === 'checkbox' ? (
               <Select value={value} onValueChange={setValue}><SelectTrigger aria-label="字段筛选值" className="h-7 text-xs"><SelectValue placeholder="选择布尔值" /></SelectTrigger><SelectContent><SelectItem value="true">已勾选</SelectItem><SelectItem value="false">未勾选</SelectItem></SelectContent></Select>

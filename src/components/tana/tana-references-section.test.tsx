@@ -13,6 +13,7 @@ import { buildTanaIndex } from '@/lib/tana';
 import {
   getReferenceBreadcrumb,
   getTanaReferencesSectionId,
+  getTanaCalendarDateReferenceEntries,
   getTanaReferenceBacklinkTitle,
   getTanaReferenceGroups,
   navigateTanaReferenceRelation,
@@ -21,6 +22,16 @@ import {
 } from './tana-references-section';
 
 describe('Tana References section', () => {
+  test('calendar pages expose derived Date Object and Date Field sources without backlink mutation', () => {
+    const value: Value = [
+      { children: [{ text: 'Day' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-14' }, type: KEYS.p },
+      { children: [{ text: 'Note with date' }, { children: [{ text: '' }], tanaDateValue: '2026-09-14', type: 'tana_date_object' }], id: 'note', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(value);
+    assert.equal(getTanaCalendarDateReferenceEntries(index, 'day').length, 1);
+    assert.equal(index.backlinks.get('day')?.length ?? 0, 0);
+  });
+
   test('groups derived backlinks by relation kind without changing their document order', () => {
     const value: Value = [
       {

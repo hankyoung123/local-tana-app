@@ -193,7 +193,7 @@ function getSearchResultDay(query: TanaQueryExpression): string | undefined {
       expression.children.forEach(visit);
       return;
     }
-    if (expression.type === "predicate" && (expression.predicate.kind === "date-is" || expression.predicate.kind === "on-day-node")) {
+    if (expression.type === "predicate" && (expression.predicate.kind === "date-is" || expression.predicate.kind === "date-overlaps")) {
       dates.add(expression.predicate.date);
     }
   };
@@ -254,7 +254,9 @@ function materializeSearchPredicate(
     // parent context. Comparisons, graph predicates, regex/text, semantics,
     // and NOT/OR branches are never fabricated.
     case "date-is":
+    case "date-overlaps":
     case "on-day-node":
+    case "date-is-calendar-context":
     case "field-exists":
     case "field-greater-than":
     case "field-less-than":

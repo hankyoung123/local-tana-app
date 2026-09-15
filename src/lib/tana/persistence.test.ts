@@ -518,6 +518,10 @@ describe('Plate document persistence', () => {
     const mismatchedWeek = structuredClone(document);
     (mismatchedWeek[4] as TanaBlockElement).tanaTime = { unit: 'week', value: '2025-W09' };
     assert.equal(isValidTanaDocument(mismatchedWeek), false);
+
+    const nonCalendarTime = structuredClone(document);
+    (nonCalendarTime[3] as TanaBlockElement).tanaTime = { unit: 'datetime', value: '2026-03-01T12:00:00Z' } as never;
+    assert.equal(isValidTanaDocument(nonCalendarTime), false);
   });
 
   test('flushes a debounced final edit before close', async () => {

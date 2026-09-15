@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { resolveTanaViewProjection, type NodeId, type TanaIndex, type TanaNode, type TanaViewDefinition } from '@/lib/tana';
+import { getTanaViewFieldLabel, resolveTanaViewProjection, type NodeId, type TanaIndex, type TanaNode, type TanaViewDefinition } from '@/lib/tana';
 
 const TITLE_SORT = '$title';
 type Criterion = NonNullable<TanaViewDefinition['sort']>[number];
@@ -33,7 +33,7 @@ export function TanaViewSortControls({ index, results, view }: { index: TanaInde
   const fieldIds = projection.availableFieldIds;
   const fieldName = (fieldId: string) => fieldId === TITLE_SORT
     ? '标题'
-    : index.nodesById.get(fieldId)?.text || '未命名字段';
+    : getTanaViewFieldLabel(index, fieldId);
   const write = (next: readonly Criterion[]) =>
     editor.getTransforms(TanaViewPlugin).view.update(view.id, {
       sort: next.length ? next : undefined,
