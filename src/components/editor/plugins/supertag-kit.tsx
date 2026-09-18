@@ -4,6 +4,7 @@ import {
   type TriggerComboboxPluginOptions,
   withTriggerCombobox,
 } from '@platejs/combobox';
+import { RangeApi } from 'platejs';
 import { createPlatePlugin } from 'platejs/react';
 
 import {
@@ -64,7 +65,9 @@ const SupertagPlugin = createPlatePlugin<
           exactMatch: false,
           suppressThrow: true,
         });
-        if (range) editor.tf.select(range);
+        if (range && (!editor.selection || !RangeApi.equals(editor.selection, range))) {
+          editor.tf.select(range);
+        }
       },
     },
   }))
