@@ -93,27 +93,33 @@ export type FieldValidationIssue =
   | "missing-required"
   | "missing-reference";
 
+/**
+ * A date operand is evaluated while a query runs.  Calendar context is
+ * occurrence context, never persisted Node identity or a second date value.
+ */
+export type DateOperand =
+  | { kind: "literal"; value: string }
+  | {
+      ancestor: "parent" | "grandparent";
+      kind: "calendar-context";
+      offset?: number;
+    };
+
 export type TanaQueryClause =
   | {
       kind: "field-equals" | "field-greater-than" | "field-less-than";
       fieldId: FieldId;
-      value: FieldValue;
+      value: FieldValue | DateOperand;
     }
   | { kind: "field-defined" | "field-exists" | "has-field"; fieldId: FieldId }
   | { kind: "has-supertag" | "has-tag"; supertagId: NodeId }
   | { kind: "done-state"; state: TanaDoneState }
-  | { kind: "date-is" | "date-overlaps"; date: string }
+  /** Matches an explicit Inline Date Object in canonical title content. */
+  | { kind: "date-is"; date: string }
+  /** Interval overlap for exactly one Date Field. */
+  | { fieldId: FieldId; kind: "date-overlaps"; value: DateOperand }
   /** Current occurrence is a direct canonical child of any Calendar Day. */
   | { kind: "on-day-node" }
-  /**
-   * Compare canonical date content with the Calendar Node around the
-   * occurrence. This remains an AST rule, never a stored date result.
-   */
-  | {
-      kind: "date-is-calendar-context";
-      ancestor: "parent" | "grandparent";
-      offsetDays?: number;
-    }
   | { kind: "is-semantic"; semantic: "calendar-node" | "field" | "search" }
   | { kind: "text-contains"; text: string }
   | { kind: "text-matches-regex"; pattern: string };

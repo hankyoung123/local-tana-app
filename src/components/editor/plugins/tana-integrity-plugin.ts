@@ -1,4 +1,4 @@
-import { isTanaSearchQueryAst } from '@/lib/tana/query-ast';
+import { isTanaSearchQueryAstOrLegacy } from '@/lib/tana/query-ast';
 import { isTanaSearchHost } from '@/lib/tana/search-host';
 import { ElementApi } from 'platejs';
 import type { Path, TElement, Value } from 'platejs';
@@ -330,7 +330,7 @@ const NodeIntegrityValidators: Partial<
     }
   },
   search: (node) =>
-    isTanaSearchQueryAst(node.tanaSearchDefinition?.query)
+    isTanaSearchQueryAstOrLegacy(node.tanaSearchDefinition?.query)
       ? undefined
       : 'invalid-search-query',
   view: (node) =>
@@ -361,7 +361,7 @@ export function validateNode(
     }
     // Missing targets remain in the persisted AST. Runtime diagnostics block
     // execution until the same identity becomes available again.
-    if (!isTanaSearchQueryAst(node.tanaSearchDefinition.query)) {
+    if (!isTanaSearchQueryAstOrLegacy(node.tanaSearchDefinition.query)) {
       return 'invalid-search-query';
     }
   }

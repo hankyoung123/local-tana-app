@@ -403,6 +403,47 @@ export function getTanaMonthTime(month: TanaMonth): TanaTime {
 }
 
 /**
+ * Moves a Calendar Node identity in its own unit.  This deliberately does
+ * not turn weeks, months, or years into arbitrary day values: a Calendar
+ * context operand must retain the granularity of the Node that supplied it.
+ */
+export function offsetCalendarValue(
+  time: TanaTime,
+  offset: number = 0,
+): TanaTime | undefined {
+  if (!isTanaTime(time) || !Number.isInteger(offset)) return;
+  if (offset === 0) return { ...time };
+
+  switch (time.unit) {
+    case "day":
+      return getTanaDayTime(addTanaDays(time.value as TanaDay, offset));
+    case "week": {
+      const monday = toUtcWeek(time.value);
+      if (!monday) return;
+      const shifted = addUtcDays(monday, offset * 7);
+      const day = isoFromDate(shifted);
+      return getTanaWeekTime(getTanaWeekForDay(day));
+    }
+    case "month": {
+      const start = toUtcMonth(time.value);
+      if (!start) return;
+      const monthIndex = start.getUTCFullYear() * 12 + start.getUTCMonth() + offset;
+      const year = Math.floor(monthIndex / 12);
+      const month = ((monthIndex % 12) + 12) % 12;
+      if (year < 1 || year > 9999) return;
+      return getTanaMonthTime(
+        `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}` as TanaMonth,
+      );
+    }
+    case "year": {
+      const year = Number(time.value) + offset;
+      if (!Number.isInteger(year) || year < 1 || year > 9999) return;
+      return getTanaYearTime(String(year).padStart(4, "0") as `${number}`);
+    }
+  }
+}
+
+/**
  * Returns the Calendar identities that a scalar date can describe. These are
  * values only; callers resolve them to existing Calendar NodeIds from the
  * derived index and never persist a Calendar link on the source.

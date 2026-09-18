@@ -659,15 +659,15 @@ test('runs numeric/date comparisons, completion, semantic, regex and grandparent
   assert.equal(notDone.includes('todo'), true);
   assert.equal(notDone.includes('release'), false);
   assert.equal(notDone.includes('search'), true);
-  assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), ['release']);
-  assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), ['day', 'inline-day-mention', 'range-task']);
-  assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-is' }), ['inline-date-object', 'range-task']);
+  assert.deepEqual(ids({ date: '2026-09-10', kind: 'date-is' }), []);
+  assert.deepEqual(ids({ date: '2026-09-11', kind: 'date-is' }), []);
+  assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-is' }), ['inline-date-object']);
   assert.deepEqual(ids({ kind: 'on-day-node' }), []);
   assert.deepEqual(
     ids({ fieldId: 'when', kind: 'field-equals', value: { type: 'date', value: '2026-09-12' } }),
     [],
   );
-  assert.deepEqual(ids({ date: '2026-09-12', kind: 'date-overlaps' }), ['inline-date-object', 'range-task']);
+  assert.deepEqual(ids({ fieldId: 'when', kind: 'date-overlaps', value: { kind: 'literal', value: '2026-09-12' } }), ['range-task']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'calendar-node' }), ['day']);
   assert.deepEqual(ids({ kind: 'is-semantic', semantic: 'search' }), ['search']);
   assert.deepEqual(ids({ kind: 'text-matches-regex', pattern: '/^Release\\s+\\d+$/' }), ['release']);
@@ -690,9 +690,7 @@ test('keeps occurrence context separate from canonical date content', () => {
   const query = (predicate: TanaQueryPredicate) => runTanaQuery(contextIndex, createAndQuery([predicate])).map((node) => node.id);
 
   assert.deepEqual(query({ kind: 'on-day-node' }), ['canonical']);
-  assert.deepEqual(query({ ancestor: 'parent', kind: 'date-is-calendar-context' }), ['canonical']);
-  assert.deepEqual(query({ ancestor: 'grandparent', kind: 'date-is-calendar-context' }), ['canonical']);
-  assert.deepEqual(query({ ancestor: 'parent', kind: 'date-is-calendar-context', offsetDays: 1 }), []);
+  assert.deepEqual(query({ fieldId: 'date', kind: 'field-equals', value: { kind: 'calendar-context', ancestor: 'parent' } }), ['canonical']);
   assert.deepEqual(
     runTanaQuery(contextIndex, createAndQuery([
       { kind: 'has-supertag', supertagId: 'project' },
@@ -700,4 +698,37 @@ test('keeps occurrence context separate from canonical date content', () => {
     ])).map((node) => node.id),
     ['canonical'],
   );
+});
+
+test('keeps Date Object, Day context, and field overlap semantics independent', () => {
+  const index = buildTanaIndex([
+    { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Range' }], id: 'range', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Other' }], id: 'other', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Date only ' }, { children: [{ text: '' }], tanaDateValue: '2026-09-15', type: 'tana_date_object' }], id: 'date-only', type: 'p' },
+    { children: [{ text: 'Target ' }, { children: [{ text: '' }], tanaDateValue: '2026-09-15', type: 'tana_date_object' }], id: 'target', type: 'p' },
+    { children: [{ text: '' }], id: 'target-due', indent: 1, tanaFieldId: 'due', type: 'p' },
+    { children: [{ text: '2026-09-16' }], id: 'target-due-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+    { children: [{ text: '' }], id: 'target-range', indent: 1, tanaFieldId: 'range', type: 'p' },
+    { children: [{ text: '2026-09-14/2026-09-16' }], id: 'target-range-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+    { children: [{ text: '' }], id: 'target-other', indent: 1, tanaFieldId: 'other', type: 'p' },
+    { children: [{ text: '2026-10-01/2026-10-02' }], id: 'target-other-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+    { children: [{ text: '2026' }], id: 'year', tanaTime: { unit: 'year', value: '2026' }, type: 'p' },
+    { children: [{ text: '2026-W38' }], id: 'week', indent: 1, tanaTime: { unit: 'week', value: '2026-W38' }, type: 'p' },
+    { children: [{ text: '2026-09-15' }], id: 'day', indent: 2, tanaTime: { unit: 'day', value: '2026-09-15' }, type: 'p' },
+    { children: [{ text: 'Reference target' }], id: 'occurrence', indent: 3, tanaReferenceTargetId: 'target', type: 'p' },
+    { children: [{ text: 'Grandchild' }], id: 'day-grandchild', indent: 4, type: 'p' },
+  ]);
+  const ids = (predicate: TanaQueryPredicate) => runTanaQuery(index, createAndQuery([predicate])).map((node) => node.id);
+
+  assert.deepEqual(ids({ date: '2026-09-15', kind: 'date-is' }), ['date-only', 'target']);
+  assert.equal(ids({ date: '2026-09-16', kind: 'date-is' }).includes('target'), false);
+  assert.deepEqual(ids({ kind: 'on-day-node' }), ['target']);
+  assert.equal(ids({ kind: 'on-day-node' }).includes('day-grandchild'), false);
+  assert.deepEqual(ids({ fieldId: 'range', kind: 'date-overlaps', value: { kind: 'literal', value: '2026-09-15' } }), ['target']);
+  assert.deepEqual(ids({ fieldId: 'due', kind: 'date-overlaps', value: { kind: 'literal', value: '2026-09-15' } }), []);
+  assert.deepEqual(ids({ fieldId: 'other', kind: 'date-overlaps', value: { kind: 'literal', value: '2026-09-15' } }), []);
+  assert.deepEqual(ids({ fieldId: 'due', kind: 'field-greater-than', value: { ancestor: 'parent', kind: 'calendar-context' } }), ['target']);
+  assert.deepEqual(ids({ fieldId: 'range', kind: 'date-overlaps', value: { ancestor: 'parent', kind: 'calendar-context' } }), ['target']);
+  assert.deepEqual(ids({ fieldId: 'range', kind: 'field-greater-than', value: { ancestor: 'grandparent', kind: 'calendar-context', offset: -1 } }), ['target']);
 });

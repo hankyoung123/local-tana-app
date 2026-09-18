@@ -11,7 +11,7 @@ import {
 import { getTanaDirectChildPaths, getTanaParentPath } from './outliner';
 import { isTanaFieldHostNode } from './fields';
 import { canOwnTanaCanonicalChildren } from './node-behavior';
-import { isTanaSearchQueryAst } from './query-ast';
+import { isTanaSearchQueryAstOrLegacy } from './query-ast';
 import { isTanaSearchHost } from './search-host';
 import { getTanaWeekForDay, isTanaDateValue, isTanaDay, isTanaTime } from './time';
 import { containsTanaSoftLineBreak } from './single-line';
@@ -326,7 +326,7 @@ function hasValidSemanticData(element: TElement): boolean {
       Array.isArray(definition) ||
       Object.keys(definition as Record<string, unknown>).length !== 1 ||
       !Object.hasOwn(definition as object, 'query') ||
-      !isTanaSearchQueryAst((definition as { query?: unknown }).query)
+      !isTanaSearchQueryAstOrLegacy((definition as { query?: unknown }).query)
     ) {
       return false;
     }

@@ -9,7 +9,7 @@ import {
   normalizeTanaQueryRoot,
   runTanaQuery,
 } from "@/lib/tana/query";
-import { isTanaQueryAst, isTanaQueryPredicateAst } from "@/lib/tana/query-ast";
+import { isTanaQueryAst, isTanaQueryPredicateAst, migrateLegacyTanaQuery } from "@/lib/tana/query-ast";
 import { isTanaSearchHost } from "@/lib/tana/search-host";
 import { getTanaToday, isTanaDay, parseTanaDateValue } from "@/lib/tana/time";
 import { getTanaNodeDescendantPaths } from "@/lib/tana/outliner";
@@ -124,16 +124,17 @@ function addClause(
     !isTanaSearchHost(entry[0], { document: editor.children, path: entry[1] })
   )
     return false;
-  if (definition.query.type !== "and") return false;
+  const query = migrateLegacyTanaQuery(definition.query);
+  if (!query || query.type !== "and") return false;
   if (!isTanaQueryPredicateAst(clause)) return false;
 
   editor.tf.setNodes(
     {
       tanaSearchDefinition: {
         query: {
-          ...definition.query,
+          ...query,
           children: [
-            ...definition.query.children,
+            ...query.children,
             { predicate: clause, type: "predicate" },
           ],
         },
@@ -148,6 +149,7 @@ function addClause(
 function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
   const entry = getTanaNodeEntry(editor, nodeId);
   const definition = entry?.[0].tanaSearchDefinition;
+  const query = definition ? migrateLegacyTanaQuery(definition.query) : undefined;
 
   if (
     !entry ||
@@ -158,8 +160,9 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
     }) ||
     !Number.isInteger(index) ||
     index < 0 ||
-    definition.query.type !== "and" ||
-    index >= definition.query.children.length
+    !query ||
+    query.type !== "and" ||
+    index >= query.children.length
   ) {
     return false;
   }
@@ -168,8 +171,8 @@ function removeClause(editor: PlateEditor, nodeId: NodeId, index: number) {
     {
       tanaSearchDefinition: {
         query: {
-          ...definition.query,
-          children: definition.query.children.filter(
+          ...query,
+          children: query.children.filter(
             (_, clauseIndex) => clauseIndex !== index,
           ),
         },
@@ -193,7 +196,7 @@ function getSearchResultDay(query: TanaQueryExpression): string | undefined {
       expression.children.forEach(visit);
       return;
     }
-    if (expression.type === "predicate" && (expression.predicate.kind === "date-is" || expression.predicate.kind === "date-overlaps")) {
+    if (expression.type === "predicate" && expression.predicate.kind === "date-is") {
       dates.add(expression.predicate.date);
     }
   };
@@ -237,7 +240,7 @@ function materializeSearchPredicate(
       fields.materialize(nodeId, predicate.fieldId);
       return;
     case "field-equals":
-      if (fields.materialize(nodeId, predicate.fieldId)) {
+      if (fields.materialize(nodeId, predicate.fieldId) && !("kind" in predicate.value)) {
         fields.setValue(nodeId, predicate.fieldId, predicate.value);
       }
       return;
@@ -250,13 +253,11 @@ function materializeSearchPredicate(
       }
       return;
     }
-    // A Node below the chosen Day makes `date-is` true through the derived
-    // parent context. Comparisons, graph predicates, regex/text, semantics,
-    // and NOT/OR branches are never fabricated.
+    // Date predicates, dynamic operands, graph predicates, regex/text,
+    // semantics, and NOT/OR branches are never fabricated.
     case "date-is":
     case "date-overlaps":
     case "on-day-node":
-    case "date-is-calendar-context":
     case "field-exists":
     case "field-greater-than":
     case "field-less-than":
@@ -283,6 +284,7 @@ function addResult(
 ): TanaSearchAddResultOutcome | undefined {
   const searchEntry = getTanaNodeEntry(editor, searchNodeId);
   const definition = searchEntry?.[0].tanaSearchDefinition;
+  const query = definition ? migrateLegacyTanaQuery(definition.query) : undefined;
 
   if (
     !searchEntry ||
@@ -291,12 +293,12 @@ function addResult(
       document: editor.children,
       path: searchEntry[1],
     }) ||
-    !isTanaQueryAst(definition.query)
+    !query
   ) {
     return;
   }
 
-  const selectedDate = getSearchResultDay(definition.query) || getTanaToday(getWorkspaceTimeZone(editor));
+  const selectedDate = getSearchResultDay(query) || getTanaToday(getWorkspaceTimeZone(editor));
   const parsedDate = parseTanaDateValue(selectedDate);
   const day = parsedDate
     ? `${parsedDate.start.getUTCFullYear()}-${String(parsedDate.start.getUTCMonth() + 1).padStart(2, '0')}-${String(parsedDate.start.getUTCDate()).padStart(2, '0')}`
@@ -336,7 +338,7 @@ function addResult(
     // normal interactability boundary as well as its checkbox adapter.
     editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
 
-    getMaterializablePredicates(definition.query).forEach((predicate) =>
+    getMaterializablePredicates(query).forEach((predicate) =>
       materializeSearchPredicate(editor, nodeId, predicate),
     );
 
@@ -344,7 +346,7 @@ function addResult(
     outcome = {
       day,
       dayNodeId: resolvedDayNodeId,
-      matches: runTanaQuery(index, definition.query, { excludeNodeId: searchNodeId })
+      matches: runTanaQuery(index, query, { excludeNodeId: searchNodeId })
         .some((node) => node.id === nodeId),
       nodeId,
     };

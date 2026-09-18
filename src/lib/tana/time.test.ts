@@ -10,6 +10,7 @@ import {
   getTanaDateGranularity,
   isTanaDateValue,
   isTanaTime,
+  offsetCalendarValue,
   parseTanaDateObjectInput,
   tanaDateValuesOverlap,
 } from "./time";
@@ -18,6 +19,15 @@ test("Today uses workspace timezone across midnight", () => {
   const instant = new Date("2026-01-01T23:30:00.000Z");
   assert.equal(getTanaToday("Pacific/Auckland", instant), "2026-01-02");
   assert.equal(getTanaDayForDate(instant, "America/Los_Angeles"), "2026-01-01");
+});
+
+test("calendar context offsets preserve the source Calendar granularity", () => {
+  assert.deepEqual(offsetCalendarValue({ unit: 'day', value: '2026-01-30' }, 3), { unit: 'day', value: '2026-02-02' });
+  assert.deepEqual(offsetCalendarValue({ unit: 'week', value: '2020-W53' }, 3), { unit: 'week', value: '2021-W03' });
+  assert.deepEqual(offsetCalendarValue({ unit: 'month', value: '2026-12' }, 1), { unit: 'month', value: '2027-01' });
+  assert.deepEqual(offsetCalendarValue({ unit: 'month', value: '2024-01' }, 1), { unit: 'month', value: '2024-02' });
+  assert.deepEqual(offsetCalendarValue({ unit: 'year', value: '2024' }, 1), { unit: 'year', value: '2025' });
+  assert.deepEqual(offsetCalendarValue({ unit: 'year', value: '2026' }, -2), { unit: 'year', value: '2024' });
 });
 
 test("date core handles leap years, ISO week boundaries and ranges", () => {

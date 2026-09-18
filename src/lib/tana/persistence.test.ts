@@ -600,6 +600,24 @@ test('Search persistence requires the exact query envelope and a canonical ordin
   ]);
   assert.equal(isValidTanaDocument(valid), true);
 
+  const fieldScopedOverlap = structuredClone(valid);
+  const overlapSearch = fieldScopedOverlap.find((node) => node.id === 'search')!;
+  overlapSearch.tanaSearchDefinition = {
+    query: {
+      children: [{ predicate: { fieldId: 'date-field', kind: 'date-overlaps', value: { kind: 'literal', value: '2026-09-15' } }, type: 'predicate' }],
+      type: 'and',
+    },
+  } as never;
+  assert.equal(isValidTanaDocument(fieldScopedOverlap), true);
+  assert.equal(isValidTanaDocument(structuredClone(fieldScopedOverlap)), true);
+
+  const legacyOverlap = structuredClone(valid);
+  const legacySearch = legacyOverlap.find((node) => node.id === 'search')!;
+  legacySearch.tanaSearchDefinition = {
+    query: { children: [{ predicate: { date: '2026-09-15', kind: 'date-overlaps' }, type: 'predicate' }], type: 'and' },
+  } as never;
+  assert.equal(isValidTanaDocument(legacyOverlap), true);
+
   const nonAndRoot = structuredClone(valid);
   const nonAndSearch = nonAndRoot.find((node) => node.id === 'search')!;
   nonAndSearch.tanaSearchDefinition = {

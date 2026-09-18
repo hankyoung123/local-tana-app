@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTanaQueryAst, isTanaSearchQueryAst, parseTanaQuery } from './query-ast';
+import { isTanaQueryAst, isTanaSearchQueryAst, isTanaSearchQueryAstOrLegacy, migrateLegacyTanaQuery, parseTanaQuery } from './query-ast';
 import { runTanaQuery } from './query';
 import { buildTanaIndex } from './index';
 
@@ -27,8 +27,14 @@ test('runtime AST rejects unknown kinds, invalid IDs, values and recursion', () 
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '^(a|aa)+$' } }), false);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'text-matches-regex', pattern: '//' } }), false);
   assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'field-greater-than', fieldId: 'field', value: { type: 'number', value: 1 } } }), true);
+  assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'date-overlaps', fieldId: 'when', value: { kind: 'literal', value: '2026-09-15' } } }), true);
+  assert.equal(isTanaQueryAst({ type: 'predicate', predicate: { kind: 'date-overlaps', date: '2026-09-15' } }), false);
   assert.equal(isTanaQueryAst({ type: 'and', children: [] }), true);
   assert.equal(isTanaSearchQueryAst({ type: 'and', children: [] }), true);
   assert.equal(isTanaSearchQueryAst({ type: 'predicate', predicate: { kind: 'text-contains', text: 'root' } }), false);
   assert.equal(isTanaQueryAst({ type: 'not', child: { type: 'predicate', predicate: { kind: 'child-of', nodeId: 'node' } } }), true);
+  const legacy = { type: 'and', children: [{ type: 'predicate', predicate: { kind: 'date-overlaps', date: '2026-09-15' } }] };
+  assert.equal(isTanaSearchQueryAstOrLegacy(legacy), true);
+  assert.deepEqual(migrateLegacyTanaQuery(legacy), { type: 'and', children: [{ type: 'predicate', predicate: { kind: 'date-is', date: '2026-09-15' } }] });
+  assert.equal(parseTanaQuery(legacy).type, 'and');
 });

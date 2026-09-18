@@ -1,4 +1,4 @@
-import type { TanaQueryExpression, TanaQueryPredicate } from './types';
+import type { DateOperand, FieldValue, TanaQueryExpression, TanaQueryPredicate } from './types';
 import { isTanaDateValue } from './time';
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -106,6 +106,33 @@ export function createTanaQueryRegExp(pattern: string): RegExp {
   return new RegExp(source, 'iu');
 }
 
+function isDateOperand(value: unknown): value is DateOperand {
+  if (!record(value)) return false;
+  if (value.kind === 'literal') {
+    return keys(value, ['kind', 'value']) && typeof value.value === 'string' && isTanaDateValue(value.value);
+  }
+  return value.kind === 'calendar-context' &&
+    (keys(value, ['kind', 'ancestor']) || keys(value, ['kind', 'ancestor', 'offset'])) &&
+    (value.ancestor === 'parent' || value.ancestor === 'grandparent') &&
+    (value.offset === undefined ||
+      (typeof value.offset === 'number' && Number.isInteger(value.offset) && Math.abs(value.offset) <= 36_600));
+}
+
+function isFieldValue(value: unknown): value is FieldValue {
+  if (!record(value) || !keys(value, ['type', 'value'])) return false;
+  switch (value.type) {
+    case 'checkbox': return typeof value.value === 'boolean';
+    case 'number': return typeof value.value === 'number' && Number.isFinite(value.value);
+    case 'options':
+    case 'from-supertag': return id(value.value);
+    case 'plain':
+    case 'email':
+    case 'url': return typeof value.value === 'string';
+    case 'date': return isTanaDateValue(value.value);
+    default: return false;
+  }
+}
+
 export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredicate {
   if (!record(value)) return false;
   switch (value.kind) {
@@ -121,17 +148,11 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     case 'done-state':
       return keys(value, ['kind', 'state']) && (value.state === 'todo' || value.state === 'done');
     case 'date-is':
-    case 'date-overlaps':
       return keys(value, ['kind', 'date']) && typeof value.date === 'string' && isTanaDateValue(value.date);
+    case 'date-overlaps':
+      return keys(value, ['kind', 'fieldId', 'value']) && id(value.fieldId) && isDateOperand(value.value);
     case 'on-day-node':
       return keys(value, ['kind']);
-    case 'date-is-calendar-context':
-      return (
-        (keys(value, ['kind', 'ancestor']) || keys(value, ['kind', 'ancestor', 'offsetDays'])) &&
-        (value.ancestor === 'parent' || value.ancestor === 'grandparent') &&
-        (value.offsetDays === undefined ||
-          (typeof value.offsetDays === 'number' && Number.isInteger(value.offsetDays) && Math.abs(value.offsetDays) <= 36_600))
-      );
     case 'is-semantic':
       return keys(value, ['kind', 'semantic']) &&
         (value.semantic === 'calendar-node' || value.semantic === 'field' || value.semantic === 'search');
@@ -141,19 +162,8 @@ export function isTanaQueryPredicateAst(value: unknown): value is TanaQueryPredi
     case 'field-equals':
     case 'field-greater-than':
     case 'field-less-than': {
-      if (!keys(value, ['kind', 'fieldId', 'value']) || !id(value.fieldId) || !record(value.value) || !keys(value.value, ['type', 'value'])) return false;
-      const field = value.value;
-      switch (field.type) {
-        case 'checkbox': return typeof field.value === 'boolean';
-        case 'number': return typeof field.value === 'number' && Number.isFinite(field.value);
-        case 'options':
-        case 'from-supertag': return id(field.value);
-        case 'plain':
-        case 'email':
-        case 'url': return typeof field.value === 'string';
-        case 'date': return isTanaDateValue(field.value);
-        default: return false;
-      }
+      return keys(value, ['kind', 'fieldId', 'value']) && id(value.fieldId) &&
+        (isFieldValue(value.value) || isDateOperand(value.value));
     }
     case 'child-of':
     case 'descendant-of':
@@ -186,12 +196,67 @@ export function isTanaQueryAst(value: unknown): value is TanaQueryExpression {
 }
 
 export function parseTanaQuery(value: unknown): TanaQueryExpression {
-  if (!isTanaQueryAst(value)) throw new Error('Invalid Tana Query AST');
-  return value;
+  const migrated = migrateLegacyTanaQuery(value);
+  if (!migrated) throw new Error('Invalid Tana Query AST');
+  return migrated;
 }
 
 
 /** Persisted Search definitions reserve an AND root for stable editor mutations. */
 export function isTanaSearchQueryAst(value: unknown): value is Extract<TanaQueryExpression, { type: 'and' }> {
   return isTanaQueryAst(value) && value.type === 'and';
+}
+
+/**
+ * The previous public `date-overlaps` had no field identity and accidentally
+ * scanned unrelated date sources.  Read it once as an exact Date Object
+ * predicate; all writers and the strict AST validator emit only the new,
+ * field-scoped overlap operator.
+ */
+function isLegacyDateOverlapsPredicate(value: unknown): value is { date: string; kind: 'date-overlaps' } {
+  return record(value) && keys(value, ['kind', 'date']) && value.kind === 'date-overlaps' &&
+    typeof value.date === 'string' && isTanaDateValue(value.date);
+}
+
+function migrateExpression(value: unknown, ancestors: Set<object>, depth: number, count: { value: number }): TanaQueryExpression | undefined {
+  if (!record(value) || depth > 128 || ++count.value > 10_000 || ancestors.has(value)) return;
+  ancestors.add(value);
+  try {
+    if (value.type === 'predicate' && keys(value, ['type', 'predicate'])) {
+      if (isTanaQueryPredicateAst(value.predicate)) {
+        return { predicate: value.predicate, type: 'predicate' };
+      }
+      if (isLegacyDateOverlapsPredicate(value.predicate)) {
+        return { predicate: { date: value.predicate.date, kind: 'date-is' }, type: 'predicate' };
+      }
+      return;
+    }
+    if (value.type === 'not' && keys(value, ['type', 'child'])) {
+      const child = migrateExpression(value.child, ancestors, depth + 1, count);
+      return child ? { child, type: 'not' } : undefined;
+    }
+    if ((value.type === 'and' || value.type === 'or') && keys(value, ['type', 'children']) && Array.isArray(value.children)) {
+      const children: TanaQueryExpression[] = [];
+      for (const child of value.children) {
+        const migrated = migrateExpression(child, ancestors, depth + 1, count);
+        if (!migrated) return;
+        children.push(migrated);
+      }
+      return { children, type: value.type };
+    }
+    return;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+/** Explicit reader compatibility for persisted F07 pre-freeze overlap ASTs. */
+export function migrateLegacyTanaQuery(value: unknown): TanaQueryExpression | undefined {
+  return migrateExpression(value, new Set<object>(), 0, { value: 0 });
+}
+
+/** Persistence may read the one legacy predicate, while new writes stay strict. */
+export function isTanaSearchQueryAstOrLegacy(value: unknown): boolean {
+  const migrated = migrateLegacyTanaQuery(value);
+  return !!migrated && migrated.type === 'and';
 }

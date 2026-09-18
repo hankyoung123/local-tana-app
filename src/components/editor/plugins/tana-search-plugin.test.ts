@@ -199,7 +199,6 @@ test('Add result creates one canonical Daily child and only reports a match afte
               type: 'predicate',
             },
             { predicate: { kind: 'done-state', state: 'todo' }, type: 'predicate' },
-            { predicate: { date: '2026-05-01', kind: 'date-is' }, type: 'predicate' },
           ],
           type: 'and',
         },

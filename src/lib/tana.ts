@@ -7,6 +7,7 @@ export * from './tana/outliner';
 export * from './tana/persistence';
 export * from './tana/query';
 export * from './tana/title';
+export * from './tana/time';
 export * from './tana/types';
 export * from './tana/view-source';
 export * from './tana/view-projection';
