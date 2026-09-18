@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const triggerFixtureText = 'Plate 提供编辑器能力，Local Tana 只补充语义。';
 
-/** Wait for Slate's post-hydration click handoff, not only DOM focus. */
+/** Wait until Slate has applied a collapsed selection in the fixture text leaf. */
 async function waitForTriggerSelection(page: Page) {
   await expect.poll(() => page.evaluate((expectedText) => {
     const selection = window.getSelection();
@@ -19,13 +19,21 @@ async function openCombobox(page: Page) {
   await page.goto('/editor');
   const editor = page.locator('[data-slate-editor]');
   await expect(editor).toBeVisible();
-  await page.getByText(triggerFixtureText, { exact: true }).click();
+  const textLeaf = editor
+    .locator('[data-slate-string="true"]')
+    .filter({ hasText: triggerFixtureText });
+  await expect(textLeaf).toHaveText(triggerFixtureText);
+  await textLeaf.click();
   // Focus alone is not sufficient after hydration: Plate can focus its root
   // before Slate applies the click selection. The trigger wrapper depends on
   // that selection to inspect the preceding character.
   await expect(editor).toBeFocused();
   await waitForTriggerSelection(page);
   await page.keyboard.press('End');
+  // Keep the keyboard sequence on the hydrated Plate root. On slower CI
+  // machines End can briefly move focus while Slate applies the selection;
+  // emitting the trigger during that handoff sends it to the document body.
+  await expect(editor).toBeFocused();
   await waitForTriggerSelection(page);
   // Plate's trigger rule intentionally listens to keyboard input events rather
   // than a synthetic bulk text insertion.
