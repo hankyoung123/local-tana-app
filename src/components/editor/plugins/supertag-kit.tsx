@@ -5,7 +5,7 @@ import {
   withTriggerCombobox,
 } from '@platejs/combobox';
 import { RangeApi } from 'platejs';
-import { createPlatePlugin } from 'platejs/react';
+import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import {
   SupertagElement,
@@ -27,6 +27,19 @@ const SupertagInputPlugin = createPlatePlugin({
     isVoid: true,
   },
 }).withComponent(SupertagInputElement);
+
+function syncSupertagSelection(editor: PlateEditor) {
+  const domSelection = window.getSelection();
+  if (!domSelection || domSelection.rangeCount === 0) return;
+
+  const range = editor.api.toSlateRange(domSelection, {
+    exactMatch: false,
+    suppressThrow: true,
+  });
+  if (range && (!editor.selection || !RangeApi.equals(editor.selection, range))) {
+    editor.tf.select(range);
+  }
+}
 
 const SupertagPlugin = createPlatePlugin<
   typeof TANA_SUPERTAG_KEY,
@@ -58,16 +71,16 @@ const SupertagPlugin = createPlatePlugin<
         // selection at keydown time, before the official trigger transform
         // checks editor.selection. This only repairs Slate's selection; the
         // combobox plugin remains the sole owner of trigger insertion.
-        const domSelection = window.getSelection();
-        if (!domSelection || domSelection.rangeCount === 0) return;
+        syncSupertagSelection(editor);
+      },
+      onBeforeInput: ({ event }) => {
+        const nativeEvent = event.nativeEvent as InputEvent;
+        if (nativeEvent.inputType !== 'insertText' || nativeEvent.data !== '#') return;
 
-        const range = editor.api.toSlateRange(domSelection, {
-          exactMatch: false,
-          suppressThrow: true,
-        });
-        if (range && (!editor.selection || !RangeApi.equals(editor.selection, range))) {
-          editor.tf.select(range);
-        }
+        // BeforeInput is the last browser event before Plate calls the
+        // insertText transform. It is the most reliable point to reconcile a
+        // selection that Chromium has just committed after the separator.
+        syncSupertagSelection(editor);
       },
     },
   }))
