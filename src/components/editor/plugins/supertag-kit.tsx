@@ -4,8 +4,7 @@ import {
   type TriggerComboboxPluginOptions,
   withTriggerCombobox,
 } from '@platejs/combobox';
-import { RangeApi, type SlateEditor } from 'platejs';
-import { createPlatePlugin, type OverrideEditor } from 'platejs/react';
+import { createPlatePlugin } from 'platejs/react';
 
 import {
   SupertagElement,
@@ -17,51 +16,6 @@ import {
 } from '@/lib/tana';
 
 import { TanaSupertagPlugin } from './tana-supertag-plugin';
-
-/**
- * A browser key can arrive while Slate is still committing the preceding DOM
- * selection (notably after End on a hydrated editor). The trigger combobox
- * intentionally fails closed when `editor.selection` is absent, so reconcile
- * the existing DOM selection immediately before a `#` insert. This keeps the
- * Plate selection as the only writable selection state and leaves the
- * official trigger rule to decide whether the preceding character is valid.
- */
-function syncSupertagTriggerSelection(editor: SlateEditor) {
-  if (typeof window === 'undefined' || !editor.api.isFocused()) return;
-
-  const domSelection = window.getSelection();
-  if (!domSelection || domSelection.rangeCount === 0) return;
-
-  const range = editor.api.toSlateRange(domSelection, {
-    exactMatch: false,
-    suppressThrow: true,
-  });
-
-  if (range && (!editor.selection || !RangeApi.equals(editor.selection, range))) {
-    editor.tf.select(range);
-  }
-}
-
-const withSupertagTriggerCombobox: OverrideEditor = (context) => {
-  const triggerOverride = withTriggerCombobox(context as never);
-  const insertText = triggerOverride.transforms?.insertText;
-
-  if (!insertText) return triggerOverride;
-
-  return {
-    ...triggerOverride,
-    transforms: {
-      ...triggerOverride.transforms,
-      insertText(text, options) {
-        if (text === '#' && !options?.at) {
-          syncSupertagTriggerSelection(context.editor);
-        }
-
-        return insertText(text, options);
-      },
-    },
-  };
-};
 
 const SupertagInputPlugin = createPlatePlugin({
   editOnly: true,
@@ -93,7 +47,7 @@ const SupertagPlugin = createPlatePlugin<
     triggerPreviousCharPattern: /^$|^[\s"']$/,
   },
 })
-  .overrideEditor(withSupertagTriggerCombobox)
+  .overrideEditor((context) => withTriggerCombobox(context as never))
   .withComponent(SupertagElement);
 
 export const SupertagKit = [

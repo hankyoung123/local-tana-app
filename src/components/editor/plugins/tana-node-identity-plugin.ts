@@ -883,13 +883,16 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
     },
     insertText(text, options) {
       if (!containsTanaSoftLineBreak(text)) {
-        const result = insertText(text, options);
         // Explicit-at writes are used by canonical projection editors. Their
         // target timestamp is written by that adapter; touching the current
         // Plate selection here would incorrectly mutate a Reference
         // occurrence's metadata.
+        // Update Last modified before Slate moves its caret for the text
+        // operation. A post-insert setNodes operation can otherwise replace
+        // the just-updated DOM leaf between two fast keystrokes, which breaks
+        // the next inline-combobox trigger on slower browsers.
         if (!options?.at) touchTanaNode(editor);
-        return result;
+        return insertText(text, options);
       }
       if (options?.at) editor.tf.select(options.at);
       const blocks = editor.api.blocks();
