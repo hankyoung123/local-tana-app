@@ -41,6 +41,15 @@ function syncSupertagSelection(editor: PlateEditor) {
   }
 }
 
+function getDomPreviousCharacter(): string | undefined {
+  const selection = window.getSelection();
+  const node = selection?.anchorNode;
+  if (!selection?.isCollapsed || !node || node.nodeType !== Node.TEXT_NODE) return;
+
+  const text = node.textContent ?? '';
+  return selection.anchorOffset > 0 ? text[selection.anchorOffset - 1] : undefined;
+}
+
 const SupertagPlugin = createPlatePlugin<
   typeof TANA_SUPERTAG_KEY,
   TriggerComboboxPluginOptions
@@ -84,7 +93,47 @@ const SupertagPlugin = createPlatePlugin<
       },
     },
   }))
-  .overrideEditor((context) => withTriggerCombobox(context as never))
+  .overrideEditor((context) => {
+    const triggerOverride = withTriggerCombobox(context as never);
+    const triggerInsertText = triggerOverride.transforms?.insertText;
+
+    if (!triggerInsertText) return triggerOverride;
+
+    return {
+      ...triggerOverride,
+      transforms: {
+        ...triggerOverride.transforms,
+        insertText(text: string, options?: Record<string, unknown>) {
+          if (text === '#' && !options?.at) {
+            syncSupertagSelection(context.editor);
+
+            // Chromium can deliver beforeinput while its DOM caret already
+            // reflects the separator but before Slate has committed that
+            // selection. In that narrow case, use the same input element the
+            // official trigger transform creates. All later query editing and
+            // cancellation remains owned by InlineCombobox.
+            const previous = getDomPreviousCharacter();
+            if (
+              previous !== undefined &&
+              /^[\s"']$/.test(previous) &&
+              context.editor.selection
+            ) {
+              const inputNode = {
+                children: [{ text: '' }],
+                type: TANA_SUPERTAG_INPUT_KEY,
+              };
+              if (context.editor.meta.userId) {
+                (inputNode as { userId?: string }).userId = context.editor.meta.userId;
+              }
+              return context.editor.tf.insertNodes(inputNode, options);
+            }
+          }
+
+          return triggerInsertText(text, options);
+        },
+      },
+    };
+  })
   .withComponent(SupertagElement);
 
 export const SupertagKit = [
