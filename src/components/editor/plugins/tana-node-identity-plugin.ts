@@ -887,17 +887,17 @@ export const TanaNodeIdentityPlugin = createPlatePlugin({
         // target timestamp is written by that adapter; touching the current
         // Plate selection here would incorrectly mutate a Reference
         // occurrence's metadata.
-        // Update Last modified before Slate moves its caret for the text
-        // operation. A post-insert setNodes operation can otherwise replace
-        // the just-updated DOM leaf between two fast keystrokes, which breaks
-        // the next inline-combobox trigger on slower browsers.
-        // A separator-only keystroke is part of the trigger gesture. Updating
-        // the owning block for the space would schedule a second Slate
-        // document render between the separator and the following `#`, which
-        // can replace the focused text leaf before the trigger transform sees
-        // it. The next non-whitespace edit records the timestamp normally.
-        if (!options?.at && text.trim().length > 0) touchTanaNode(editor);
-        return insertText(text, options);
+        const result = insertText(text, options);
+        // The separator and trigger character are one inline gesture. Avoid
+        // metadata-only Slate updates while Plate's trigger plugin is
+        // replacing that text with its combobox input; the next real content
+        // edit records Last modified as usual.
+        const isInlineTriggerCharacter = text.length === 1 &&
+          (text === '#' || text === '@' || text === '>');
+        if (!options?.at && text.trim().length > 0 && !isInlineTriggerCharacter) {
+          touchTanaNode(editor);
+        }
+        return result;
       }
       if (options?.at) editor.tf.select(options.at);
       const blocks = editor.api.blocks();

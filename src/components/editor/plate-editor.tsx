@@ -119,12 +119,7 @@ function LoadedPlateEditor({
     [saveController, sqliteEnabled]
   );
   const noteDocumentChange = React.useCallback(() => {
-    // TanaIndex is a read-only projection. Keep rebuilding it at a lower
-    // priority so a Slate text event can finish its selection/trigger
-    // lifecycle before the workspace projection rerenders.
-    React.startTransition(() => {
-      setDocumentRevision((revision) => revision + 1);
-    });
+    setDocumentRevision((revision) => revision + 1);
   }, []);
 
   React.useEffect(() => {
