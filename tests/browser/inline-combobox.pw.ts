@@ -39,6 +39,27 @@ async function openCombobox(page: Page) {
   // than a synthetic bulk text insertion.
   await page.keyboard.type(' #');
   const input = page.locator('input[role="combobox"]');
+  if (await input.count() === 0) {
+    console.log('INLINE_TRIGGER_DEBUG', await page.evaluate(() => {
+      const selection = window.getSelection();
+      const slateEditor = document.querySelector('[data-slate-editor]');
+      return {
+        activeTag: document.activeElement?.tagName,
+        activeRole: document.activeElement?.getAttribute('role'),
+        activeText: document.activeElement?.textContent?.slice(0, 160),
+        inputCount: document.querySelectorAll('input[role="combobox"]').length,
+        editorText: slateEditor?.textContent?.slice(0, 220),
+        selection: selection && {
+          collapsed: selection.isCollapsed,
+          anchorType: selection.anchorNode?.nodeType,
+          anchorText: selection.anchorNode?.textContent,
+          anchorOffset: selection.anchorOffset,
+          focusText: selection.focusNode?.textContent,
+          focusOffset: selection.focusOffset,
+        },
+      };
+    }));
+  }
   await expect(input).toBeFocused();
   return input;
 }
