@@ -36,7 +36,7 @@ const SupertagInputPlugin = createPlatePlugin({
  * inserted.
  */
 function syncSupertagTriggerSelection(editor: PlateEditor) {
-  if (typeof window === 'undefined' || !editor.api.isFocused()) return;
+  if (typeof window === 'undefined') return;
 
   const domSelection = window.getSelection();
   if (!domSelection || domSelection.rangeCount === 0) return;
