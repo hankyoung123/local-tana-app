@@ -12,9 +12,17 @@ import { useEditorRef } from 'platejs/react';
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Button } from '@/components/ui/button';
-import { getTanaDayParts, getTanaWeekForDay, isTanaDay, type TanaDay } from '@/lib/tana/time';
+import {
+  getTanaDayParts,
+  getTanaMonthForDay,
+  getTanaToday,
+  getTanaWeekForDay,
+  getTanaYearForDay,
+  isTanaDay,
+  type TanaDay,
+} from '@/lib/tana/time';
 import { resolveTanaNodeTitle } from '@/lib/tana/title';
-import type { NodeId, TanaIndex, TanaNode } from '@/lib/tana/types';
+import type { NodeId, TanaBlockElement, TanaIndex, TanaNode } from '@/lib/tana/types';
 
 export type TanaDailyNotesGroup = {
   label: string;
@@ -67,13 +75,43 @@ export function TanaDailyNotesView({
 }) {
   const editor = useEditorRef();
   const [dayInput, setDayInput] = React.useState('');
+  const [weekInput, setWeekInput] = React.useState('');
+  const [monthInput, setMonthInput] = React.useState('');
+  const [yearInput, setYearInput] = React.useState('');
   const groups = getTanaDailyNotesGroups(index, node.id);
   const time = editor.getTransforms(TanaTimePlugin).time;
+  const workspaceId = index.systemNodeIds.get('workspace');
+  const workspace = workspaceId
+    ? (index.nodesById.get(workspaceId)?.node as TanaBlockElement | undefined)
+    : undefined;
+  const workspaceTimeZone = typeof workspace?.tanaWorkspaceTimeZone === 'string'
+    ? workspace.tanaWorkspaceTimeZone
+    : 'UTC';
+
+  const getCurrentDay = () => getTanaToday(workspaceTimeZone);
 
   const goToInputDay = () => {
     if (!dayInput) return;
 
     time.goToDay(dayInput);
+  };
+
+  const goToInputWeek = () => {
+    if (!weekInput) return;
+
+    time.goToWeek(weekInput);
+  };
+
+  const goToInputMonth = () => {
+    if (!monthInput) return;
+
+    time.goToMonth(monthInput);
+  };
+
+  const goToInputYear = () => {
+    if (!yearInput) return;
+
+    time.goToYear(yearInput);
   };
 
   return (
@@ -117,6 +155,88 @@ export function TanaDailyNotesView({
                 if (event.key === 'Enter') {
                   event.preventDefault();
                   goToInputDay();
+                }
+              }}
+            />
+          </label>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            aria-label="打开本周"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => time.goToWeek(getTanaWeekForDay(getCurrentDay()))}
+          >
+            本周
+          </Button>
+          <label className="flex h-8 items-center rounded border bg-white px-2">
+            <span className="sr-only">前往指定周</span>
+            <input
+              aria-label="前往指定周"
+              className="w-28 bg-transparent text-xs outline-none"
+              type="week"
+              value={weekInput}
+              onBlur={goToInputWeek}
+              onChange={(event) => setWeekInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  goToInputWeek();
+                }
+              }}
+            />
+          </label>
+          <Button
+            aria-label="打开本月"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => time.goToMonth(getTanaMonthForDay(getCurrentDay()))}
+          >
+            本月
+          </Button>
+          <label className="flex h-8 items-center rounded border bg-white px-2">
+            <span className="sr-only">前往指定月份</span>
+            <input
+              aria-label="前往指定月份"
+              className="w-28 bg-transparent text-xs outline-none"
+              type="month"
+              value={monthInput}
+              onBlur={goToInputMonth}
+              onChange={(event) => setMonthInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  goToInputMonth();
+                }
+              }}
+            />
+          </label>
+          <Button
+            aria-label="打开今年"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => time.goToYear(getTanaYearForDay(getCurrentDay()))}
+          >
+            今年
+          </Button>
+          <label className="flex h-8 items-center rounded border bg-white px-2">
+            <span className="sr-only">前往指定年份</span>
+            <input
+              aria-label="前往指定年份"
+              className="w-16 bg-transparent text-xs outline-none"
+              inputMode="numeric"
+              pattern="\\d{4}"
+              type="text"
+              value={yearInput}
+              onBlur={goToInputYear}
+              onChange={(event) => setYearInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  goToInputYear();
                 }
               }}
             />

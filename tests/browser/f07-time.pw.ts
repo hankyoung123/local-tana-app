@@ -48,3 +48,42 @@ test('Date Object input accepts tomorrow and yesterday without creating Node ref
   await page.getByRole('option', { name: /日期：\d{4}-\d{2}-\d{2}/ }).click();
   await expect(page.getByRole('button', { name: /打开日期 \d{4}-\d{2}-\d{2}/ })).toHaveCount(2);
 });
+
+test('Daily Notes opens canonical Day, Week, Month, and Year Nodes from its header', async ({ page }) => {
+  await page.goto('/editor');
+  const breadcrumbs = page.getByRole('navigation', { name: '路径导航' });
+
+  await page.getByRole('button', { name: 'Today', exact: true }).click();
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+
+  await page.getByLabel('前往指定日期').fill('2026-02-03');
+  await page.getByLabel('前往指定日期').press('Enter');
+  await expect(breadcrumbs).toContainText(/2026年2月3日/);
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByLabel('前往指定周').fill('2026-W09');
+  await page.getByLabel('前往指定周').press('Enter');
+  await expect(breadcrumbs).toContainText('2026-W09 周');
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByLabel('前往指定月份').fill('2026-02');
+  await page.getByLabel('前往指定月份').press('Enter');
+  await expect(breadcrumbs).toContainText('2026-02 月');
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByLabel('前往指定年份').fill('2026');
+  await page.getByLabel('前往指定年份').press('Enter');
+  await expect(breadcrumbs).toContainText('2026 年');
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByRole('button', { name: '打开本周', exact: true }).click();
+  await expect(breadcrumbs).toContainText(/\d{4}-W\d{2} 周/);
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByRole('button', { name: '打开本月', exact: true }).click();
+  await expect(breadcrumbs).toContainText(/\d{4}-\d{2} 月/);
+
+  await breadcrumbs.getByRole('button', { name: '每日笔记', exact: true }).click();
+  await page.getByRole('button', { name: '打开今年', exact: true }).click();
+  await expect(breadcrumbs).toContainText(/\d{4} 年/);
+});
