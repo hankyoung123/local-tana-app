@@ -4,7 +4,6 @@ import {
   type TriggerComboboxPluginOptions,
   withTriggerCombobox,
 } from '@platejs/combobox';
-import { RangeApi } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import {
@@ -29,14 +28,24 @@ const SupertagInputPlugin = createPlatePlugin({
 }).withComponent(SupertagInputElement);
 
 /**
- * Chromium can deliver the trigger key while Slate is still committing the
- * preceding DOM selection. Reconcile that selection at the transform boundary
- * so the official trigger plugin sees the same caret the user sees. The
- * trigger plugin remains the sole owner of whether and how the input node is
- * inserted.
+ * The Slate selection is authoritative once it addresses live document paths.
+ * Chromium's DOM range can trail a native space insertion by one input event;
+ * overwriting a valid Slate caret with that range makes Plate inspect the wrong
+ * preceding character and decline the trigger. Only recover from DOM when
+ * Slate has no usable selection. `withTriggerCombobox` remains the sole owner
+ * of trigger matching and input insertion.
  */
 function syncSupertagTriggerSelection(editor: PlateEditor) {
   if (typeof window === 'undefined') return;
+
+  const selection = editor.selection;
+  if (
+    selection &&
+    editor.api.hasPath(selection.anchor.path) &&
+    editor.api.hasPath(selection.focus.path)
+  ) {
+    return;
+  }
 
   const domSelection = window.getSelection();
   if (!domSelection || domSelection.rangeCount === 0) return;
@@ -46,9 +55,7 @@ function syncSupertagTriggerSelection(editor: PlateEditor) {
     suppressThrow: true,
   });
 
-  if (range && (!editor.selection || !RangeApi.equals(editor.selection, range))) {
-    editor.tf.select(range);
-  }
+  if (range) editor.tf.select(range);
 }
 
 const SupertagPlugin = createPlatePlugin<
