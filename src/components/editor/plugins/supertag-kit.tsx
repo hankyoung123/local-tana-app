@@ -58,6 +58,37 @@ function syncSupertagTriggerSelection(editor: PlateEditor) {
   if (range) editor.tf.select(range);
 }
 
+/**
+ * Slate React defers a native single-space insertion until `input`. A following
+ * `#` can therefore reach the trigger transform before Slate has advanced its
+ * caret. Commit the separator through Plate at `beforeinput` instead, after
+ * reconciling the live browser range. This is an input-transaction adapter;
+ * it neither parses `#` nor creates a combobox input.
+ */
+function insertSupertagSeparator(editor: PlateEditor, event: InputEvent) {
+  if (
+    event.data !== ' ' ||
+    event.inputType !== 'insertText' ||
+    event.isComposing
+  ) {
+    return false;
+  }
+
+  const domSelection = window.getSelection();
+  if (!domSelection || domSelection.rangeCount === 0) return false;
+
+  const range = editor.api.toSlateRange(domSelection, {
+    exactMatch: false,
+    suppressThrow: true,
+  });
+  if (!range) return false;
+
+  editor.tf.select(range);
+  event.preventDefault();
+  editor.tf.insertText(' ');
+  return true;
+}
+
 const SupertagPlugin = createPlatePlugin<
   typeof TANA_SUPERTAG_KEY,
   TriggerComboboxPluginOptions
@@ -78,6 +109,18 @@ const SupertagPlugin = createPlatePlugin<
     triggerPreviousCharPattern: /^$|^[\s"']$/,
   },
 })
+  .extend(({ editor }) => ({
+    handlers: {
+      onDOMBeforeInput: ({ event }) => {
+        const nativeEvent = (event as Event & {
+          nativeEvent?: InputEvent;
+        }).nativeEvent;
+        return nativeEvent
+          ? insertSupertagSeparator(editor, nativeEvent)
+          : false;
+      },
+    },
+  }))
   .overrideEditor((context) => {
     const triggerOverride = withTriggerCombobox(context as never);
     const triggerInsertText = triggerOverride.transforms?.insertText;
