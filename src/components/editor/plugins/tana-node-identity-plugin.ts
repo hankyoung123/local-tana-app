@@ -9,7 +9,7 @@ import {
   canUseSlashCommand,
 } from '@/lib/tana/node-behavior';
 import { ElementApi, KEYS, NodeApi, RangeApi, TextApi, nanoid } from 'platejs';
-import type { Path, TElement, TText } from 'platejs';
+import type { Descendant, Path, TElement, TText } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
@@ -722,7 +722,7 @@ export function insertTanaSibling(editor: PlateEditor, nodeId: string, before = 
 export function insertTanaChild(
   editor: PlateEditor,
   parentId: string,
-  text = '',
+  content: string | readonly Descendant[] = '',
   options: { select?: boolean } = {},
 ) {
   const entry = editor.api.node<TanaBlockElement>({ at: [], id: parentId });
@@ -730,11 +730,12 @@ export function insertTanaChild(
   const [parent, parentPath] = entry;
   const end = getTanaNodeDescendantPaths(editor.children, parentPath).at(-1) ?? parentPath;
   const id = nanoid();
+  const children = typeof content === 'string' ? [{ text: content }] : [...structuredClone(content)];
   editor.tf.withNewBatch(() => editor.tf.insertNodes({
     type: KEYS.p,
     id,
     indent: (typeof parent.indent === 'number' ? parent.indent : 0) + 1,
-    children: [{ text }],
+    children,
   }, { at: [end[0] + 1], select: options.select ?? true }));
   return editor.api.node({ at: [], id }) ? id : undefined;
 }

@@ -4,6 +4,7 @@ import type {
   TanaSidebarTopItem,
   TanaWorkspaceUi,
 } from "./types";
+import { normalizeTanaCaptureDraft } from "./capture";
 
 export const TANA_SIDEBAR_DEFAULT_WIDTH = 224;
 export const TANA_SIDEBAR_MIN_WIDTH = 176;
@@ -64,7 +65,7 @@ export function normalizeTanaWorkspaceUi(value: unknown): TanaWorkspaceUi {
         topItems: [...DEFAULT_TANA_SIDEBAR_TOP_ITEMS],
         pinnedNodeIds: [],
       },
-      quickAddDraft: "",
+      quickAddDraft: { content: [{ text: "" }] },
     };
   }
   const source = value as Record<string, unknown>;
@@ -84,8 +85,7 @@ export function normalizeTanaWorkspaceUi(value: unknown): TanaWorkspaceUi {
         (id): id is NodeId => typeof id === "string" && id.length > 0,
       )
     : [];
-  const quickAddDraft =
-    typeof source.quickAddDraft === "string" ? source.quickAddDraft : "";
+  const quickAddDraft = normalizeTanaCaptureDraft(source.quickAddDraft);
   return {
     sidebar: {
       mode,

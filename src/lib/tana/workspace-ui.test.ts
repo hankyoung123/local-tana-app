@@ -22,7 +22,7 @@ describe('workspace UI metadata', () => {
     assert.equal(ui.sidebar?.mode, 'mini');
     assert.deepEqual(ui.sidebar?.topItems, ['search', 'today']);
     assert.deepEqual(ui.sidebar?.pinnedNodeIds, ['node-a', 'missing']);
-    assert.equal(ui.quickAddDraft, 'draft');
+    assert.deepEqual(ui.quickAddDraft, { content: [{ text: 'draft' }] });
     assert.equal('children' in ui, false);
   });
 

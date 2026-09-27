@@ -49,6 +49,9 @@ import {
   isTanaNodeElement,
   searchTanaNodes,
   normalizeTanaWorkspaceUi,
+  captureDraftHasText,
+  normalizeTanaCaptureDraft,
+  type TanaCaptureDraft,
   type TanaWorkspaceUi,
   type TanaNode,
 } from "@/lib/tana";
@@ -138,8 +141,10 @@ function TanaWorkspaceContent({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [quickAddOpen, setQuickAddOpen] = React.useState(false);
-  const [quickAddDraft, setQuickAddDraft] = React.useState("");
-  const quickAddDraftRef = React.useRef("");
+  const [quickAddDraft, setQuickAddDraft] = React.useState<TanaCaptureDraft>(() =>
+    normalizeTanaCaptureDraft(""),
+  );
+  const quickAddDraftRef = React.useRef<TanaCaptureDraft>(normalizeTanaCaptureDraft(""));
   const workspaceId = index.systemNodeIds.get("workspace");
   const workspacePath = workspaceId
     ? index.nodesById.get(workspaceId)?.path
@@ -157,9 +162,13 @@ function TanaWorkspaceContent({
   );
 
   const openQuickAdd = React.useCallback(() => {
-    const restored =
-      quickAddDraftRef.current || workspaceUi.quickAddDraft || "";
+    const restored = quickAddDraftRef.current.content.some(
+      (node) => "text" in node && typeof node.text === "string" && node.text.length > 0,
+    )
+      ? quickAddDraftRef.current
+      : normalizeTanaCaptureDraft(workspaceUi.quickAddDraft);
     setQuickAddDraft(restored);
+    quickAddDraftRef.current = restored;
     setQuickAddOpen(true);
   }, [workspaceUi.quickAddDraft]);
 
@@ -168,12 +177,13 @@ function TanaWorkspaceContent({
   }, [editor]);
 
   const submitQuickAdd = React.useCallback(() => {
-    const nodeId = editor
-      .getTransforms(TanaCapturePlugin)
-      .capture.commit(quickAddDraft, { zoom: false });
+    if (!captureDraftHasText(quickAddDraft)) return;
+    const nodeId = editor.getTransforms(TanaCapturePlugin).capture.commit(quickAddDraft, { zoom: false });
     if (!nodeId) return;
-    quickAddDraftRef.current = "";
-    updateWorkspaceUi({ ...workspaceUi, quickAddDraft: "" });
+    const blank = normalizeTanaCaptureDraft("");
+    quickAddDraftRef.current = blank;
+    updateWorkspaceUi({ ...workspaceUi, quickAddDraft: blank });
+    setQuickAddDraft(blank);
     setQuickAddOpen(false);
   }, [editor, quickAddDraft, updateWorkspaceUi, workspaceUi]);
   const focusedNodeId =
@@ -448,16 +458,18 @@ function TanaWorkspaceContent({
               </DialogDescription>
               <TanaCaptureComposer
                 ariaLabel="Quick Add 草稿"
-                value={quickAddDraft}
-                onChange={(value) => {
-                  setQuickAddDraft(value);
-                  quickAddDraftRef.current = value;
+                document={editor.children}
+                index={index}
+                draft={quickAddDraft}
+                onChange={(draft) => {
+                  setQuickAddDraft(draft);
+                  quickAddDraftRef.current = draft;
                   updateWorkspaceUi({
                     ...workspaceUi,
-                    quickAddDraft: value,
+                    quickAddDraft: draft,
                   });
                 }}
-                onSubmit={submitQuickAdd}
+                onSubmit={() => submitQuickAdd()}
                 onCancel={() => setQuickAddOpen(false)}
               />
             </DialogContent>

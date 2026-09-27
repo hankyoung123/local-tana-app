@@ -8,10 +8,7 @@ test("Sidebar cycles through full, mini, hidden and recovers", async ({
   await expect(sidebar).toBeVisible();
   await page.getByRole("button", { name: "收起导航" }).click();
   await expect(page.getByTestId("tana-sidebar-mini")).toBeVisible();
-  await page.getByRole("button", { name: "展开导航" }).click();
-  await expect(sidebar).toBeVisible();
-  await page.getByRole("button", { name: "侧栏设置" }).click();
-  await page.getByRole("button", { name: "隐藏", exact: true }).click();
+  await page.getByRole("button", { name: "隐藏导航" }).click();
   await expect(page.getByTestId("tana-sidebar")).toHaveCount(0);
   await page.getByRole("button", { name: "恢复侧栏" }).click();
   await expect(page.getByTestId("tana-sidebar")).toBeVisible();
@@ -38,6 +35,15 @@ test("Sidebar resize and top item visibility are canonical preferences", async (
   await expect(page.getByTestId("sidebar-today")).toHaveCount(0);
   await page.getByRole("button", { name: "显示 Today" }).click();
   await expect(page.getByTestId("sidebar-today")).toBeVisible();
+});
+
+test("displayed top items expose context-menu hide and reorder actions", async ({ page }) => {
+  await page.goto("/editor");
+  await page.getByTestId("sidebar-top-item-today").click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "隐藏", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "下移", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "隐藏", exact: true }).click();
+  await expect(page.getByTestId("sidebar-today")).toHaveCount(0);
 });
 
 test("Create New creates a focused ordinary Today child", async ({ page }) => {
@@ -71,13 +77,13 @@ test("Quick Add preserves a draft on Escape and commits without navigating from 
     page.getByRole("navigation", { name: "路径导航" }),
   ).toContainText("Plate 提供编辑器能力");
   await page.keyboard.press("ControlOrMeta+e");
-  const input = page.getByRole("textbox", { name: "Quick Add 草稿" });
+  const input = page.locator('[data-slate-editor][aria-label="Quick Add 草稿"]');
   await expect(input).toBeVisible();
   await input.fill("F08 quick capture");
   await page.keyboard.press("Escape");
   await expect(input).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+e");
-  await expect(input).toHaveValue("F08 quick capture");
+  await expect(input).toContainText("F08 quick capture");
   await page.getByRole("button", { name: "添加", exact: true }).click();
   await expect(input).toHaveCount(0);
   await expect(
@@ -156,6 +162,9 @@ test("browser clipper surface stays a transient composer without desktop shortcu
     page.getByRole("textbox", { name: "Global Capture 草稿" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "添加", exact: true }),
+    page.getByRole("button", { name: "保存", exact: true }),
   ).toBeDisabled();
+  const editor = page.locator('[data-slate-editor][aria-label="Global Capture 草稿"]');
+  await editor.fill("#");
+  await expect(page.locator('input[role="combobox"]')).toHaveAttribute("aria-expanded", "true");
 });

@@ -21,6 +21,9 @@ import {
   resetPlateDocument,
   usesSQLitePersistence,
   parseTanaCapturePayload,
+  parseLegacyTanaCapturePayload,
+  buildTanaIndex,
+  type TanaCaptureAck,
 } from "@/lib/tana";
 import { createCloseGuard } from "@/lib/tana/close-guard";
 import { initialDocument } from "@/lib/tana/initial-document";
@@ -143,32 +146,51 @@ function LoadedPlateEditor({ initialValue }: { initialValue: Value }) {
     if (!isTauri()) return;
     let disposed = false;
     let stopListening: (() => void) | undefined;
+    let stopContextRequest: (() => void) | undefined;
+    const acknowledgements = new Map<string, TanaCaptureAck>();
     void import("@tauri-apps/api/event")
       .then(async ({ emitTo, listen }) => {
         const stop = await listen<unknown>(
           "f08://capture-submit",
           async (event) => {
-            const payload = parseTanaCapturePayload(event.payload);
+            const index = buildTanaIndex(editor.children);
+            const payload =
+              parseTanaCapturePayload(event.payload, index) ??
+              parseLegacyTanaCapturePayload(event.payload);
+            if (payload && acknowledgements.has(payload.requestId)) {
+              await emitTo("clipper", "f08://capture-ack", acknowledgements.get(payload.requestId));
+              return;
+            }
             const nodeId = payload
-              ? editor.getTransforms(TanaCapturePlugin).capture.commit(payload.text, {
+              ? editor.getTransforms(TanaCapturePlugin).capture.commit(payload, {
                   zoom: false,
                   select: false,
                 })
               : undefined;
-            await emitTo("clipper", "f08://capture-ack", {
+            const acknowledgement: TanaCaptureAck = {
               ok: typeof nodeId === "string",
+              requestId: payload?.requestId,
               nodeId,
               error: nodeId ? undefined : "capture commit failed",
-            });
+            };
+            if (payload) acknowledgements.set(payload.requestId, acknowledgement);
+            await emitTo("clipper", "f08://capture-ack", acknowledgement);
           },
         );
+        const contextRequest = await listen("f08://capture-context-request", async () => {
+          await emitTo("clipper", "f08://capture-context", { document: editor.children });
+        });
         if (disposed) stop();
-        else stopListening = stop;
+        else {
+          stopListening = stop;
+          stopContextRequest = contextRequest;
+        }
       })
       .catch(() => undefined);
     return () => {
       disposed = true;
       stopListening?.();
+      stopContextRequest?.();
     };
   }, [editor]);
 

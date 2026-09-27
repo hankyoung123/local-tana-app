@@ -15,6 +15,7 @@ import { isTanaSearchQueryAstOrLegacy } from './query-ast';
 import { isTanaSearchHost } from './search-host';
 import { getTanaWeekForDay, isTanaDateValue, isTanaDay, isTanaTime } from './time';
 import { containsTanaSoftLineBreak } from './single-line';
+import { isTanaCaptureDraft } from './capture';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
 import {
@@ -91,7 +92,9 @@ function isWorkspaceUi(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const source = value as Record<string, unknown>;
   if (!Object.keys(source).every((key) => key === 'sidebar' || key === 'quickAddDraft')) return false;
-  if (source.quickAddDraft !== undefined && typeof source.quickAddDraft !== 'string') return false;
+  if (source.quickAddDraft !== undefined &&
+    typeof source.quickAddDraft !== 'string' &&
+    !isTanaCaptureDraft(source.quickAddDraft)) return false;
   if (source.sidebar === undefined) return true;
   if (!source.sidebar || typeof source.sidebar !== 'object' || Array.isArray(source.sidebar)) return false;
   const sidebar = source.sidebar as Record<string, unknown>;

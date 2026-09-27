@@ -57,6 +57,13 @@ type TanaSidebarProps = {
   onUpdateUi: (ui: TanaWorkspaceUi) => void;
   onModeChange?: (mode: TanaSidebarMode) => void;
 };
+
+export function cycleTanaSidebarMode(mode: TanaSidebarMode): TanaSidebarMode {
+  if (mode === "full") return "mini";
+  if (mode === "mini") return "hidden";
+  return "full";
+}
+
 const labels: Record<TanaSidebarTopItem, string> = {
   today: "Today",
   "create-new": "Create New",
@@ -94,27 +101,50 @@ export function TanaSidebar({
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [recentsOpen, setRecentsOpen] = React.useState(false);
   const resizing = React.useRef(false);
+  const resizeWidthRef = React.useRef<number | null>(null);
+  const sidebarRef = React.useRef<HTMLElement | null>(null);
   const updateUi = (patch: Parameters<typeof mergeTanaWorkspaceUi>[1]) =>
     onUpdateUi(mergeTanaWorkspaceUi(workspaceUi, patch));
   const setMode = (next: TanaSidebarMode) => {
     updateUi({ sidebar: { mode: next } });
     onModeChange?.(next);
   };
+  const cycleMode = () => setMode(cycleTanaSidebarMode(mode));
+  const resizeFromPointer = (clientX: number) => {
+    const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
+    const next = clampTanaSidebarWidth(clientX - left);
+    resizeWidthRef.current = next;
+    setResizeWidth(next);
+  };
+  const commitResize = (override?: number) => {
+    if (!resizing.current) return;
+    resizing.current = false;
+    const next = override ?? resizeWidthRef.current;
+    resizeWidthRef.current = null;
+    setResizeWidth(null);
+    if (typeof next === "number") updateUi({ sidebar: { width: next } });
+  };
+  const cancelResize = () => {
+    if (!resizing.current) return;
+    resizing.current = false;
+    resizeWidthRef.current = null;
+    setResizeWidth(null);
+  };
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== "full") return;
     resizing.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
+    resizeFromPointer(event.clientX);
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (resizing.current) setResizeWidth(clampTanaSidebarWidth(event.clientX));
+    if (resizing.current) resizeFromPointer(event.clientX);
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!resizing.current) return;
-    resizing.current = false;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    const next = clampTanaSidebarWidth(event.clientX);
-    setResizeWidth(null);
-    updateUi({ sidebar: { width: next } });
+    resizeFromPointer(event.clientX);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    commitResize(resizeWidthRef.current ?? undefined);
   };
   if (mode === "hidden") return null;
   if (mode === "mini")
@@ -124,7 +154,7 @@ export function TanaSidebar({
         className="flex h-full w-10 shrink-0 flex-col items-center border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)] pt-3"
         data-testid="tana-sidebar-mini"
       >
-        <SidebarIconButton label="展开导航" onClick={() => setMode("full")}>
+        <SidebarIconButton label="隐藏导航" onClick={cycleMode}>
           <Settings2Icon className="size-4" />
         </SidebarIconButton>
         <div className="mt-3 flex flex-col gap-1">
@@ -267,7 +297,7 @@ export function TanaSidebar({
           Recents <span>{recentsOpen ? "−" : "+"}</span>
         </button>
         {recentsOpen &&
-          recents.slice(0, 12).map((node) => (
+          recents.map((node) => (
             <SidebarButton
               key={node.id}
               onClick={() =>
@@ -332,11 +362,44 @@ export function TanaSidebar({
       ];
     });
   };
+  const reorderTopItem = (item: TanaSidebarTopItem, direction: -1 | 1) => {
+    const itemIndex = orderedItems.indexOf(item);
+    const nextIndex = itemIndex + direction;
+    if (itemIndex < 0 || nextIndex < 0 || nextIndex >= orderedItems.length) return;
+    const next = [...orderedItems];
+    [next[itemIndex], next[nextIndex]] = [next[nextIndex]!, next[itemIndex]!];
+    updateUi({ sidebar: { topItems: next } });
+  };
+  const hideTopItem = (item: TanaSidebarTopItem) =>
+    updateUi({ sidebar: { topItems: orderedItems.filter((candidate) => candidate !== item) } });
+  const renderTopItemMenu = (item: TanaSidebarTopItem) => (
+    <ContextMenu key={item}>
+      <ContextMenuTrigger asChild>
+        <div data-testid={`sidebar-top-item-${item}`}>{renderTopItem(item)}</div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => hideTopItem(item)}>隐藏</ContextMenuItem>
+        <ContextMenuItem
+          disabled={orderedItems.indexOf(item) === 0}
+          onSelect={() => reorderTopItem(item, -1)}
+        >
+          上移
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={orderedItems.indexOf(item) === orderedItems.length - 1}
+          onSelect={() => reorderTopItem(item, 1)}
+        >
+          下移
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
   return (
     <aside
       aria-label="侧栏"
       className="relative flex h-full shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]"
       data-testid="tana-sidebar"
+      ref={sidebarRef}
       style={{ width: resizeWidth ?? width }}
     >
       <div className="flex h-12 items-center justify-between px-4">
@@ -359,7 +422,7 @@ export function TanaSidebar({
             aria-label="收起导航"
             className="grid size-7 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
             type="button"
-            onClick={() => setMode("mini")}
+            onClick={cycleMode}
           >
             <ChevronDownIcon className="size-3.5" />
           </button>
@@ -537,11 +600,11 @@ export function TanaSidebar({
         <nav aria-label="主导航" className="space-y-0.5">
           {visible
             .filter((item) => item !== "supertags" && item !== "recents")
-            .map(renderTopItem)}
+            .map(renderTopItemMenu)}
         </nav>
         {visible
           .filter((item) => item === "supertags" || item === "recents")
-          .map(renderTopItem)}
+          .map(renderTopItemMenu)}
         <SidebarSection title="Pinned">
           <div className="space-y-0.5">
             {pinned.map(({ target, results }) => (
@@ -681,6 +744,8 @@ export function TanaSidebar({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={cancelResize}
+        onLostPointerCapture={() => commitResize()}
       />
     </aside>
   );

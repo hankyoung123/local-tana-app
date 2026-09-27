@@ -20,11 +20,12 @@ for (const width of [760, 1000, 1440]) {
     await page.getByRole('button', { name: '关闭检查器' }).click();
     await expect(inspector).toHaveCount(0);
     await page.getByRole('button', { name: '收起导航' }).click();
-    const collapsed = page.getByRole('button', { name: '展开导航' }).locator('xpath=ancestor::aside');
+    const collapsed = page.getByTestId('tana-sidebar-mini');
     expect((await collapsed.boundingBox())!.width).toBe(40);
     await page.setViewportSize({ width: width + 50, height: 850 });
     expect((await collapsed.boundingBox())!.width).toBe(40);
-    await page.getByRole('button', { name: '展开导航' }).click();
+    await page.getByRole('button', { name: '隐藏导航' }).click();
+    await page.getByRole('button', { name: '恢复侧栏' }).click();
     await expect(page.getByRole('button', { name: '收起导航' })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });

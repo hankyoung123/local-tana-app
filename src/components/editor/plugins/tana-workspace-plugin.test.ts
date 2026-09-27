@@ -63,16 +63,16 @@ test("workspace presentation metadata is written to the canonical Workspace Node
     plugins: EditorKit,
     value,
   });
-  assert.equal(
+  assert.deepEqual(
     editor
       .getTransforms(TanaWorkspacePlugin)
-      .workspace.setUi({ quickAddDraft: "saved" }),
+      .workspace.setUi({ quickAddDraft: { content: [{ text: "saved" }] } }),
     true,
   );
-  assert.equal(
-    (editor.children[0] as { tanaWorkspaceUi?: { quickAddDraft?: string } })
+  assert.deepEqual(
+    (editor.children[0] as { tanaWorkspaceUi?: { quickAddDraft?: unknown } })
       .tanaWorkspaceUi?.quickAddDraft,
-    "saved",
+    { content: [{ text: "saved" }] },
   );
 });
 

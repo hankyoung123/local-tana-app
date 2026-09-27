@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { initialDocument } from "./initial-document";
 import { isValidTanaDocument } from "./persistence";
 import type { TanaBlockElement } from "./types";
+import { normalizeTanaCaptureDraft } from "./capture";
 
 function copyDocument() {
   return JSON.parse(JSON.stringify(initialDocument)) as typeof initialDocument;
@@ -22,7 +23,7 @@ describe("workspace UI persistence boundary", () => {
         topItems: [],
         pinnedNodeIds: ["restored-later"],
       },
-      quickAddDraft: "keep me",
+      quickAddDraft: normalizeTanaCaptureDraft("keep me"),
     };
     assert.equal(isValidTanaDocument(withUi), true);
     assert.deepEqual(workspace.tanaWorkspaceUi?.sidebar?.pinnedNodeIds, [

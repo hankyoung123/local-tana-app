@@ -1,4 +1,4 @@
-import type { Path, TElement, Value } from "platejs";
+import type { Descendant, Path, TElement, Value } from "platejs";
 
 import type { TanaNodeSemanticType } from "./node-semantic";
 
@@ -36,6 +36,13 @@ export type TanaSidebarTopItem =
   | "supertags"
   | "recents";
 
+export type TanaCaptureField = { fieldId: NodeId; value?: FieldValue };
+export type TanaCaptureDraft = {
+  content: readonly Descendant[];
+  fields?: readonly TanaCaptureField[];
+  supertagIds?: readonly NodeId[];
+};
+
 /** Workspace-owned presentation preferences. Content and navigation remain
  * derived from the canonical Plate document; this stores only user chrome. */
 export type TanaWorkspaceUi = {
@@ -45,7 +52,7 @@ export type TanaWorkspaceUi = {
     topItems?: readonly TanaSidebarTopItem[];
     pinnedNodeIds?: readonly NodeId[];
   };
-  quickAddDraft?: string;
+  quickAddDraft?: TanaCaptureDraft;
 };
 
 export type FieldVisibilityPolicy =
