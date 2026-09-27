@@ -1,16 +1,18 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 
-import type { Value } from 'platejs';
+import type { Value } from "platejs";
+import { isTauri } from "@tauri-apps/api/core";
 
-import { Plate, usePlateEditor } from 'platejs/react';
+import { Plate, usePlateEditor } from "platejs/react";
 
-import { EditorKit } from '@/components/editor/editor-kit';
+import { EditorKit } from "@/components/editor/editor-kit";
+import { TanaCapturePlugin } from "@/components/editor/plugins/tana-capture-plugin";
 import {
   type PersistenceStatus,
   TanaWorkspace,
-} from '@/components/tana/tana-workspace';
+} from "@/components/tana/tana-workspace";
 import {
   createDocumentSaveController,
   isTanaNodeElement,
@@ -18,9 +20,10 @@ import {
   savePlateDocument,
   resetPlateDocument,
   usesSQLitePersistence,
-} from '@/lib/tana';
-import { createCloseGuard } from '@/lib/tana/close-guard';
-import { initialDocument } from '@/lib/tana/initial-document';
+  parseTanaCapturePayload,
+} from "@/lib/tana";
+import { createCloseGuard } from "@/lib/tana/close-guard";
+import { initialDocument } from "@/lib/tana/initial-document";
 
 export function PlateEditor() {
   const [loadedDocument, setLoadedDocument] = React.useState<Value>();
@@ -35,7 +38,8 @@ export function PlateEditor() {
         if (!cancelled) setLoadedDocument(document);
       })
       .catch((error: unknown) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
+        if (!cancelled)
+          setLoadError(error instanceof Error ? error.message : String(error));
       });
 
     return () => {
@@ -44,23 +48,39 @@ export function PlateEditor() {
   }, [attempt]);
 
   if (loadError) {
-    return <main className="grid h-dvh place-content-center gap-4 p-8" role="alert">
-      <h1 className="text-xl font-semibold">工作区加载失败</h1>
-      <p>{loadError}</p>
-      <p>工作区未打开。可重试，或确认清空当前工作区后重新开始。</p>
-      <button onClick={() => { setLoadError(undefined); setAttempt((value) => value + 1); }}>重试</button>
-      <button onClick={async () => {
-        if (!window.confirm('永久清空当前工作区并重置？此操作无法撤销。')) return;
-        setLoadError(undefined);
-        try {
-          await resetPlateDocument(initialDocument);
-          setLoadError(undefined);
-          setAttempt((value) => value + 1);
-        } catch (error) {
-          setLoadError(error instanceof Error ? error.message : String(error));
-        }
-      }}>清空并重置工作区…</button>
-    </main>;
+    return (
+      <main className="grid h-dvh place-content-center gap-4 p-8" role="alert">
+        <h1 className="text-xl font-semibold">工作区加载失败</h1>
+        <p>{loadError}</p>
+        <p>工作区未打开。可重试，或确认清空当前工作区后重新开始。</p>
+        <button
+          onClick={() => {
+            setLoadError(undefined);
+            setAttempt((value) => value + 1);
+          }}
+        >
+          重试
+        </button>
+        <button
+          onClick={async () => {
+            if (!window.confirm("永久清空当前工作区并重置？此操作无法撤销。"))
+              return;
+            setLoadError(undefined);
+            try {
+              await resetPlateDocument(initialDocument);
+              setLoadError(undefined);
+              setAttempt((value) => value + 1);
+            } catch (error) {
+              setLoadError(
+                error instanceof Error ? error.message : String(error),
+              );
+            }
+          }}
+        >
+          清空并重置工作区…
+        </button>
+      </main>
+    );
   }
 
   if (!loadedDocument) {
@@ -71,22 +91,14 @@ export function PlateEditor() {
     );
   }
 
-  return (
-    <LoadedPlateEditor
-      initialValue={loadedDocument}
-    />
-  );
+  return <LoadedPlateEditor initialValue={loadedDocument} />;
 }
 
-function LoadedPlateEditor({
-  initialValue,
-}: {
-  initialValue: Value;
-}) {
+function LoadedPlateEditor({ initialValue }: { initialValue: Value }) {
   const editor = usePlateEditor({
     nodeId: {
       filter: isTanaNodeElement,
-      initialValueIds: 'always',
+      initialValueIds: "always",
     },
     plugins: EditorKit,
     value: initialValue,
@@ -94,7 +106,7 @@ function LoadedPlateEditor({
   const sqliteEnabled = usesSQLitePersistence();
   const [persistenceStatus, setPersistenceStatus] =
     React.useState<PersistenceStatus>(
-      sqliteEnabled ? 'saved' : 'browser-preview'
+      sqliteEnabled ? "saved" : "browser-preview",
     );
   // This is only a Plate change notification for rebuilding read-only Tana
   // projections. It stores no document data or View result state.
@@ -106,7 +118,7 @@ function LoadedPlateEditor({
         onStatus: setPersistenceStatus,
         write: savePlateDocument,
       }),
-    []
+    [],
   );
 
   const scheduleSave = React.useCallback(
@@ -116,7 +128,7 @@ function LoadedPlateEditor({
       saveVersion.current += 1;
       saveController.schedule(value);
     },
-    [saveController, sqliteEnabled]
+    [saveController, sqliteEnabled],
   );
   const noteDocumentChange = React.useCallback(() => {
     // TanaIndex is a read-only projection. Keep rebuilding it at a lower
@@ -128,33 +140,70 @@ function LoadedPlateEditor({
   }, []);
 
   React.useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stopListening: (() => void) | undefined;
+    void import("@tauri-apps/api/event")
+      .then(async ({ emitTo, listen }) => {
+        const stop = await listen<unknown>(
+          "f08://capture-submit",
+          async (event) => {
+            const payload = parseTanaCapturePayload(event.payload);
+            const nodeId = payload
+              ? editor.getTransforms(TanaCapturePlugin).capture.commit(payload.text, {
+                  zoom: false,
+                  select: false,
+                })
+              : undefined;
+            await emitTo("clipper", "f08://capture-ack", {
+              ok: typeof nodeId === "string",
+              nodeId,
+              error: nodeId ? undefined : "capture commit failed",
+            });
+          },
+        );
+        if (disposed) stop();
+        else stopListening = stop;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      stopListening?.();
+    };
+  }, [editor]);
+
+  React.useEffect(() => {
     if (!sqliteEnabled) return;
 
     const flush = () => {
-      void saveController.flush().catch(() => setPersistenceStatus('error'));
+      void saveController.flush().catch(() => setPersistenceStatus("error"));
     };
 
-    window.addEventListener('pagehide', flush);
+    window.addEventListener("pagehide", flush);
 
     let disposed = false;
     let unlisten: (() => void) | undefined;
 
-    void import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
-      const appWindow = getCurrentWindow();
-      const stopListening = await appWindow.onCloseRequested(createCloseGuard({
-        flush: saveController.flush,
-        getVersion: () => saveVersion.current,
-        close: () => appWindow.destroy(),
-        onError: () => setPersistenceStatus('error'),
-      }));
+    void import("@tauri-apps/api/window")
+      .then(async ({ getCurrentWindow }) => {
+        const appWindow = getCurrentWindow();
+        const stopListening = await appWindow.onCloseRequested(
+          createCloseGuard({
+            flush: saveController.flush,
+            getVersion: () => saveVersion.current,
+            close: () => appWindow.destroy(),
+            onError: () => setPersistenceStatus("error"),
+          }),
+        );
 
-      if (disposed) stopListening();
-      else unlisten = stopListening;
-    }).catch(() => setPersistenceStatus('error'));
+        if (disposed) stopListening();
+        else unlisten = stopListening;
+      })
+      .catch(() => setPersistenceStatus("error"));
 
     return () => {
       disposed = true;
-      window.removeEventListener('pagehide', flush);
+      window.removeEventListener("pagehide", flush);
       unlisten?.();
       flush();
     };
@@ -169,7 +218,10 @@ function LoadedPlateEditor({
         scheduleSave(value);
       }}
     >
-      <TanaWorkspace documentRevision={documentRevision} persistenceStatus={persistenceStatus} />
+      <TanaWorkspace
+        documentRevision={documentRevision}
+        persistenceStatus={persistenceStatus}
+      />
     </Plate>
   );
 }

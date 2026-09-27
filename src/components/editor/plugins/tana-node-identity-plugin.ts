@@ -39,6 +39,7 @@ const TANA_SEMANTIC_KEYS = [
   'tanaSupertagDefinition',
   'tanaSystemNode',
   'tanaWorkspaceTimeZone',
+  'tanaWorkspaceUi',
   'tanaTime',
   'tanaCreatedAt',
   'tanaLastEditedAt',
@@ -715,6 +716,27 @@ export function insertTanaSibling(editor: PlateEditor, nodeId: string, before = 
     children: [{ text: '' }],
   }, { at: before ? path : [end[0] + 1], select: true }));
   return true;
+}
+
+/** Insert one ordinary canonical child at the end of a real Plate subtree. */
+export function insertTanaChild(
+  editor: PlateEditor,
+  parentId: string,
+  text = '',
+  options: { select?: boolean } = {},
+) {
+  const entry = editor.api.node<TanaBlockElement>({ at: [], id: parentId });
+  if (!entry || !isTanaNodeElement(entry) || !canOwnTanaCanonicalChildren(entry[0])) return;
+  const [parent, parentPath] = entry;
+  const end = getTanaNodeDescendantPaths(editor.children, parentPath).at(-1) ?? parentPath;
+  const id = nanoid();
+  editor.tf.withNewBatch(() => editor.tf.insertNodes({
+    type: KEYS.p,
+    id,
+    indent: (typeof parent.indent === 'number' ? parent.indent : 0) + 1,
+    children: [{ text }],
+  }, { at: [end[0] + 1], select: options.select ?? true }));
+  return editor.api.node({ at: [], id }) ? id : undefined;
 }
 
 /**

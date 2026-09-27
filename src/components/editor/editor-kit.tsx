@@ -28,8 +28,10 @@ import { TanaReferenceClipboardPlugin } from '@/components/editor/plugins/tana-r
 import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
 import { TanaShortcutsPlugin } from '@/components/editor/plugins/tana-shortcuts-plugin';
 import { TanaTimePlugin } from '@/components/editor/plugins/tana-time-plugin';
+import { TanaCapturePlugin } from '@/components/editor/plugins/tana-capture-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
+import { TanaWorkspacePlugin } from '@/components/editor/plugins/tana-workspace-plugin';
 import { ToggleKit } from '@/components/editor/plugins/toggle-kit';
 
 export const EditorKit = [
@@ -38,6 +40,8 @@ export const EditorKit = [
   TanaNodeIdentityPlugin,
   TanaShortcutsPlugin,
   TanaTimePlugin,
+  TanaCapturePlugin,
+  TanaWorkspacePlugin,
   TanaNodeLifecyclePlugin,
 
   // Elements

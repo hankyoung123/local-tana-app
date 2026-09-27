@@ -257,6 +257,7 @@ export function buildTanaIndex(document: Value): TanaIndex {
         : [],
       systemNode: tanaNode.tanaSystemNode,
       time: tanaNode.tanaTime,
+      workspaceUi: tanaNode.tanaWorkspaceUi,
       createdAt: tanaNode.tanaCreatedAt,
       lastEditedAt: tanaNode.tanaLastEditedAt,
       doneAt: tanaNode.tanaDoneAt,

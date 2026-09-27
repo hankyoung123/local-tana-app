@@ -118,7 +118,7 @@ test('Backspace deletes selected input text before cancelling the empty input', 
 test('moving selection back into Plate restores the typed query at its original point', async ({ page }) => {
   const input = await openCombobox(page);
   await page.keyboard.insertText('draft');
-  await page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
+  await page.locator('[data-slate-editor]').getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
   await expect(input).toHaveCount(0);
   await expect(page.locator('[data-slate-editor]')).toContainText('#draft');
   await expect(page.locator('[data-slate-editor]')).toBeFocused();

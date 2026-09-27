@@ -9,6 +9,8 @@ export * from './tana/query';
 export * from './tana/title';
 export * from './tana/time';
 export * from './tana/types';
+export * from './tana/workspace-ui';
+export * from './tana/capture';
 export * from './tana/view-source';
 export * from './tana/view-projection';
 

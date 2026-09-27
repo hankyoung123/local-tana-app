@@ -27,6 +27,27 @@ export type TanaSystemNode =
   | "trash"
   | "workspace";
 
+export type TanaSidebarMode = "full" | "mini" | "hidden";
+export type TanaSidebarTopItem =
+  | "today"
+  | "create-new"
+  | "search"
+  | "quick-add"
+  | "supertags"
+  | "recents";
+
+/** Workspace-owned presentation preferences. Content and navigation remain
+ * derived from the canonical Plate document; this stores only user chrome. */
+export type TanaWorkspaceUi = {
+  sidebar?: {
+    mode?: TanaSidebarMode;
+    width?: number;
+    topItems?: readonly TanaSidebarTopItem[];
+    pinnedNodeIds?: readonly NodeId[];
+  };
+  quickAddDraft?: string;
+};
+
 export type FieldVisibilityPolicy =
   "always" | "never" | "when-empty" | "when-non-empty" | "when-default";
 
@@ -232,6 +253,7 @@ export type TanaBlockElement = TElement & {
   tanaSystemNode?: TanaSystemNode;
   /** Workspace-owned timezone for Today and one-shot time initializers. */
   tanaWorkspaceTimeZone?: string;
+  tanaWorkspaceUi?: TanaWorkspaceUi;
   tanaTime?: TanaTime;
   /** Created/edited/done times are Node facts, not a date projection cache. */
   tanaCreatedAt?: string;
@@ -266,6 +288,7 @@ export type TanaNode = {
   lastEditedAt?: string;
   doneAt?: string;
   viewDefinition?: TanaViewDefinition;
+  workspaceUi?: TanaWorkspaceUi;
 };
 
 /**

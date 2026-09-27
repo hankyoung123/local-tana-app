@@ -68,7 +68,7 @@ test('F06 View chrome changes only presentation while retaining the shared Searc
   await page.getByLabel('选择日历日期字段').click();
   await page.getByRole('menuitemcheckbox', { name: '截止日期' }).click();
   await expect(page.getByText(/未安排 · 1/)).toBeVisible();
-  await expect(page.getByText('F06 Table title', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('F06 Table title', { exact: true })).toBeVisible();
 
   await chooseViewType(page, '大纲');
   await expect(page.getByLabel('选择显示字段')).toBeVisible();

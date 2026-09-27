@@ -170,6 +170,14 @@ function ensureCalendarNode(
   return newId;
 }
 function goToDay(editor: PlateEditor, day: string): NodeId | undefined {
+  const dayId = ensureDay(editor, day);
+  return dayId && editor.getTransforms(TanaZoomPlugin).zoom.to(dayId)
+    ? dayId
+    : undefined;
+}
+
+/** Ensure the canonical Day/Week/Year chain without changing the current page. */
+function ensureDay(editor: PlateEditor, day: string): NodeId | undefined {
   if (!isTanaDay(day)) return;
   const daily = getDailyNotesEntry(editor);
   if (!daily) return;
@@ -191,9 +199,7 @@ function goToDay(editor: PlateEditor, day: string): NodeId | undefined {
     const weekIndent = typeof weekEntry?.[0].indent === "number" ? weekEntry[0].indent : yearIndent + 1;
     dayId = ensureCalendarNode(editor, getTanaDayTime(day), weekId, weekIndent);
   });
-  return dayId && editor.getTransforms(TanaZoomPlugin).zoom.to(dayId)
-    ? dayId
-    : undefined;
+  return dayId;
 }
 function focusedCalendarDay(editor: PlateEditor): string | undefined {
   const id = editor.getOption(TanaZoomPlugin, "focusedNodeId");
@@ -235,6 +241,8 @@ export const TanaTimePlugin = createPlatePlugin({
   key: TANA_TIME_PLUGIN_KEY,
 }).extendEditorTransforms(({ editor }) => ({
   time: {
+    ensureDay: (day: string) => ensureDay(editor, day),
+    ensureToday: () => ensureDay(editor, getTanaToday(getWorkspaceTimeZone(editor))),
     goToDay: (day: string) => goToDay(editor, day),
     goToDate: (value: string) => {
       const granularity = getTanaDateGranularity(value);

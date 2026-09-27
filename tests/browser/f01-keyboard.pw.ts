@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 for (const key of ['Shift+Enter', 'ControlOrMeta+Shift+Enter']) {
   test(`${key} creates a separate Node and undo restores it`, async ({ page }) => {
     await page.goto('/editor');
-    await page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
+    await page.locator('[data-slate-editor]').getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
     await page.keyboard.press('End');
     await page.keyboard.press(key);
     await page.keyboard.insertText('F01 keyboard sibling');
@@ -17,14 +17,14 @@ for (const key of ['Shift+Enter', 'ControlOrMeta+Shift+Enter']) {
 
 test('Escape opens the existing node menu', async ({ page }) => {
   await page.goto('/editor');
-  await page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
+  await page.locator('[data-slate-editor]').getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menuitem', { name: '复制', exact: true })).toBeVisible();
 });
 
 test('Done shortcut follows the existing three-state checkbox contract', async ({ page }) => {
   await page.goto('/editor');
-  const text = page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true });
+  const text = page.locator('[data-slate-editor]').getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true });
   const row = text.locator('xpath=ancestor::*[@data-slate-node="element"][1]');
   const checkbox = row.getByRole('checkbox');
   await text.click();
@@ -40,7 +40,7 @@ test('Done shortcut follows the existing three-state checkbox contract', async (
 
 test('Zoom shortcuts navigate into the canonical Node and back', async ({ page }) => {
   await page.goto('/editor');
-  await page.getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
+  await page.locator('[data-slate-editor]').getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true }).click();
   await page.keyboard.press('ControlOrMeta+.');
   await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText(
     'Plate 提供编辑器能力，Local Tana 只补充语义。'
@@ -53,6 +53,7 @@ test('Zoom shortcuts navigate into the canonical Node and back', async ({ page }
 test('Tab keeps an empty child caret at its text coordinate', async ({ page }) => {
   await page.goto('/editor');
   const source = page
+    .locator('[data-slate-editor]')
     .getByText('Plate 提供编辑器能力，Local Tana 只补充语义。', { exact: true })
     .locator('xpath=ancestor::*[@data-slate-node="element"][1]');
   const sourceMarginLeft = await source.evaluate(

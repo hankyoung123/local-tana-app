@@ -17,6 +17,11 @@ import { getTanaWeekForDay, isTanaDateValue, isTanaDay, isTanaTime } from './tim
 import { containsTanaSoftLineBreak } from './single-line';
 import type { NodeId, TanaBlockElement } from './types';
 import { validateWorkspaceStructure } from './workspace';
+import {
+  TANA_SIDEBAR_MAX_WIDTH,
+  TANA_SIDEBAR_MIN_WIDTH,
+  TANA_SIDEBAR_TOP_ITEMS,
+} from './workspace-ui';
 
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
@@ -80,6 +85,21 @@ function isTanaNodeIdList(value: unknown): value is readonly string[] {
     value.every((item) => typeof item === 'string' && item.length > 0) &&
     new Set(value).size === value.length
   );
+}
+
+function isWorkspaceUi(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const source = value as Record<string, unknown>;
+  if (!Object.keys(source).every((key) => key === 'sidebar' || key === 'quickAddDraft')) return false;
+  if (source.quickAddDraft !== undefined && typeof source.quickAddDraft !== 'string') return false;
+  if (source.sidebar === undefined) return true;
+  if (!source.sidebar || typeof source.sidebar !== 'object' || Array.isArray(source.sidebar)) return false;
+  const sidebar = source.sidebar as Record<string, unknown>;
+  if (!Object.keys(sidebar).every((key) => ['mode', 'width', 'topItems', 'pinnedNodeIds'].includes(key))) return false;
+  if (sidebar.mode !== undefined && !['full', 'mini', 'hidden'].includes(sidebar.mode as string)) return false;
+  if (sidebar.width !== undefined && (!Number.isInteger(sidebar.width) || (sidebar.width as number) < TANA_SIDEBAR_MIN_WIDTH || (sidebar.width as number) > TANA_SIDEBAR_MAX_WIDTH)) return false;
+  if (sidebar.topItems !== undefined && (!isTanaNodeIdList(sidebar.topItems) || (sidebar.topItems as readonly string[]).some((item) => !(TANA_SIDEBAR_TOP_ITEMS as readonly string[]).includes(item)))) return false;
+  return sidebar.pinnedNodeIds === undefined || isTanaNodeIdList(sidebar.pinnedNodeIds);
 }
 
 function isPersistedFieldValue(value: unknown): boolean {
@@ -159,6 +179,7 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaSupertagDefinition?: unknown;
     tanaSystemNode?: unknown;
     tanaWorkspaceTimeZone?: unknown;
+    tanaWorkspaceUi?: unknown;
     tanaTime?: unknown;
     tanaCreatedAt?: unknown;
     tanaLastEditedAt?: unknown;
@@ -245,6 +266,7 @@ function hasValidSemanticData(element: TElement): boolean {
     if (typeof semantic.tanaWorkspaceTimeZone !== 'string' || semantic.tanaWorkspaceTimeZone.length === 0) return false;
     try { new Intl.DateTimeFormat('en', { timeZone: semantic.tanaWorkspaceTimeZone }).format(); } catch { return false; }
   }
+  if (semantic.tanaWorkspaceUi !== undefined && !isWorkspaceUi(semantic.tanaWorkspaceUi)) return false;
   for (const key of ['tanaCreatedAt', 'tanaLastEditedAt', 'tanaDoneAt'] as const) {
     if (semantic[key] !== undefined && (typeof semantic[key] !== 'string' || Number.isNaN(Date.parse(semantic[key])))) return false;
   }
@@ -529,6 +551,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaSupertagDefinition?: unknown;
       tanaSystemNode?: unknown;
       tanaWorkspaceTimeZone?: unknown;
+      tanaWorkspaceUi?: unknown;
       tanaTime?: unknown;
       tanaCreatedAt?: unknown;
       tanaLastEditedAt?: unknown;
@@ -552,6 +575,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaSupertagDefinition !== undefined ||
       semantic.tanaSystemNode !== undefined ||
       semantic.tanaWorkspaceTimeZone !== undefined ||
+      semantic.tanaWorkspaceUi !== undefined ||
       semantic.tanaTime !== undefined ||
       semantic.tanaCreatedAt !== undefined ||
       semantic.tanaLastEditedAt !== undefined ||
@@ -685,6 +709,8 @@ export function isValidTanaDocument(value: unknown): value is Value {
       if (systemNodes.has(node.tanaSystemNode)) return false;
       systemNodes.add(node.tanaSystemNode);
     }
+
+    if (node.tanaWorkspaceUi !== undefined && node.tanaSystemNode !== 'workspace') return false;
 
     if (node.tanaTime) {
       if (!isTanaTime(node.tanaTime)) return false;

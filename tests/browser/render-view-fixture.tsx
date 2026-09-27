@@ -23,6 +23,6 @@ const value: Value = [
 ];
 const editor = createPlateEditor({ plugins: EditorKit, value });
 const index = buildTanaIndex(editor.children);
-console.log(renderToStaticMarkup(
+process.stdout.write(renderToStaticMarkup(
   <Plate editor={editor}><TanaView index={index} view={index.nodesById.get('view')!} /></Plate>
 ));

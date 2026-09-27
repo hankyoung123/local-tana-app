@@ -29,6 +29,7 @@ import { setBlockType } from '@/components/editor/transforms';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaWorkspacePlugin } from '@/components/editor/plugins/tana-workspace-plugin';
 import { useTanaIndex } from '@/components/tana/tana-index-context';
 import { useIsTouchDevice } from '@/hooks/use-is-touch-device';
 import {
@@ -107,6 +108,14 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
     (node) => isTanaNodeActive(index, node.id) && node.semanticTypes.includes('supertag-definition')
   );
   const selectedSupertagIds = getSelectedCanonicalSupertagIds(index, selectedNodeIds);
+  const selectedPinnedTarget =
+    selectedNodeIds.length === 1
+      ? getTanaProjectionTarget(index, selectedNodeIds[0])
+      : undefined;
+  const workspaceId = index.systemNodeIds.get('workspace');
+  const pinnedIds = workspaceId
+    ? index.nodesById.get(workspaceId)?.workspaceUi?.sidebar?.pinnedNodeIds ?? []
+    : [];
   const canZoomToSelection =
     !!selectedNode &&
     typeof selectedNodeId === 'string' &&
@@ -189,6 +198,20 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
                 }
               >
                 打开节点
+              </ContextMenuItem>
+            )}
+            {selectedPinnedTarget && (
+              <ContextMenuItem
+                onClick={() =>
+                  editor.getTransforms(TanaWorkspacePlugin).workspace.setPinned(
+                    selectedPinnedTarget.id,
+                    !pinnedIds.includes(selectedPinnedTarget.id),
+                  )
+                }
+              >
+                {pinnedIds.includes(selectedPinnedTarget.id)
+                  ? '取消固定到侧栏'
+                  : '固定到侧栏'}
               </ContextMenuItem>
             )}
             {canAddChild && (
