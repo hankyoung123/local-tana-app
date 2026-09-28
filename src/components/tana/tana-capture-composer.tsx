@@ -81,10 +81,10 @@ export function TanaCaptureComposer({
     latestDraft.current = draft;
   }, [draft]);
 
-  React.useEffect(() => {
-    editor.tf.focus();
+  React.useLayoutEffect(() => {
     const end = editor.api.end([0]);
     if (end) editor.tf.select({ anchor: end, focus: end });
+    editor.tf.focus();
   }, [editor]);
 
   React.useEffect(() => {
@@ -144,9 +144,18 @@ export function TanaCaptureComposer({
     onSubmit(next);
   }, [draft, onSubmit, pending]);
   const focusCaptureRoot = React.useCallback(() => {
-    if (editor.selection?.anchor.path[0] === 0) return;
     const end = editor.api.end([0]);
-    if (end) editor.tf.select({ anchor: end, focus: end });
+    if (end) {
+      const range = { anchor: end, focus: end };
+      editor.tf.select(range);
+      const domRange = editor.api.toDOMRange(range);
+      const domSelection = window.getSelection();
+      if (domRange && domSelection) {
+        domSelection.removeAllRanges();
+        domSelection.addRange(domRange);
+      }
+      editor.tf.focus();
+    }
   }, [editor]);
   const cancel = React.useCallback(() => {
     const currentDraft = extractTanaCaptureDraft(editor.children, transientId);
@@ -167,7 +176,10 @@ export function TanaCaptureComposer({
             disabled={pending}
             variant="none"
             onFocus={focusCaptureRoot}
+            onMouseDown={focusCaptureRoot}
+            onBeforeInput={focusCaptureRoot}
             onKeyDown={(event) => {
+              if (event.key !== "#" && event.key !== "@") focusCaptureRoot();
               if (event.nativeEvent.isComposing) return;
               if (event.key === "Escape") {
                 event.preventDefault();

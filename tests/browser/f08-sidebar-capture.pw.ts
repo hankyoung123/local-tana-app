@@ -81,7 +81,8 @@ test("Quick Add preserves a draft on Escape and commits without navigating from 
   await page.keyboard.press("ControlOrMeta+e");
   const input = page.locator('[data-slate-editor][aria-label="Quick Add 草稿"]');
   await expect(input).toBeVisible();
-  await input.fill("F08 quick capture");
+  await input.click();
+  await page.keyboard.type("F08 quick capture");
   await expect(input).toContainText("F08 quick capture");
   await page.keyboard.press("Escape");
   await expect(input).toHaveCount(0);
