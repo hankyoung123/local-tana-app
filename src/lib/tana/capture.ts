@@ -1,6 +1,7 @@
 import { KEYS, type Descendant, type TElement, type TText, type Value } from "platejs";
 
 import { TANA_DATE_OBJECT_KEY, TANA_SUPERTAG_KEY } from "./constants";
+import { buildTanaIndex } from "./index";
 import { isTanaDateValue } from "./time";
 import type { FieldValue, NodeId, TanaCaptureDraft, TanaCaptureField, TanaIndex } from "./types";
 
@@ -154,6 +155,38 @@ export function parseLegacyTanaCapturePayload(value: unknown): TanaCapturePayloa
 
 export function captureDraftHasText(draft: TanaCaptureDraft): boolean {
   return draft.content.some((node) => "text" in node && typeof node.text === "string" && node.text.length > 0);
+}
+
+/** Extracts the transient host's content and semantic Node relations only. */
+export function extractTanaCaptureDraft(
+  value: Value,
+  transientNodeId: NodeId,
+): TanaCaptureDraft | undefined {
+  const root = value.find(
+    (node) =>
+      typeof node === "object" &&
+      node !== null &&
+      "id" in node &&
+      node.id === transientNodeId &&
+      "children" in node,
+  );
+  if (!root || !("children" in root)) return;
+  const index = buildTanaIndex(value);
+  const fields = index.fieldNodesByParent.get(transientNodeId) ?? [];
+  return normalizeTanaCaptureDraft({
+    content: root.children,
+    ...(("tanaSupertagIds" in root && Array.isArray(root.tanaSupertagIds) && root.tanaSupertagIds.length)
+      ? { supertagIds: root.tanaSupertagIds }
+      : {}),
+    ...(fields.length
+      ? {
+          fields: fields.map((field) => ({
+            fieldId: field.fieldId,
+            ...(field.value ? { value: field.value } : {}),
+          })),
+        }
+      : {}),
+  });
 }
 
 export type TanaCaptureDocument = Value;

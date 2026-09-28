@@ -141,6 +141,7 @@ function TanaWorkspaceContent({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [quickAddOpen, setQuickAddOpen] = React.useState(false);
+  const [quickAddSession, setQuickAddSession] = React.useState(0);
   const [quickAddDraft, setQuickAddDraft] = React.useState<TanaCaptureDraft>(() =>
     normalizeTanaCaptureDraft(""),
   );
@@ -162,13 +163,15 @@ function TanaWorkspaceContent({
   );
 
   const openQuickAdd = React.useCallback(() => {
-    const restored = quickAddDraftRef.current.content.some(
-      (node) => "text" in node && typeof node.text === "string" && node.text.length > 0,
-    )
+    const persisted = normalizeTanaCaptureDraft(workspaceUi.quickAddDraft);
+    const restored = captureDraftHasText(persisted)
+      ? persisted
+      : captureDraftHasText(quickAddDraftRef.current)
       ? quickAddDraftRef.current
-      : normalizeTanaCaptureDraft(workspaceUi.quickAddDraft);
+      : persisted;
     setQuickAddDraft(restored);
     quickAddDraftRef.current = restored;
+    setQuickAddSession((session) => session + 1);
     setQuickAddOpen(true);
   }, [workspaceUi.quickAddDraft]);
 
@@ -457,6 +460,7 @@ function TanaWorkspaceContent({
                 添加到 Today；Esc 保留草稿。
               </DialogDescription>
               <TanaCaptureComposer
+                key={`quick-add-${quickAddSession}`}
                 ariaLabel="Quick Add 草稿"
                 document={editor.children}
                 index={index}

@@ -102,6 +102,12 @@ export function TanaSidebar({
   const [recentsOpen, setRecentsOpen] = React.useState(false);
   const resizing = React.useRef(false);
   const resizeWidthRef = React.useRef<number | null>(null);
+  const resizePointerId = React.useRef<number | null>(null);
+  const resizeListeners = React.useRef<{
+    move: (event: PointerEvent) => void;
+    up: (event: PointerEvent) => void;
+    cancel: () => void;
+  } | null>(null);
   const sidebarRef = React.useRef<HTMLElement | null>(null);
   const updateUi = (patch: Parameters<typeof mergeTanaWorkspaceUi>[1]) =>
     onUpdateUi(mergeTanaWorkspaceUi(workspaceUi, patch));
@@ -128,19 +134,57 @@ export function TanaSidebar({
     if (!resizing.current) return;
     resizing.current = false;
     resizeWidthRef.current = null;
+    resizePointerId.current = null;
     setResizeWidth(null);
+  };
+  const detachResizeListeners = () => {
+    const listeners = resizeListeners.current;
+    if (!listeners) return;
+    window.removeEventListener("pointermove", listeners.move);
+    window.removeEventListener("pointerup", listeners.up);
+    window.removeEventListener("pointercancel", listeners.cancel);
+    resizeListeners.current = null;
   };
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== "full") return;
     resizing.current = true;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    resizePointerId.current = event.pointerId;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Native window listeners below keep the drag alive when capture is unavailable.
+    }
     resizeFromPointer(event.clientX);
+    const move = (nativeEvent: PointerEvent) => {
+      if (nativeEvent.pointerId === resizePointerId.current) {
+        resizeFromPointer(nativeEvent.clientX);
+      }
+    };
+    const up = (nativeEvent: PointerEvent) => {
+      if (nativeEvent.pointerId !== resizePointerId.current) return;
+      resizeFromPointer(nativeEvent.clientX);
+      detachResizeListeners();
+      commitResize(resizeWidthRef.current ?? undefined);
+    };
+    const cancel = () => {
+      detachResizeListeners();
+      cancelResize();
+    };
+    resizeListeners.current = { move, up, cancel };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing.current && event.buttons === 1 && mode === "full") {
+      resizing.current = true;
+      resizePointerId.current = event.pointerId;
+    }
     if (resizing.current) resizeFromPointer(event.clientX);
   };
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     resizeFromPointer(event.clientX);
+    detachResizeListeners();
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -744,8 +788,10 @@ export function TanaSidebar({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={cancelResize}
-        onLostPointerCapture={() => commitResize()}
+        onPointerCancel={() => {
+          detachResizeListeners();
+          cancelResize();
+        }}
       />
     </aside>
   );

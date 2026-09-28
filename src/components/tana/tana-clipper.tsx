@@ -16,6 +16,7 @@ import { initialDocument } from "@/lib/tana/initial-document";
 export function TanaClipper() {
   const [draft, setDraft] = React.useState<TanaCaptureDraft>(() => normalizeTanaCaptureDraft(""));
   const [document, setDocument] = React.useState<Value>(initialDocument);
+  const [documentVersion, setDocumentVersion] = React.useState(0);
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string>();
   const requestId = React.useRef<string | undefined>(undefined);
@@ -33,7 +34,10 @@ export function TanaClipper() {
           else setError(event.payload.error ?? "保存失败");
         });
         const context = await eventApi.listen<{ document?: Value }>("f08://capture-context", (event) => {
-          if (!disposed && Array.isArray(event.payload.document)) setDocument(event.payload.document);
+          if (!disposed && Array.isArray(event.payload.document)) {
+            setDocument(event.payload.document);
+            setDocumentVersion((version) => version + 1);
+          }
         });
         if (disposed) {
           ack();
@@ -75,6 +79,7 @@ export function TanaClipper() {
           <span className="text-[10px] text-[var(--tana-text-tertiary)]">Today</span>
         </header>
         <TanaCaptureComposer
+          key={`capture-${documentVersion}`}
           ariaLabel="Global Capture 草稿"
           document={document}
           index={buildTanaIndex(document)}

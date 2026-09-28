@@ -26,6 +26,7 @@ import {
 
 const DATABASE_URL = 'sqlite:local-tana.db';
 const DOCUMENT_ID = 'main';
+const BROWSER_DOCUMENT_STORAGE_KEY = 'local-tana:plate-document';
 
 export const CURRENT_SCHEMA_VERSION = 6;
 
@@ -967,8 +968,20 @@ export function usesSQLitePersistence() {
   return isTauri();
 }
 
+function loadBrowserDocument(): Value | undefined {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.sessionStorage.getItem(BROWSER_DOCUMENT_STORAGE_KEY);
+    if (!raw) return;
+    const parsed: unknown = JSON.parse(raw);
+    return isPlateDocument(parsed) && isValidTanaDocument(parsed) ? parsed : undefined;
+  } catch {
+    return;
+  }
+}
+
 export async function loadPlateDocument(fallback: Value): Promise<Value> {
-  if (!usesSQLitePersistence()) return structuredClone(fallback);
+  if (!usesSQLitePersistence()) return loadBrowserDocument() ?? structuredClone(fallback);
 
   const database = await getDatabase();
   const rows = await database.select<DocumentRow[]>(
@@ -1002,7 +1015,10 @@ export async function loadPlateDocument(fallback: Value): Promise<Value> {
 /** Destructive recovery, called only after explicit user confirmation. */
 export async function resetPlateDocument(value: Value): Promise<void> {
   if (!isValidTanaDocument(value)) throw new Error('Invalid reset document');
-  if (!usesSQLitePersistence()) return;
+  if (!usesSQLitePersistence()) {
+    window.sessionStorage.removeItem(BROWSER_DOCUMENT_STORAGE_KEY);
+    return;
+  }
   const { default: Database } = await import('@tauri-apps/plugin-sql');
   const database = await Database.load(DATABASE_URL);
   // Explicit destructive reset; never called by loading or saving.
@@ -1012,9 +1028,15 @@ export async function resetPlateDocument(value: Value): Promise<void> {
 }
 
 export async function savePlateDocument(value: Value): Promise<void> {
-  if (!usesSQLitePersistence()) return;
   if (!isValidTanaDocument(value)) {
     throw new Error('Refusing to persist a Plate document with invalid Tana data');
+  }
+
+  if (!usesSQLitePersistence()) {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(BROWSER_DOCUMENT_STORAGE_KEY, JSON.stringify(value));
+    }
+    return;
   }
 
   const database = await getDatabase();

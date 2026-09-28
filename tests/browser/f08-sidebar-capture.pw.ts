@@ -29,6 +29,8 @@ test("Sidebar resize and top item visibility are canonical preferences", async (
   const after = await sidebar.boundingBox();
   expect(after).not.toBeNull();
   expect(after!.width).toBeGreaterThan(before!.width);
+  await page.reload();
+  await expect(page.getByTestId("tana-sidebar")).toHaveCSS("width", `${after!.width}px`);
 
   await page.getByRole("button", { name: "侧栏设置" }).click();
   await page.getByRole("button", { name: "隐藏 Today" }).click();
@@ -80,6 +82,7 @@ test("Quick Add preserves a draft on Escape and commits without navigating from 
   const input = page.locator('[data-slate-editor][aria-label="Quick Add 草稿"]');
   await expect(input).toBeVisible();
   await input.fill("F08 quick capture");
+  await expect(input).toContainText("F08 quick capture");
   await page.keyboard.press("Escape");
   await expect(input).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+e");
@@ -165,6 +168,12 @@ test("browser clipper surface stays a transient composer without desktop shortcu
     page.getByRole("button", { name: "保存", exact: true }),
   ).toBeDisabled();
   const editor = page.locator('[data-slate-editor][aria-label="Global Capture 草稿"]');
-  await editor.fill("#");
+  await editor.click();
+  await page.keyboard.type("#");
+  await expect(page.locator('input[role="combobox"]')).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await editor.fill("");
+  await editor.click();
+  await page.keyboard.type("@");
   await expect(page.locator('input[role="combobox"]')).toHaveAttribute("aria-expanded", "true");
 });

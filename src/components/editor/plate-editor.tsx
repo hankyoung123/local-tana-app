@@ -126,7 +126,10 @@ function LoadedPlateEditor({ initialValue }: { initialValue: Value }) {
 
   const scheduleSave = React.useCallback(
     (value: Value) => {
-      if (!sqliteEnabled) return;
+      if (!sqliteEnabled) {
+        void savePlateDocument(value).catch(() => setPersistenceStatus("error"));
+        return;
+      }
 
       saveVersion.current += 1;
       saveController.schedule(value);

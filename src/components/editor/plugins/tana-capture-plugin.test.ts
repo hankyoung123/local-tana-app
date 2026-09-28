@@ -4,7 +4,8 @@ import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
-import { buildTanaIndex, isTanaNodeElement } from '@/lib/tana';
+import { buildTanaIndex, isTanaNodeElement, type TanaBlockElement, type TanaCaptureDraft } from '@/lib/tana';
+import { initialDocument } from '@/lib/tana/initial-document';
 import { TanaCapturePlugin } from './tana-capture-plugin';
 import { TanaZoomPlugin } from './tana-zoom-plugin';
 
@@ -37,5 +38,34 @@ describe('Tana capture transform', () => {
     assert.equal(index.parentNodeIds.get(first), today);
     assert.equal(index.parentNodeIds.get(second), today);
     assert.equal(new Set(editor.children.map((node) => node.id)).size, editor.children.length);
+  });
+
+  test('round-trips rich content, Supertag membership, and Field values through one canonical commit', () => {
+    const editor = createPlateEditor({
+      nodeId: { filter: isTanaNodeElement, initialValueIds: 'always' },
+      plugins: EditorKit,
+      value: structuredClone(initialDocument),
+    });
+    const draft: TanaCaptureDraft = {
+      content: [
+        { text: 'Rich capture', bold: true },
+        { children: [{ text: 'Home' }], key: 'home', type: 'mention' },
+      ],
+      supertagIds: ['supertag-project'],
+      fields: [{ fieldId: 'field-summary', value: { type: 'plain', value: 'from capture' } }],
+    };
+    const nodeId = editor.getTransforms(TanaCapturePlugin).capture.commit(draft, {
+      zoom: false,
+      select: false,
+    });
+    assert.ok(nodeId);
+    const index = buildTanaIndex(editor.children);
+    const node = index.nodesById.get(nodeId);
+    assert.ok(node?.supertagIds.includes('supertag-project'));
+    const canonical = editor.api.node<TanaBlockElement>({ at: [], id: nodeId })?.[0];
+    assert.equal(canonical && 'children' in canonical && canonical.children[0]?.text, 'Rich capture');
+    assert.equal(canonical && 'children' in canonical && canonical.children.some((child) => 'key' in child && child.key === 'home'), true);
+    assert.equal(index.fieldValues.get(nodeId)?.get('field-summary')?.value, 'from capture');
+    assert.equal(index.fieldNodesByParent.get(nodeId)?.some((field) => field.fieldId === 'field-summary'), true);
   });
 });
