@@ -451,10 +451,16 @@ function TanaWorkspaceContent({
           <Dialog
             open={quickAddOpen}
             onOpenChange={(open) => {
+              if (!open && captureDraftHasText(quickAddDraftRef.current)) {
+                updateWorkspaceUi({
+                  ...workspaceUi,
+                  quickAddDraft: quickAddDraftRef.current,
+                });
+              }
               setQuickAddOpen(open);
             }}
           >
-            <DialogContent>
+            <DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
               <DialogTitle>Quick Add</DialogTitle>
               <DialogDescription>
                 添加到 Today；Esc 保留草稿。

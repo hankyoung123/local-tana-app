@@ -147,6 +147,8 @@ export function TanaSidebar({
   };
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== "full") return;
+    event.preventDefault();
+    event.stopPropagation();
     resizing.current = true;
     resizePointerId.current = event.pointerId;
     try {
@@ -783,7 +785,7 @@ export function TanaSidebar({
       </div>
       <div
         aria-label="调整侧栏宽度"
-        className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize"
+        className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none"
         data-testid="sidebar-resizer"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

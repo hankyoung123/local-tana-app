@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-import type { PointRef, TElement } from 'platejs';
+import type { Point, PointRef, TElement } from 'platejs';
 
 import {
   type ComboboxItemProps,
@@ -90,6 +90,8 @@ const InlineCombobox = ({
   const [valueState, setValueState] = React.useState('');
   const hasValueProp = valueProp !== undefined;
   const value = hasValueProp ? valueProp : valueState;
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
 
   // Check if current user is the creator of this element (for Yjs collaboration)
   const isCreator = React.useMemo(() => {
@@ -104,6 +106,7 @@ const InlineCombobox = ({
 
   const setValue = React.useCallback(
     (newValue: string) => {
+      valueRef.current = newValue;
       setValueProp?.(newValue);
 
       if (!hasValueProp) {
@@ -118,6 +121,7 @@ const InlineCombobox = ({
    * insertText if the combobox closes due to a selection change.
    */
   const insertPointRef = React.useRef<PointRef | null>(null);
+  const insertPointSnapshotRef = React.useRef<Point | null>(null);
 
   React.useLayoutEffect(() => {
     insertPointRef.current?.unref();
@@ -131,6 +135,7 @@ const InlineCombobox = ({
 
     if (!point) return;
 
+    insertPointSnapshotRef.current = point;
     const pointRef = editor.api.pointRef(point);
     insertPointRef.current = pointRef;
 
@@ -149,8 +154,8 @@ const InlineCombobox = ({
     ref: inputRef,
     onCancelInput: (cause) => {
       if (restoreTriggerOnCancel && cause !== 'backspace') {
-        editor.tf.insertText(trigger + value, {
-          at: insertPointRef.current?.current ?? undefined,
+        editor.tf.insertText(trigger + valueRef.current, {
+          at: insertPointRef.current?.current ?? insertPointSnapshotRef.current ?? undefined,
         });
       }
       if (cause === 'arrowLeft' || cause === 'arrowRight') {
