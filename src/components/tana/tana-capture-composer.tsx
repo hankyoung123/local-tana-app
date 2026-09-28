@@ -113,7 +113,7 @@ export function TanaCaptureComposer({
     lastDraft.current = serialized;
   }, [draft, editor, transientId]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     initialized.current = true;
   }, [editor]);
 

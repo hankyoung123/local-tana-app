@@ -119,7 +119,7 @@ const InlineCombobox = ({
    */
   const insertPointRef = React.useRef<PointRef | null>(null);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     insertPointRef.current?.unref();
     insertPointRef.current = null;
 
