@@ -2,11 +2,14 @@
 
 import * as React from 'react';
 
+import { ElementApi } from 'platejs';
 import { useEditorRef, useEditorSelector } from 'platejs/react';
 
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Editor, EditorContainer } from '@/components/ui/editor';
 import { type NodeId } from '@/lib/tana';
+import { getNodeSemanticType } from '@/lib/tana/node-semantic';
+import { getTanaDirectChildPaths } from '@/lib/tana/outliner';
 
 import { useTanaIndex } from './tana-index-context';
 import { TanaReferencesSection } from './tana-references-section';
@@ -30,14 +33,26 @@ export function OutlineNodeView({
     },
     [focusedNodeId]
   );
+  const hasBodyContent = useEditorSelector(
+    (currentEditor) => {
+      if (!focusedNodeId) return false;
+      const entry = currentEditor.api.node({ at: [], id: focusedNodeId });
+      if (!entry) return false;
+
+      return getTanaDirectChildPaths(currentEditor.children, entry[1]).some((path) => {
+        const child = currentEditor.api.node(path)?.[0];
+        return !!child && ElementApi.isElement(child) && getNodeSemanticType(child, {
+          document: currentEditor.children,
+          path,
+        }) === 'content';
+      });
+    },
+    [focusedNodeId]
+  );
 
   React.useEffect(() => {
     if (!focusedNodeId) return;
 
-    // A focused page exposes its last empty direct child through Plate itself.
-    // The transform only creates that canonical child; focus, IME, history, and
-    // all subsequent editing stay inside the mounted Plate editor.
-    editor.getTransforms(TanaZoomPlugin).zoom.ensureBodyChild();
     editor.getApi(TanaZoomPlugin).zoom.focus(focusedNodeId);
   }, [editor, focusedNodeId]);
 
@@ -51,6 +66,16 @@ export function OutlineNodeView({
             className="px-8 pt-10 pb-40 text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]"
             variant="none"
           />
+          {focusedNodeId && !hasBodyContent && (
+            <button
+              aria-label="输入内容…"
+              className="absolute left-8 top-[5.75rem] rounded px-1 text-left text-[15px] text-muted-foreground/80 hover:bg-[var(--tana-hover)] sm:left-[max(64px,calc(50%-374px))]"
+              type="button"
+              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild()}
+            >
+              输入内容…
+            </button>
+          )}
           {focusedNodeId && (
             <div className="px-8 pb-12 sm:px-[max(64px,calc(50%-374px))]">
               <TanaReferencesSection index={index} nodeId={focusedNodeId} />

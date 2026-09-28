@@ -62,7 +62,7 @@ test('Zoom shortcuts use canonical zoom and no formatting aliases remain', () =>
   run(editor, 'in');
   assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'b');
   run(editor, 'out');
-  assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'workspace');
+  assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
   for (const [name, shortcut] of Object.entries(editor.meta.shortcuts)) {
     if (name.startsWith('tanaShortcuts.')) continue;
     assert.ok(!['mod+enter', 'mod+shift+enter', 'mod+comma', 'mod+period'].includes(String(shortcut?.keys)), name);

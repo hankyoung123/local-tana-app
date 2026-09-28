@@ -21,7 +21,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { TanaZoomPlugin } from "@/components/editor/plugins/tana-zoom-plugin";
+import {
+  getTanaEditorHref,
+  getTanaEditorNodeId,
+  TanaZoomPlugin,
+} from "@/components/editor/plugins/tana-zoom-plugin";
 import { TanaCapturePlugin } from "@/components/editor/plugins/tana-capture-plugin";
 import { TanaTimePlugin } from "@/components/editor/plugins/tana-time-plugin";
 import {
@@ -217,6 +221,33 @@ function TanaWorkspaceContent({
     if (!focusedNodeExists) editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
   }, [editor, focusedNodeExists]);
 
+  const navigationHydrated = React.useRef(false);
+
+  React.useEffect(() => {
+    if (navigationHydrated.current || !index.nodesById.size) return;
+
+    navigationHydrated.current = true;
+    const nodeId = getTanaEditorNodeId(window.location);
+    if (nodeId) {
+      editor.getApi(TanaZoomPlugin).zoom.restore(nodeId);
+    } else {
+      window.history.replaceState({ tanaNodeId: null, tanaHistoryIndex: 0 }, '', getTanaEditorHref());
+    }
+  }, [editor, index.nodesById.size]);
+
+  React.useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const nodeId = getTanaEditorNodeId(window.location);
+      const historyIndex = typeof event.state?.tanaHistoryIndex === 'number'
+        ? event.state.tanaHistoryIndex
+        : undefined;
+      editor.getApi(TanaZoomPlugin).zoom.restore(nodeId, historyIndex);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [editor]);
+
   const breadcrumbNodeIds = React.useMemo(() => {
     if (!focusedNodeId || !index.nodesById.has(focusedNodeId)) return [];
 
@@ -297,6 +328,15 @@ function TanaWorkspaceContent({
 
       <main className="relative flex min-w-0 flex-1 flex-col">
         <div className="relative flex h-10 shrink-0 items-center border-b border-[var(--tana-divider)] bg-[color:var(--tana-canvas)]/95 px-5">
+          <button
+            aria-label="返回上一页"
+            className="mr-2 grid size-7 place-items-center rounded text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={(usePluginOption(TanaZoomPlugin, "historyIndex") ?? 0) <= 0}
+            type="button"
+            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.previous()}
+          >
+            ‹
+          </button>
           <nav
             aria-label="路径导航"
             className="flex min-w-0 flex-1 items-center gap-1 text-[var(--tana-text-tertiary)] text-xs"
@@ -366,6 +406,17 @@ function TanaWorkspaceContent({
                   当前页面
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    const href = new URL(
+                      getTanaEditorHref(focusedNodeId),
+                      window.location.origin,
+                    ).href;
+                    void navigator.clipboard?.writeText(href);
+                  }}
+                >
+                  复制链接
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setFieldPanelOpen(true)}>
                   <Settings2Icon />
                   配置…

@@ -885,7 +885,7 @@ describe('Tana outliner behavior', () => {
     assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
   });
 
-  test('zooms out through Tana parents and returns to workspace root', () => {
+  test('zooms back through previous views and returns to workspace root', () => {
     const editor = createPlateEditor({
       plugins: [TanaZoomPlugin, TogglePlugin],
       value: [
@@ -896,6 +896,8 @@ describe('Tana outliner behavior', () => {
     });
     const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
 
+    assert.equal(zoom.to('a'), true);
+    assert.equal(zoom.to('b'), true);
     assert.equal(zoom.to('c'), true);
     assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), 'c');
     assert.equal(zoom.out(), true);

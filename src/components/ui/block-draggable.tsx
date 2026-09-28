@@ -494,6 +494,8 @@ function Draggable({
     document: editor.children,
     path: tanaPath,
   });
+  const effectiveHasChildren = isFocusedNode ? false : hasChildren;
+  const effectiveIsDraggable = isFocusedNode ? false : isDraggable;
   const indent = getNodeIndent(element);
   const displayIndent = getTanaDisplayIndent(indent, baseIndent);
   const displayIndentPx = getTanaDisplayIndentPx(indent, baseIndent);
@@ -565,7 +567,7 @@ function Draggable({
       canDropNode: canDropOnInteractableTanaNode,
       // Keep Plate's default drag lifecycle for valid Nodes. Only Value Nodes
       // override it, so their source is blocked even without a rendered handle.
-      drag: isDraggable ? undefined : { canDrag: () => false },
+      drag: effectiveIsDraggable ? undefined : { canDrag: () => false },
       element,
       onDropHandler: (_, { dragItem, monitor, nodeRef }) => {
         if (!('id' in dragItem) || !('editorId' in dragItem) || dragItem.editorId !== editor.id) return false;
@@ -629,8 +631,8 @@ function Draggable({
     ),
     dragHandleRef: handleRef,
     fieldType: gutterFieldType,
-    hasChildren,
-    isDraggable,
+    hasChildren: effectiveHasChildren,
+    isDraggable: effectiveIsDraggable,
     isFocusedNode,
     isSelectionAreaVisible,
     nodeLabel: gutterLabel,
