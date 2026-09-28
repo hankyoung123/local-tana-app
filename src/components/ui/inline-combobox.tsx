@@ -91,7 +91,9 @@ const InlineCombobox = ({
   const hasValueProp = valueProp !== undefined;
   const value = hasValueProp ? valueProp : valueState;
   const valueRef = React.useRef(value);
-  valueRef.current = value;
+  React.useLayoutEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   // Check if current user is the creator of this element (for Yjs collaboration)
   const isCreator = React.useMemo(() => {
