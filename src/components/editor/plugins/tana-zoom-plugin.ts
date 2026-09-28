@@ -25,6 +25,11 @@ export const TANA_ZOOM_PLUGIN_KEY = 'tanaZoom' as const;
 
 export type TanaZoomHistoryEntry = NodeId | null;
 
+type TanaZoomBrowserState = {
+  tanaHistory: TanaZoomHistoryEntry[];
+  tanaHistoryIndex: number;
+};
+
 export const TANA_EDITOR_PATH = '/editor';
 
 export function getTanaEditorHref(nodeId: NodeId | null = null) {
@@ -43,7 +48,32 @@ export function getTanaEditorNodeId(locationLike: Pick<Location, 'pathname' | 's
   return nodeId || null;
 }
 
-function syncBrowserUrl(nodeId: NodeId | null, mode: 'push' | 'replace', historyIndex?: number) {
+function readBrowserState(value: unknown, nodeId: NodeId | null): TanaZoomBrowserState | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const state = value as Partial<TanaZoomBrowserState>;
+  const history = state.tanaHistory;
+  const historyIndex = state.tanaHistoryIndex;
+
+  if (
+    !Array.isArray(history) ||
+    history.length === 0 ||
+    !history.every((entry) => entry === null || typeof entry === 'string') ||
+    !Number.isInteger(historyIndex) ||
+    historyIndex! < 0 ||
+    historyIndex! >= history.length ||
+    history[historyIndex!] !== nodeId
+  ) return null;
+
+  return { tanaHistory: history, tanaHistoryIndex: historyIndex! };
+}
+
+function syncBrowserUrl(
+  nodeId: NodeId | null,
+  mode: 'push' | 'replace',
+  history: readonly TanaZoomHistoryEntry[],
+  historyIndex: number
+) {
   if (typeof window === 'undefined') return;
 
   const url = new URL(window.location.href);
@@ -51,7 +81,15 @@ function syncBrowserUrl(nodeId: NodeId | null, mode: 'push' | 'replace', history
   if (nodeId) url.searchParams.set('node', nodeId);
   else url.searchParams.delete('node');
 
-  window.history[`${mode}State`]({ tanaNodeId: nodeId, tanaHistoryIndex: historyIndex }, '', url);
+  const currentState = window.history.state;
+  const routerState = currentState && typeof currentState === 'object' ? currentState : {};
+
+  window.history[`${mode}State`]({
+    ...routerState,
+    tanaNodeId: nodeId,
+    tanaHistory: [...history],
+    tanaHistoryIndex: historyIndex,
+  }, '', url);
 }
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
@@ -88,7 +126,7 @@ function setNavigationState(
   editor.setOption(TanaZoomPlugin, 'focusedNodeId', focusedNodeId);
   editor.setOption(TanaZoomPlugin, 'history', [...history]);
   editor.setOption(TanaZoomPlugin, 'historyIndex', historyIndex);
-  if (urlMode !== 'none') syncBrowserUrl(focusedNodeId, urlMode, historyIndex);
+  if (urlMode !== 'none') syncBrowserUrl(focusedNodeId, urlMode, history, historyIndex);
 }
 
 function pruneBlockSelection(editor: PlateEditor) {
@@ -331,6 +369,19 @@ function zoomPrevious(editor: PlateEditor): boolean {
 
   if (historyIndex <= 0) return false;
 
+  if (typeof window !== 'undefined') {
+    const browserState = readBrowserState(window.history.state, getFocusedNodeId(editor));
+
+    if (
+      browserState?.tanaHistoryIndex === historyIndex &&
+      browserState.tanaHistory.length === history.length &&
+      browserState.tanaHistory.every((entry, index) => entry === history[index])
+    ) {
+      window.history.back();
+      return true;
+    }
+  }
+
   const nextIndex = historyIndex - 1;
   const target = history[nextIndex] ?? null;
 
@@ -355,39 +406,29 @@ function zoomRootAtHistory(editor: PlateEditor, historyIndex: number): boolean {
 function restore(
   editor: PlateEditor,
   targetNodeId: NodeId | null,
-  requestedHistoryIndex?: number
+  browserState?: unknown
 ): boolean {
-  const history = getHistory(editor);
-  let historyIndex = typeof requestedHistoryIndex === 'number'
-    ? Math.max(0, Math.min(requestedHistoryIndex, history.length - 1))
-    : history.lastIndexOf(targetNodeId);
+  const savedState = readBrowserState(browserState, targetNodeId);
+  const history = savedState?.tanaHistory ?? [targetNodeId];
+  const historyIndex = savedState?.tanaHistoryIndex ?? 0;
+  const urlMode = savedState ? 'none' : 'replace';
 
-  if (historyIndex < 0 && targetNodeId !== null) {
-    if (!getTanaNodeEntry(editor, targetNodeId)) {
-      return zoomRoot(editor, { record: false, urlMode: 'replace' });
-    }
-
-    const nextHistory = [...history.slice(0, getHistoryIndex(editor) + 1), targetNodeId];
-    historyIndex = nextHistory.length - 1;
-    setNavigationState(editor, targetNodeId, nextHistory, historyIndex, 'replace');
-    reveal(editor, targetNodeId);
+  if (targetNodeId !== null && !reveal(editor, targetNodeId)) {
+    setNavigationState(editor, null, [null], 0, 'replace');
     pruneBlockSelection(editor);
-    return true;
+    return false;
   }
 
-  if (targetNodeId === null) {
-    return zoomRootAtHistory(editor, historyIndex);
-  }
+  setNavigationState(editor, targetNodeId, history, historyIndex, urlMode);
+  if (targetNodeId !== null) {
+    const targetEntry = getTanaNodeEntry(editor, targetNodeId);
 
-  if (!getTanaNodeEntry(editor, targetNodeId)) {
-    return zoomRootAtHistory(editor, historyIndex >= 0 ? historyIndex : getHistoryIndex(editor));
+    if (targetEntry && hasTanaNodeDescendants(editor.children, targetEntry[1])) {
+      editor.getApi(TogglePlugin).toggle.toggleIds([targetNodeId], true);
+    }
   }
-
-  return zoomTo(editor, targetNodeId, {
-    historyIndex,
-    record: false,
-    urlMode: 'replace',
-  });
+  pruneBlockSelection(editor);
+  return true;
 }
 
 function resetInvalid(editor: PlateEditor) {
@@ -421,7 +462,7 @@ export const TanaZoomPlugin = createPlatePlugin<
       pruneBlockSelection: () => pruneBlockSelection(editor),
       resetInvalid: () => resetInvalid(editor),
       reveal: (nodeId: NodeId) => reveal(editor, nodeId),
-      restore: (nodeId: NodeId | null, historyIndex?: number) => restore(editor, nodeId, historyIndex),
+      restore: (nodeId: NodeId | null, browserState?: unknown) => restore(editor, nodeId, browserState),
     },
   }))
   .extendEditorTransforms(({ editor }) => ({

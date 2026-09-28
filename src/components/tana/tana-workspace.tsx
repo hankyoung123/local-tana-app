@@ -24,6 +24,7 @@ import {
 import {
   getTanaEditorHref,
   getTanaEditorNodeId,
+  TANA_EDITOR_PATH,
   TanaZoomPlugin,
 } from "@/components/editor/plugins/tana-zoom-plugin";
 import { TanaCapturePlugin } from "@/components/editor/plugins/tana-capture-plugin";
@@ -231,17 +232,27 @@ function TanaWorkspaceContent({
     if (nodeId) {
       editor.getApi(TanaZoomPlugin).zoom.restore(nodeId);
     } else {
-      window.history.replaceState({ tanaNodeId: null, tanaHistoryIndex: 0 }, '', getTanaEditorHref());
+      window.history.replaceState(
+        {
+          ...(window.history.state && typeof window.history.state === "object"
+            ? window.history.state
+            : {}),
+          tanaNodeId: null,
+          tanaHistory: [null],
+          tanaHistoryIndex: 0,
+        },
+        '',
+        getTanaEditorHref(),
+      );
     }
   }, [editor, index.nodesById.size]);
 
   React.useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
+      if (window.location.pathname !== TANA_EDITOR_PATH) return;
+
       const nodeId = getTanaEditorNodeId(window.location);
-      const historyIndex = typeof event.state?.tanaHistoryIndex === 'number'
-        ? event.state.tanaHistoryIndex
-        : undefined;
-      editor.getApi(TanaZoomPlugin).zoom.restore(nodeId, historyIndex);
+      editor.getApi(TanaZoomPlugin).zoom.restore(nodeId, event.state);
     };
 
     window.addEventListener('popstate', onPopState);

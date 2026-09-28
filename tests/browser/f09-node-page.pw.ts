@@ -53,6 +53,27 @@ test('search navigation shares history with Node pages', async ({ page }) => {
   await expect(navigation).not.toContainText('全部项目');
 });
 
+test('browser Back and Forward interoperate with the shared page history', async ({ page }) => {
+  await page.goto('/editor');
+  await page.getByRole('button', { name: `聚焦 节点：${firstNodeTitle}` }).click();
+  const navigation = page.getByRole('navigation', { name: '路径导航' });
+
+  await page.keyboard.press('ControlOrMeta+s');
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', { name: '搜索所有节点' }).fill('全部项目');
+  await dialog.getByText('全部项目', { exact: true }).click();
+  await expect(navigation).toContainText('全部项目');
+
+  await page.getByRole('button', { name: '返回上一页' }).click();
+  await expect(navigation).toContainText(firstNodeTitle);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/editor$/);
+  await page.goForward();
+  await expect(navigation).toContainText(firstNodeTitle);
+  await page.goForward();
+  await expect(navigation).toContainText('全部项目');
+});
+
 test('location breadcrumbs navigate through canonical ancestors', async ({ page }) => {
   await page.goto('/editor');
   await page
