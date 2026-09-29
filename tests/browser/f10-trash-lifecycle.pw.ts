@@ -56,6 +56,17 @@ test('Delete → Trash → Restore keeps the canonical title', async ({ page }) 
   await expect(page.locator('[data-slate-editor]').getByText(title, { exact: true })).toBeVisible();
 });
 
+test('Deleting a block Reference removes only the occurrence', async ({ page }) => {
+  await page.goto('/editor');
+  await addBlockReferenceFromEmptyNode(page, 'Plate 文档是唯一真相源。');
+  const reference = page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' });
+  await expect(reference).toBeVisible();
+  await reference.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '删除引用', exact: true }).click();
+  await expect(page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '聚焦 节点：Plate 文档是唯一真相源。' })).toBeVisible();
+});
+
 test('Permanent delete removes a Trash root after confirmation', async ({ page }) => {
   await page.goto('/editor');
   const title = await createDisposableNode(page, 'permanent');
@@ -64,6 +75,17 @@ test('Permanent delete removes a Trash root after confirmation', async ({ page }
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '永久删除…', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toHaveCount(0);
+});
+
+test('Reload keeps a deleted Node in Trash with its canonical identity', async ({ page }) => {
+  await page.goto('/editor');
+  const title = await createDisposableNode(page, 'reload');
+  await deleteNode(page, title);
+  await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible();
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
 });
 
 test('Empty Trash removes all Trash roots in one confirmed action', async ({ page }) => {
@@ -128,4 +150,21 @@ test('Hard delete preserves inline References to the trashed target', async ({ p
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(inlineReference).toHaveCount(1);
   await expect(inlineReference).toHaveAttribute('data-reference-status', 'trashed');
+});
+
+test('Hard delete removes block References while retaining the target identity in Trash', async ({ page }) => {
+  await page.goto('/editor');
+  await addBlockReferenceFromEmptyNode(page, 'Plate 文档是唯一真相源。');
+  const blockReference = page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' });
+  await expect(blockReference).toBeVisible();
+
+  await page.getByRole('button', { name: '聚焦 节点：Plate 文档是唯一真相源。' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
+  await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '删除节点及引用…', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' })).toHaveCount(0);
 });
