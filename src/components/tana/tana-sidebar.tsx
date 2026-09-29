@@ -109,6 +109,11 @@ export function TanaSidebar({
     cancel: () => void;
   } | null>(null);
   const sidebarRef = React.useRef<HTMLElement | null>(null);
+  React.useEffect(() => {
+    if (!resizing.current && resizeWidth !== null && width === resizeWidth) {
+      setResizeWidth(null);
+    }
+  }, [resizeWidth, width]);
   const updateUi = (patch: Parameters<typeof mergeTanaWorkspaceUi>[1]) =>
     onUpdateUi(mergeTanaWorkspaceUi(workspaceUi, patch));
   const setMode = (next: TanaSidebarMode) => {
@@ -127,8 +132,12 @@ export function TanaSidebar({
     resizing.current = false;
     const next = override ?? resizeWidthRef.current;
     resizeWidthRef.current = null;
-    setResizeWidth(null);
-    if (typeof next === "number") updateUi({ sidebar: { width: next } });
+    if (typeof next === "number") {
+      setResizeWidth(next);
+      updateUi({ sidebar: { width: next } });
+    } else {
+      setResizeWidth(null);
+    }
   };
   const cancelResize = () => {
     if (!resizing.current) return;
