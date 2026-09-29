@@ -46,15 +46,29 @@ test('field pages keep a trailing Body input on the last line', async ({ page })
   const lastRow = editor.locator('[data-tana-semantic]').last();
   const lastRowBox = await lastRow.boundingBox();
   const bodyInputBox = await bodyInput.boundingBox();
+  const bodyBulletBox = await bodyInput.locator('svg').boundingBox();
+  const outlineBulletBox = await editor
+    .locator('[data-tana-semantic="field"] .tana-nodeGutter button[aria-label^="聚焦"] svg')
+    .first()
+    .boundingBox();
 
   expect(lastRowBox).not.toBeNull();
   expect(bodyInputBox).not.toBeNull();
+  expect(bodyBulletBox).not.toBeNull();
+  expect(outlineBulletBox).not.toBeNull();
   expect(bodyInputBox!.y).toBeGreaterThanOrEqual(lastRowBox!.y + lastRowBox!.height);
+  expect(bodyInputBox!.y).toBeLessThan(lastRowBox!.y + lastRowBox!.height + 16);
+  expect(Math.abs(
+    bodyBulletBox!.x + bodyBulletBox!.width / 2 -
+    (outlineBulletBox!.x + outlineBulletBox!.width / 2)
+  )).toBeLessThan(1);
 
   const before = await canonicalNodeCount(page);
   await bodyInput.click();
+  await expect(bodyInput).toHaveCount(0);
   await page.keyboard.type('F09 trailing body');
   await expect(editor).toContainText('F09 trailing body');
+  await expect(page.getByRole('button', { name: '输入内容…' })).toBeVisible();
   expect(await canonicalNodeCount(page)).toBe(before + 1);
 });
 

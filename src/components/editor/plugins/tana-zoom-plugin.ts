@@ -248,7 +248,7 @@ function insertZoomBodyChild(editor: PlateEditor, { select = true } = {}) {
   return select ? navigate(editor, childPath) : true;
 }
 
-function isEmptyZoomBodyChild(editor: PlateEditor, path: number[]) {
+export function isEmptyZoomBodyChild(editor: PlateEditor, path: number[]) {
   const entry = editor.api.node(path);
 
   if (!entry || !ElementApi.isElement(entry[0])) return false;
