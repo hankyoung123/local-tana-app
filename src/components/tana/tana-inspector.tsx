@@ -19,6 +19,7 @@ import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs } from '@heroui/react';
 import {
   Select,
   SelectContent,
@@ -88,10 +89,19 @@ export function TanaInspector({ activeNodeId, onClose }: {
   const editor = useEditorRef();
   const index = useTanaIndex();
   const node = activeNodeId ? index.nodesById.get(activeNodeId) : undefined;
+  const defaultInspectorTab = node?.semanticTypes.includes('supertag-definition') ? '字段' : '属性';
+  const [inspectorSelection, setInspectorSelection] = React.useState<{
+    nodeId: NodeId | null;
+    tab: string;
+  }>({ nodeId: null, tab: '' });
+  const activeInspectorTab =
+    inspectorSelection.nodeId === activeNodeId && inspectorSelection.tab
+      ? inspectorSelection.tab
+      : defaultInspectorTab;
 
   if (!node) {
     return (
-      <aside aria-label="检查器" className="tana-inspector relative h-full w-[21rem] max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
+      <aside aria-label="检查器" className="tana-inspector relative h-full w-80 max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
         <button
           aria-label="关闭检查器"
           className="absolute top-2.5 right-3 grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:ring-2"
@@ -117,7 +127,6 @@ export function TanaInspector({ activeNodeId, onClose }: {
   const inspectorTabs = isSupertagDefinition
     ? ['信息', '字段', '关联']
     : ['属性', '字段', '引用'];
-  const activeInspectorTab = isSupertagDefinition ? '字段' : '属性';
   const parentNode = index.parentNodeIds.get(node.id)
     ? index.nodesById.get(index.parentNodeIds.get(node.id)!)
     : undefined;
@@ -140,7 +149,7 @@ export function TanaInspector({ activeNodeId, onClose }: {
     });
 
   return (
-    <aside aria-label="检查器" className="tana-inspector relative h-full w-[21rem] max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
+    <aside aria-label="检查器" className="tana-inspector relative h-full w-80 max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
       <div className="sticky top-0 z-10 border-b border-[var(--tana-divider)] bg-[color:var(--tana-sidebar)]/95 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4 pt-2.5">
           <p className="text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.14em]">
@@ -168,16 +177,30 @@ export function TanaInspector({ activeNodeId, onClose }: {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 px-4" aria-label="检查器分区">
-          {inspectorTabs.map((tab) => (
-            <span
-              key={tab}
-              className={`border-b-2 px-1.5 pb-2 text-[12px] transition-colors ${tab === activeInspectorTab ? 'border-[var(--tana-accent)] font-medium text-[var(--tana-text)]' : 'border-transparent text-[var(--tana-text-tertiary)]'}`}
-            >
-              {tab}
-            </span>
-          ))}
-        </div>
+        <Tabs
+          aria-label="检查器分区"
+          className="w-full !gap-0 px-3"
+          selectedKey={activeInspectorTab}
+          variant="secondary"
+          align="start"
+          onSelectionChange={(key) =>
+            setInspectorSelection({ nodeId: activeNodeId, tab: String(key) })
+          }
+        >
+          <Tabs.ListContainer className="!w-full !rounded-none !bg-transparent">
+            <Tabs.List className="!w-full !min-w-0 !justify-start !gap-0 !p-0">
+              {inspectorTabs.map((tab) => (
+                <Tabs.Tab
+                  key={tab}
+                  id={tab}
+                  className="!h-9 !flex-1 !rounded-none !px-2 !text-[12px]"
+                >
+                  {tab}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+          </Tabs.ListContainer>
+        </Tabs>
       </div>
 
       {isFieldDefinition && (
@@ -194,7 +217,7 @@ export function TanaInspector({ activeNodeId, onClose }: {
         />
       )}
 
-      {isOrdinaryNode && (
+      {isOrdinaryNode && activeInspectorTab !== '引用' && (
         <OrdinaryNodeProperties
           customFields={customFields}
           index={index}
@@ -204,17 +227,19 @@ export function TanaInspector({ activeNodeId, onClose }: {
         />
       )}
 
-      {isSupertagDefinition && (
+      {isSupertagDefinition && activeInspectorTab === '字段' && (
         <SupertagFieldsSection nodeId={node.id} />
       )}
 
-      {isSupertagDefinition && (
+      {isSupertagDefinition && activeInspectorTab === '信息' && (
         <SupertagInheritanceSection supertagId={node.id} />
       )}
 
-      {isSupertagDefinition && <SupertagPresentationSection supertagId={node.id} />}
+      {isSupertagDefinition && activeInspectorTab === '信息' && <SupertagPresentationSection supertagId={node.id} />}
 
-      {isOrdinaryNode && <ReferencesConfigurationSection nodeId={node.id} />}
+      {((isOrdinaryNode && activeInspectorTab === '引用') || (isSupertagDefinition && activeInspectorTab === '关联')) && (
+        <ReferencesConfigurationSection nodeId={node.id} />
+      )}
 
       {isSearch && (
         <TanaSearchDefinitionEditor

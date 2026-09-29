@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "@heroui/styles";
 
 @plugin "tailwind-scrollbar-hide";
 
@@ -64,19 +64,41 @@
   --ring: oklch(0.62 0.1 158);
   --highlight: oklch(0.78 0.15 92);
   --brand: oklch(0.7 0.12 158);
-  --tana-canvas: #191d1a;
-  --tana-sidebar: #1d221f;
-  --tana-text: #edf1ed;
-  --tana-text-secondary: #b8c0ba;
-  --tana-text-tertiary: #89938c;
-  --tana-hover: #272e2a;
-  --tana-selected: #263b2e;
-  --tana-divider: #303832;
-  --tana-accent: #8dc8a1;
-  --tana-accent-soft: #263b2e;
-  --tana-link: #9fd3af;
-  --tana-node-bullet: #b2c2b8;
-  --tana-reference: #a9c7b4;
+  --tana-canvas: #111315;
+  --tana-sidebar: #17191c;
+  --tana-text: #f1f2f4;
+  --tana-text-secondary: #b4b8c0;
+  --tana-text-tertiary: #777d87;
+  --tana-hover: #22252a;
+  --tana-selected: #292d3a;
+  --tana-divider: #2b2e34;
+  --tana-accent: #a9b2ff;
+  --tana-accent-soft: #272b3c;
+  --tana-link: #bbc2ff;
+  --tana-node-bullet: #b9bec8;
+  --tana-reference: #b3baff;
+
+  /* HeroUI v3 theme tokens match the Plate canvas and local panels. */
+  --background: #111315;
+  --foreground: #f1f2f4;
+  --surface: #1a1c20;
+  --surface-secondary: #202329;
+  --surface-tertiary: #282b32;
+  --surface-foreground: #f1f2f4;
+  --overlay: #23262c;
+  --overlay-foreground: #f1f2f4;
+  --default: #292c33;
+  --default-foreground: #e5e7ec;
+  --accent: #a9b2ff;
+  --accent-foreground: #171a2b;
+  --muted: #9197a3;
+  --separator: #2b2e34;
+  --border: #343841;
+  --focus: #a9b2ff;
+  --field-background: #252830;
+  --field-foreground: #f1f2f4;
+  --field-placeholder: #888e99;
+  --radius: 0.625rem;
 }
 
 @theme inline {
@@ -117,7 +139,163 @@
     @apply bg-background text-foreground;
     font-family: var(--font-geist-sans), sans-serif;
     letter-spacing: 0;
+    background: var(--tana-canvas);
   }
+}
+
+/* Graphite workspace chrome. The editor keeps Plate in charge while these
+ * layers give navigation, focus and panels a quiet, physical surface. */
+.tana-workspace-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 66% -18%, color-mix(in srgb, var(--tana-accent) 11%, transparent), transparent 34%),
+    radial-gradient(circle at 4% 100%, color-mix(in srgb, #44518d 7%, transparent), transparent 32%),
+    var(--tana-canvas);
+}
+
+.tana-topbar {
+  min-height: 3.5rem;
+  background: linear-gradient(180deg, rgb(31 33 38 / 86%), rgb(20 22 25 / 78%));
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  backdrop-filter: blur(22px) saturate(135%);
+  box-shadow: 0 10px 35px rgb(0 0 0 / 14%);
+}
+
+.tana-topbar-button {
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.tana-topbar-button:hover {
+  border-color: var(--tana-divider);
+  background: var(--tana-hover);
+}
+
+.tana-topbar-button:active {
+  transform: translateY(1px);
+}
+
+.tana-search-pill {
+  border: 1px solid var(--tana-divider);
+  background: color-mix(in srgb, var(--tana-sidebar) 76%, transparent);
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.tana-search-pill:hover,
+.tana-search-pill:focus-visible {
+  border-color: color-mix(in srgb, var(--tana-accent) 55%, var(--tana-divider));
+  background: var(--tana-hover);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tana-accent) 12%, transparent);
+}
+
+.tana-page-surface {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tana-canvas) 94%, #ffffff 6%), var(--tana-canvas));
+}
+
+.tana-page-surface::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 18% 5%, color-mix(in srgb, var(--tana-accent) 8%, transparent), transparent 36%),
+    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, #313a70 6%, transparent), transparent 36%);
+  content: '';
+  pointer-events: none;
+}
+
+.tana-inspector-surface {
+  background: linear-gradient(180deg, rgb(30 32 37 / 94%), rgb(21 23 26 / 95%));
+  backdrop-filter: blur(28px) saturate(135%);
+  box-shadow: -24px 0 55px rgb(0 0 0 / 28%);
+}
+
+.tana-sidebar {
+  background: linear-gradient(180deg, rgb(26 28 33 / 96%), rgb(19 21 24 / 96%));
+  backdrop-filter: blur(26px) saturate(130%);
+  box-shadow: 16px 0 38px rgb(0 0 0 / 12%);
+}
+
+.tana-sidebar-header {
+  background: linear-gradient(180deg, rgb(255 255 255 / 4%), transparent);
+}
+
+.tana-sidebar-scroll {
+  scrollbar-gutter: stable;
+}
+
+.tana-current-location {
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 7%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+
+.tana-inspector-row {
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.tana-inspector-row:hover {
+  border-color: color-mix(in srgb, var(--tana-divider) 80%, transparent);
+}
+
+.tana-inspector section {
+  border-color: color-mix(in srgb, var(--tana-divider) 84%, transparent);
+}
+
+.tana-inspector [role='tab'] {
+  color: var(--tana-text-tertiary) !important;
+  font-weight: 500;
+}
+
+.tana-inspector [role='tab']:hover {
+  color: var(--tana-text-secondary) !important;
+}
+
+.tana-inspector [role='tab'][aria-selected='true'] {
+  color: var(--tana-text) !important;
+  background: transparent !important;
+}
+
+.tana-inspector [role='tab']::after {
+  background: var(--tana-accent) !important;
+}
+
+@media (max-width: 900px) {
+  .tana-topbar .tana-breadcrumb-label {
+    display: none;
+  }
+
+  .tana-topbar .tana-breadcrumb-separator {
+    display: none;
+  }
+}
+
+.tana-sidebar,
+.tana-inspector {
+  scrollbar-color: color-mix(in srgb, var(--tana-text-tertiary) 35%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.tana-sidebar::-webkit-scrollbar,
+.tana-inspector::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tana-sidebar::-webkit-scrollbar-track,
+.tana-inspector::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tana-sidebar::-webkit-scrollbar-thumb,
+.tana-inspector::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--tana-text-tertiary) 28%, transparent);
 }
 
 /* Node spacing belongs to the outer wrapper; the element owns its own line box. */

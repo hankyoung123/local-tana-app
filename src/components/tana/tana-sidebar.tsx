@@ -15,6 +15,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import * as React from "react";
+import { Button } from "@heroui/react";
 import { useEditorRef, usePluginOption } from "platejs/react";
 import { TogglePlugin } from "@platejs/toggle/react";
 import { TanaTimePlugin } from "@/components/editor/plugins/tana-time-plugin";
@@ -207,26 +208,26 @@ export function TanaSidebar({
     return (
       <aside
         aria-label="侧栏"
-        className="flex h-full w-10 shrink-0 flex-col items-center border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)] pt-3"
+        className="tana-sidebar flex h-full w-10 shrink-0 flex-col items-center border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)] pt-3"
         data-testid="tana-sidebar-mini"
       >
-        <SidebarIconButton label="隐藏导航" onClick={cycleMode}>
+        <SidebarIconButton label="隐藏导航" onPress={cycleMode}>
           <Settings2Icon className="size-4" />
         </SidebarIconButton>
         <div className="mt-3 flex flex-col gap-1">
           <SidebarIconButton
             label="Today"
-            onClick={() => editor.getTransforms(TanaTimePlugin).time.today()}
+            onPress={() => editor.getTransforms(TanaTimePlugin).time.today()}
           >
             <CalendarDaysIcon className="size-4" />
           </SidebarIconButton>
-          <SidebarIconButton label="Create New" onClick={onCreateNew}>
+          <SidebarIconButton label="Create New" onPress={onCreateNew}>
             <PlusIcon className="size-4" />
           </SidebarIconButton>
-          <SidebarIconButton label="Search" onClick={onOpenSearch}>
+          <SidebarIconButton label="Search" onPress={onOpenSearch}>
             <SearchIcon className="size-4" />
           </SidebarIconButton>
-          <SidebarIconButton label="Quick Add" onClick={onQuickAdd}>
+          <SidebarIconButton label="Quick Add" onPress={onQuickAdd}>
             <SparklesIcon className="size-4" />
           </SidebarIconButton>
         </div>
@@ -454,22 +455,22 @@ export function TanaSidebar({
   return (
     <aside
       aria-label="侧栏"
-      className="relative flex h-full shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]"
+      className="tana-sidebar relative flex h-full shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]"
       data-testid="tana-sidebar"
       ref={sidebarRef}
       style={{ width: resizeWidth ?? width }}
     >
-      <div className="flex h-12 items-center justify-between px-4">
+      <div className="tana-sidebar-header flex h-14 items-center justify-between border-b border-[var(--tana-divider)]/70 px-4">
         <span className="flex items-center gap-2 font-medium text-[13px]">
-          <span className="grid size-5 place-items-center rounded-md bg-[var(--tana-accent)] font-semibold text-white text-[10px]">
+          <span className="grid size-6 place-items-center rounded-lg bg-[var(--tana-accent)] font-semibold text-[#15161a] text-[10px] shadow-[0_0_0_3px_var(--tana-accent-soft)]">
             T
           </span>
-          Local Tana
+          <span className="tracking-[-0.01em]">Local Tana</span>
         </span>
         <div className="flex items-center gap-1">
           <button
             aria-label="侧栏设置"
-            className="grid size-7 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+            className="grid size-7 place-items-center rounded-lg text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
             type="button"
             onClick={() => setSettingsOpen((open) => !open)}
           >
@@ -477,7 +478,7 @@ export function TanaSidebar({
           </button>
           <button
             aria-label="收起导航"
-            className="grid size-7 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+            className="grid size-7 place-items-center rounded-lg text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
             type="button"
             onClick={cycleMode}
           >
@@ -653,7 +654,7 @@ export function TanaSidebar({
           </div>
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+      <div className="tana-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-5">
         <nav aria-label="主导航" className="space-y-0.5">
           {visible
             .filter((item) => item !== "supertags" && item !== "recents")
@@ -826,8 +827,8 @@ function SidebarSection({
   title: string;
 }) {
   return (
-    <section className="mt-5">
-      <h2 className="px-2 py-1.5 font-medium text-[11px] text-[var(--tana-text-tertiary)]">
+    <section className="mt-6">
+      <h2 className="px-2 py-1.5 font-medium text-[10px] uppercase tracking-[0.13em] text-[var(--tana-text-tertiary)]">
         {title}
       </h2>
       {children}
@@ -838,36 +839,51 @@ function SidebarButton({
   active,
   children,
   className,
+  disabled,
+  onClick,
   ...props
 }: React.ComponentProps<"button"> & { active?: boolean }) {
   return (
-    <button
+    <Button
+      {...(props as React.ComponentProps<typeof Button>)}
+      isDisabled={disabled}
+      onPress={(event) =>
+        onClick?.(event as unknown as React.MouseEvent<HTMLButtonElement>)
+      }
       className={cn(
-        "flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]",
+        "!h-8 !min-w-0 !w-full !justify-start !gap-2 !rounded-lg !px-2 !text-left !text-xs text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]",
         active &&
-          "bg-[var(--tana-selected)] font-medium text-[var(--tana-accent)]",
+          "bg-[var(--tana-selected)] font-medium text-[var(--tana-accent)] shadow-[inset_2px_0_0_var(--tana-accent)]",
         className,
       )}
+      size="sm"
+      variant="ghost"
       type="button"
-      {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 function SidebarIconButton({
   label,
   children,
-  ...props
-}: React.ComponentProps<"button"> & { label: string }) {
+  onPress,
+}: {
+  label: string;
+  children: React.ReactNode;
+  onPress: () => void;
+}) {
   return (
-    <button
+    <Button
       aria-label={label}
-      className="grid size-8 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+      className="!h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+      isIconOnly
+      size="sm"
+      variant="ghost"
       type="button"
-      {...props}
+      onPress={onPress}
     >
       {children}
-    </button>
+    </Button>
   );
 }

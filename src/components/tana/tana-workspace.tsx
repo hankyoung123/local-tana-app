@@ -4,10 +4,14 @@ import * as React from "react";
 
 import {
   CornerDownLeftIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   EllipsisIcon,
+  PanelRightIcon,
   SearchIcon,
   Settings2Icon,
 } from "lucide-react";
+import { Button, Kbd } from "@heroui/react";
 import {
   type PlateEditor,
   useEditorRef,
@@ -310,7 +314,7 @@ function TanaWorkspaceContent({
   }, [editor, openQuickAdd, openSearch]);
 
   return (
-    <div className="flex h-dvh min-w-0 bg-[var(--tana-sidebar)] text-[var(--tana-text)]">
+    <div className="tana-workspace-shell flex h-dvh min-w-0 overflow-hidden text-[var(--tana-text)]">
       <TanaOutlinerOpenState />
       <TanaSidebar
         activeNodeId={activeNodeId}
@@ -338,22 +342,37 @@ function TanaWorkspaceContent({
       )}
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="relative flex h-10 shrink-0 items-center border-b border-[var(--tana-divider)] bg-[color:var(--tana-canvas)]/95 px-5">
-          <button
+        <div className="tana-topbar relative z-20 flex shrink-0 items-center gap-2 px-3 sm:px-5">
+          <Button
             aria-label="返回上一页"
-            className="mr-2 grid size-7 place-items-center rounded text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] disabled:cursor-not-allowed disabled:opacity-40"
-            disabled={(usePluginOption(TanaZoomPlugin, "historyIndex") ?? 0) <= 0}
+            className="tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
+            isDisabled={(usePluginOption(TanaZoomPlugin, "historyIndex") ?? 0) <= 0}
+            isIconOnly
+            size="sm"
+            variant="ghost"
             type="button"
-            onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.previous()}
+            onPress={() => editor.getTransforms(TanaZoomPlugin).zoom.previous()}
           >
-            ‹
-          </button>
+            <ChevronLeftIcon className="size-4" />
+          </Button>
+          <Button
+            aria-label="前进到下一页"
+            className="tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
+            isDisabled
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            type="button"
+          >
+            <ChevronRightIcon className="size-4" />
+          </Button>
+          <div className="mx-1 hidden h-5 w-px bg-[var(--tana-divider)] sm:block" />
           <nav
             aria-label="路径导航"
-            className="flex min-w-0 flex-1 items-center gap-1 text-[var(--tana-text-tertiary)] text-xs"
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--tana-text-tertiary)] text-xs"
           >
             <button
-              className="truncate hover:text-[var(--tana-text)] disabled:text-[var(--tana-text)]"
+              className="tana-breadcrumb-label truncate rounded px-1.5 py-1 hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] disabled:text-[var(--tana-text)]"
               disabled={!focusedNodeId}
               type="button"
               onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
@@ -367,17 +386,17 @@ function TanaWorkspaceContent({
                 <React.Fragment key={node.id}>
                   <span
                     aria-hidden="true"
-                    className="text-[var(--tana-text-tertiary)]/60"
+                    className="tana-breadcrumb-separator text-[var(--tana-text-tertiary)]/60"
                   >
                     /
                   </span>
                   {isCurrent ? (
-                    <span className="truncate font-medium text-[var(--tana-text)]">
+                    <span className="tana-current-location truncate rounded-lg px-2 py-1 font-medium text-[var(--tana-text)]">
                       {node.text || "未命名节点"}
                     </span>
                   ) : (
                     <button
-                      className="truncate hover:text-[var(--tana-text)]"
+                      className="tana-breadcrumb-label truncate rounded px-1.5 py-1 hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
                       type="button"
                       onClick={() =>
                         editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
@@ -391,7 +410,30 @@ function TanaWorkspaceContent({
             })}
           </nav>
 
-          <div className="ml-4 flex shrink-0 items-center gap-2 text-xs">
+          <div className="ml-2 flex shrink-0 items-center gap-1.5 text-xs">
+            <Button
+              aria-label="打开全局搜索"
+              className="tana-search-pill hidden !h-8 !min-w-0 !justify-start !gap-2 !rounded-lg !px-2.5 text-[var(--tana-text-tertiary)] sm:flex"
+              size="sm"
+              variant="ghost"
+              type="button"
+              onPress={openSearch}
+            >
+              <SearchIcon className="size-3.5" />
+              <span className="text-[11px]">搜索</span>
+              <Kbd className="!h-5 !rounded-md !px-1 !text-[9px]">⌘S</Kbd>
+            </Button>
+            <Button
+              aria-label={fieldPanelOpen ? "关闭配置面板" : "打开配置面板"}
+              className={`tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 ${fieldPanelOpen ? 'bg-[var(--tana-selected)] text-[var(--tana-accent)]' : 'text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]'}`}
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              type="button"
+              onPress={() => setFieldPanelOpen((open) => !open)}
+            >
+              <PanelRightIcon className="size-4" />
+            </Button>
             {persistenceStatus === "saving" && (
               <span
                 aria-label="正在保存"
@@ -406,7 +448,7 @@ function TanaWorkspaceContent({
               <DropdownMenuTrigger asChild>
                 <button
                   aria-label="更多页面操作"
-                  className="grid size-7 place-items-center rounded text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
+                  className="tana-topbar-button grid size-8 place-items-center rounded-lg text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
                   type="button"
                 >
                   <EllipsisIcon className="size-4" />
@@ -549,13 +591,15 @@ function TanaWorkspaceContent({
         </div>
 
         <div className="relative flex min-h-0 min-w-0 flex-1">
-          <TanaNodeViewHost
-            focusedNodeId={focusedNodeId}
-            selectedNodeId={selectedNodeId}
-          />
+          <div className="tana-page-surface flex min-w-0 flex-1">
+            <TanaNodeViewHost
+              focusedNodeId={focusedNodeId}
+              selectedNodeId={selectedNodeId}
+            />
+          </div>
           {fieldPanelOpen && (
             <div
-              className="absolute inset-y-0 right-0 z-30 max-w-full shadow-xl xl:relative xl:shrink-0 xl:shadow-none"
+              className="tana-inspector-surface absolute inset-y-0 right-0 z-30 max-w-full xl:relative xl:shrink-0"
               onKeyDown={(event) => {
                 if (event.key === "Escape" && !event.defaultPrevented) {
                   event.stopPropagation();
