@@ -2,10 +2,19 @@ import { expect, test, type Page } from '@playwright/test';
 
 const firstNodeTitle = 'Plate 提供编辑器能力，Local Tana 只补充语义。';
 
-async function deleteFirstNode(page: Page) {
-  const node = page
-    .locator('[data-slate-editor]')
-    .getByText(firstNodeTitle, { exact: true });
+async function createDisposableNode(page: Page, suffix: string) {
+  const title = `F10 disposable ${suffix}`;
+  const editor = page.locator('[data-slate-editor]');
+  await editor.getByText(firstNodeTitle, { exact: true }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.insertText(title);
+  await expect(editor.getByText(title, { exact: true })).toBeVisible();
+  return title;
+}
+
+async function deleteNode(page: Page, title: string) {
+  const node = page.locator('[data-slate-editor]').getByText(title, { exact: true });
   await node.click();
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
@@ -26,27 +35,30 @@ async function addReferenceFromEmptyNode(page: Page, targetTitle: string) {
 
 test('Delete → Trash → Restore keeps the canonical title', async ({ page }) => {
   await page.goto('/editor');
-  await deleteFirstNode(page);
+  const title = await createDisposableNode(page, 'restore');
+  await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible();
-  await expect(page.getByText(firstNodeTitle, { exact: true })).toBeVisible();
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '恢复', exact: true }).click();
   await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await expect(page.locator('[data-slate-editor]').getByText(firstNodeTitle, { exact: true })).toBeVisible();
+  await expect(page.locator('[data-slate-editor]').getByText(title, { exact: true })).toBeVisible();
 });
 
 test('Permanent delete removes a Trash root after confirmation', async ({ page }) => {
   await page.goto('/editor');
-  await deleteFirstNode(page);
+  const title = await createDisposableNode(page, 'permanent');
+  await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '永久删除…', exact: true }).click();
-  await expect(page.getByText(firstNodeTitle, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(title, { exact: true })).toHaveCount(0);
 });
 
 test('Empty Trash removes all Trash roots in one confirmed action', async ({ page }) => {
   await page.goto('/editor');
-  await deleteFirstNode(page);
+  const title = await createDisposableNode(page, 'empty');
+  await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '清空废纸篓', exact: true }).click();
@@ -55,18 +67,20 @@ test('Empty Trash removes all Trash roots in one confirmed action', async ({ pag
 
 test('A Trash item can be viewed without being restored', async ({ page }) => {
   await page.goto('/editor');
-  await deleteFirstNode(page);
+  const title = await createDisposableNode(page, 'view');
+  await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
   await page.getByRole('button', { name: '查看', exact: true }).click();
-  await expect(page).toHaveURL(/\/editor\?node=node-principle/);
+  await expect(page).toHaveURL(/\/editor\?node=/);
   await expect(page.getByRole('button', { name: '恢复', exact: true })).toHaveCount(0);
-  await expect(page.locator('[data-slate-editor]')).toContainText(firstNodeTitle);
+  await expect(page.locator('[data-slate-editor]')).toContainText(title);
 });
 
 test('Deleting the focused Node page returns to Workspace', async ({ page }) => {
   await page.goto('/editor');
-  await page.getByRole('button', { name: `聚焦 节点：${firstNodeTitle}` }).click();
-  await page.locator('[data-slate-editor]').getByText(firstNodeTitle, { exact: true }).click();
+  const title = await createDisposableNode(page, 'focused');
+  await page.getByRole('button', { name: `聚焦 节点：${title}` }).click();
+  await page.locator('[data-slate-editor]').getByText(title, { exact: true }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
   await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('工作区');
