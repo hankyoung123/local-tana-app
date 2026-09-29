@@ -72,10 +72,10 @@ export function OutlineNodeView({
             variant="none"
           />
           {focusedNodeId && showBodyAffordance && (
-            <div className="mt-2 px-8 sm:px-[max(64px,calc(50%-374px))]">
+            <div className="px-8 sm:px-[max(64px,calc(50%-374px))]">
               <button
                 aria-label="输入内容…"
-                className="slate-blockWrapper relative flow-root block h-8 min-h-8 w-full border-0 bg-transparent p-0 text-left text-[15px] leading-8 text-muted-foreground/80 outline-none transition-colors hover:text-muted-foreground focus-visible:bg-[var(--tana-hover)]"
+                className="slate-blockWrapper relative flow-root block h-8 min-h-8 w-full border-0 bg-transparent px-0 py-1 text-left text-[15px] leading-6 text-muted-foreground/80 outline-none transition-colors hover:text-muted-foreground focus-visible:bg-[var(--tana-hover)]"
                 style={{
                   paddingInlineStart: `${getTanaDisplayIndentPx(
                     (baseIndent ?? 0) + 1,
@@ -87,7 +87,8 @@ export function OutlineNodeView({
               >
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2"
+                  className="pointer-events-none absolute left-1 top-0 grid size-5 place-items-center leading-none"
+                  style={{ lineHeight: 0, transform: 'translateY(4px)' }}
                 >
                   <TanaNodeBullet semanticType="content" />
                 </span>
