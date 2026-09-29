@@ -29,6 +29,7 @@ import type {
   TanaFieldInitializer,
   TanaFieldNode
 } from '@/lib/tana/types';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_FIELD_PLUGIN_KEY = 'tanaField' as const;
 
@@ -73,6 +74,29 @@ function isAtFieldStructureEdge(
   return edge === 'start'
     ? editor.api.isStart(selection.anchor, entry[1])
     : editor.api.isEnd(selection.anchor, entry[1]);
+}
+
+/**
+ * A focused page with only Field subtrees still needs a keyboard path into its
+ * ordinary Body. Keep the Field/Value structure atomic, but let an Enter at
+ * the end of a Value materialize the same canonical Body Node as the visible
+ * Zoom affordance.
+ */
+function insertBodyAtFieldEnd(editor: PlateEditor): boolean {
+  const entry = getActiveFieldStructureEntry(editor);
+
+  if (
+    !entry ||
+    !isAtFieldStructureEdge(editor, entry, 'end') ||
+    !getNodeSemanticTypes(entry[0], {
+      document: editor.children,
+      path: entry[1]
+    }).some((semantic) => semantic === 'value')
+  ) {
+    return false;
+  }
+
+  return editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild();
 }
 
 function selectionCrossesFieldStructure(editor: PlateEditor): boolean {
@@ -1187,7 +1211,15 @@ export const TanaFieldPlugin = createPlatePlugin({
   .overrideEditor(
     ({
       editor,
-      tf: { deleteBackward, deleteForward, deleteFragment, insertBreak, removeNodes, tab }
+      tf: {
+        deleteBackward,
+        deleteForward,
+        deleteFragment,
+        insertBreak,
+        insertSoftBreak,
+        removeNodes,
+        tab
+      }
     }) => {
       const removeFieldSubtree = (fieldPath: Path) => {
         getTanaNodeDescendantPaths(editor.children, fieldPath)
@@ -1221,10 +1253,20 @@ export const TanaFieldPlugin = createPlatePlugin({
           },
           insertBreak() {
             // A Field cannot split, and a Value must stay its Field's only direct
-            // Value child. Text editing remains available through insertText.
-            if (getActiveFieldStructureEntry(editor)) return;
+            // Value child. At a Value's end, use the page Body affordance so a
+            // page containing only Fields remains keyboard-editable.
+            if (getActiveFieldStructureEntry(editor)) {
+              return insertBodyAtFieldEnd(editor) || undefined;
+            }
 
             return insertBreak();
+          },
+          insertSoftBreak() {
+            if (getActiveFieldStructureEntry(editor)) {
+              return insertBodyAtFieldEnd(editor) || undefined;
+            }
+
+            return insertSoftBreak();
           },
           tab(options) {
             // Plate owns Tab/Shift+Tab. Claim the shortcut only for Field structure

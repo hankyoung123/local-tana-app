@@ -223,6 +223,14 @@ function insertZoomBodyChild(editor: PlateEditor, { select = true } = {}) {
     editor.getOption(TogglePlugin, 'openIds') ?? EMPTY_OPEN_IDS, focusedNodeId)) return false;
 
   const [host, hostPath] = hostEntry;
+  const directChildPaths = getTanaDirectChildPaths(editor.children, hostPath);
+  const trailingChild = directChildPaths.at(-1);
+
+  if (trailingChild && isEmptyZoomBodyChild(editor, trailingChild)) {
+    editor.getApi(TogglePlugin).toggle.toggleIds([focusedNodeId], true);
+    return select ? navigate(editor, trailingChild) : true;
+  }
+
   const childPath = getTanaZoomBodyInsertionPath(editor, hostPath);
   const indent = typeof host.indent === 'number' ? host.indent + 1 : 1;
 

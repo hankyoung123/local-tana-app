@@ -248,6 +248,16 @@ describe('Tana outliner behavior', () => {
     );
     assert.equal(isTanaNodeInteractable(editor.children, bodyPath!, openIds, 'project'), true);
     assert.deepEqual(editor.selection?.anchor.path, [bodyPath![0], 0]);
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.insertBodyChild(), true);
+    assert.deepEqual(
+      editor.selection?.anchor.path,
+      [bodyPath![0], 0],
+      'reopening the trailing Body affordance reuses its empty Node'
+    );
+    assert.equal(
+      getTanaZoomRange(editor.children, 'project').filter(([index]) => editor.children[index].id === body!.id).length,
+      1
+    );
     assert.equal(getTanaNodePath(editor.children, 'sqlite')![0] > bodyPath![0], true);
     assert.equal(editor.children[bodyPath![0] - 1].id, 'note-b');
     assert.deepEqual(
@@ -362,6 +372,66 @@ describe('Tana outliner behavior', () => {
       ),
       true
     );
+  });
+
+  test('creates the first Body child when Enter ends a Field Value', () => {
+    for (const breakKind of ['insertBreak', 'insertSoftBreak'] as const) {
+      const editor = createPlateEditor({
+        nodeId: {
+          filter: isTanaNodeElement,
+          idCreator: () => 'generated',
+          initialValueIds: 'always'
+        },
+        plugins: EditorKit,
+        value: [
+          { children: [{ text: 'Project' }], id: 'project', type: KEYS.p },
+          {
+            children: [{ text: '' }],
+            id: 'project-status',
+            indent: 1,
+            tanaFieldId: 'status',
+            type: KEYS.p
+          },
+          {
+            children: [{ text: 'Summary' }],
+            id: 'project-status-value',
+            indent: 2,
+            tanaFieldValueType: 'plain',
+            type: KEYS.p
+          },
+          {
+            children: [{ text: 'Status' }],
+            id: 'status',
+            tanaFieldDefinition: { type: 'plain' },
+            type: KEYS.p
+          }
+        ]
+      });
+
+      assert.equal(zoomToTanaNode(editor, 'project'), true);
+      const valuePath = getTanaNodePath(editor.children, 'project-status-value');
+      assert.ok(valuePath);
+      editor.tf.select({
+        anchor: { path: [valuePath[0], 0], offset: 'Summary'.length },
+        focus: { path: [valuePath[0], 0], offset: 'Summary'.length }
+      });
+
+      if (breakKind === 'insertBreak') editor.tf.insertBreak();
+      else editor.tf.insertSoftBreak();
+
+      const bodyPath = editor.selection?.anchor.path.slice(0, 1);
+      assert.ok(bodyPath, `${breakKind}: Body receives the caret`);
+      const body = editor.children[bodyPath![0]] as TElement;
+      assert.equal(body.indent, 1, `${breakKind}: Body is a direct child of the page`);
+      assert.equal('tanaFieldId' in body, false, `${breakKind}: Body is ordinary content`);
+      assert.deepEqual(getTanaParentPath(editor.children, bodyPath!), [0]);
+      assert.equal(editor.children[valuePath[0]].id, 'project-status-value');
+      assert.equal(editor.children[valuePath[0]].children[0].text, 'Summary');
+      assert.deepEqual(
+        getTanaZoomRange(editor.children, 'project').map(([index]) => editor.children[index].id),
+        ['project', 'project-status', 'project-status-value', body.id]
+      );
+    }
   });
 
   test('uses one NodeId predicate for every top-level block type', () => {

@@ -36,6 +36,28 @@ test('empty page navigation stays read-only until the body affordance is activat
   expect(await canonicalNodeCount(page)).toBe(2);
 });
 
+test('field pages keep a trailing Body input on the last line', async ({ page }) => {
+  await page.goto('/editor?node=node-project-example');
+
+  const editor = page.locator('[data-slate-editor]');
+  const bodyInput = page.getByRole('button', { name: '输入内容…' });
+  await expect(bodyInput).toBeVisible();
+
+  const lastRow = editor.locator('[data-tana-semantic]').last();
+  const lastRowBox = await lastRow.boundingBox();
+  const bodyInputBox = await bodyInput.boundingBox();
+
+  expect(lastRowBox).not.toBeNull();
+  expect(bodyInputBox).not.toBeNull();
+  expect(bodyInputBox!.y).toBeGreaterThanOrEqual(lastRowBox!.y + lastRowBox!.height);
+
+  const before = await canonicalNodeCount(page);
+  await bodyInput.click();
+  await page.keyboard.type('F09 trailing body');
+  await expect(editor).toContainText('F09 trailing body');
+  expect(await canonicalNodeCount(page)).toBe(before + 1);
+});
+
 test('search navigation shares history with Node pages', async ({ page }) => {
   await page.goto('/editor');
   await page.getByRole('button', { name: `聚焦 节点：${firstNodeTitle}` }).click();
