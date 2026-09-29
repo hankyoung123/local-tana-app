@@ -20,12 +20,23 @@ async function deleteNode(page: Page, title: string) {
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
 }
 
-async function addReferenceFromEmptyNode(page: Page, targetTitle: string) {
+async function addBlockReferenceFromEmptyNode(page: Page, targetTitle: string) {
   const editor = page.locator('[data-slate-editor]');
   await editor.getByText(firstNodeTitle, { exact: true }).click();
   await page.keyboard.press('End');
-  await page.keyboard.press('Enter');
+  await page.keyboard.press('Shift+Enter');
   await page.keyboard.type('@');
+  const input = page.locator('input[role="combobox"]');
+  await expect(input).toBeFocused();
+  await page.keyboard.type(targetTitle);
+  await page.getByRole('option', { name: targetTitle, exact: true }).click();
+}
+
+async function addInlineReference(page: Page, targetTitle: string) {
+  const editor = page.locator('[data-slate-editor]');
+  await editor.getByText(firstNodeTitle, { exact: true }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' @');
   const input = page.locator('input[role="combobox"]');
   await expect(input).toBeFocused();
   await page.keyboard.type(targetTitle);
@@ -89,21 +100,21 @@ test('Deleting the focused Node page returns to Workspace', async ({ page }) => 
 
 test('A Reference shows Trash state and restores its exact target', async ({ page }) => {
   await page.goto('/editor');
-  await addReferenceFromEmptyNode(page, 'Plate 文档是唯一真相源。');
-  const reference = page.locator('[data-target-node-id="node-document-source"]');
-  await expect(reference).toHaveAttribute('data-reference-status', 'live');
+  await addBlockReferenceFromEmptyNode(page, 'Plate 文档是唯一真相源。');
+  const liveReference = page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' });
+  await expect(liveReference).toBeVisible();
 
   await page.getByRole('button', { name: '聚焦 节点：Plate 文档是唯一真相源。' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
-  await expect(reference).toHaveAttribute('data-reference-status', 'trashed');
+  await expect(page.getByLabel('引用：目标在废纸篓：Plate 文档是唯一真相源。')).toBeVisible();
   await page.getByRole('button', { name: '恢复原节点' }).click();
-  await expect(reference).toHaveAttribute('data-reference-status', 'live');
+  await expect(liveReference).toBeVisible();
 });
 
 test('Hard delete preserves inline References to the trashed target', async ({ page }) => {
   await page.goto('/editor');
-  await addReferenceFromEmptyNode(page, 'Plate 文档是唯一真相源。');
+  await addInlineReference(page, 'Plate 文档是唯一真相源。');
   const inlineReference = page.locator('[data-target-node-id="node-document-source"]');
   await expect(inlineReference).toHaveAttribute('data-reference-status', 'live');
 
