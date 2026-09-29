@@ -5,9 +5,10 @@ import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
-import { getTanaNodeDescendantPaths, getTanaParentPath } from '@/lib/tana/outliner';
+import { getTanaDirectChildPaths, getTanaNodeDescendantPaths, getTanaParentPath } from '@/lib/tana/outliner';
 import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
-import type { NodeId, TanaBlockElement, TanaSystemNode } from '@/lib/tana/types';
+import type { NodeId, TanaBlockElement, TanaRestoreLocation, TanaSystemNode } from '@/lib/tana/types';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 export const TANA_NODE_LIFECYCLE_PLUGIN_KEY = 'tanaNodeLifecycle' as const;
 
@@ -81,6 +82,24 @@ function getSubtree(
   return [paths, nodes as TElement[]];
 }
 
+function captureRestoreLocation(editor: PlateEditor, path: Path): TanaRestoreLocation | undefined {
+  const parentPath = getTanaParentPath(editor.children, path);
+  if (!parentPath) return;
+  const parent = editor.api.node(parentPath)?.[0];
+  if (!parent || !ElementApi.isElement(parent) || typeof parent.id !== 'string') return;
+  const siblings = getTanaDirectChildPaths(editor.children, parentPath)
+    .map((siblingPath) => editor.api.node(siblingPath)?.[0])
+    .filter((sibling): sibling is TanaBlockElement => !!sibling && ElementApi.isElement(sibling) && typeof sibling.id === 'string');
+  const index = siblings.findIndex((sibling) => sibling.id === editor.api.node(path)?.[0]?.id);
+  const siblingIds = siblings.map((sibling) => sibling.id as string);
+  if (index < 0) return { parentNodeId: parent.id };
+  return {
+    parentNodeId: parent.id,
+    previousSiblingId: siblingIds[index - 1],
+    nextSiblingId: siblingIds[index + 1],
+  };
+}
+
 function moveSubtreeToSystem(
   editor: PlateEditor,
   removeNodes: PlateEditor['tf']['removeNodes'],
@@ -130,6 +149,51 @@ function moveSubtreeToSystem(
   return true;
 }
 
+function moveSubtreeToParent(
+  editor: PlateEditor,
+  removeNodes: PlateEditor['tf']['removeNodes'],
+  nodeId: NodeId,
+  location: TanaRestoreLocation
+): boolean {
+  const source = getTanaNodeEntry(editor, nodeId);
+  const parent = getTanaNodeEntry(editor, location.parentNodeId);
+  if (!source || !parent || source[0].tanaSystemNode !== undefined || source[1][0] === parent[1][0]) return false;
+  const subtree = getSubtree(editor, source[1]);
+  if (!subtree) return false;
+  const [paths, nodes] = subtree;
+  const sourceIndent = getIndent(nodes[0]);
+  const relocatedNodes = nodes.map((node) => ({
+    ...node,
+    indent: getIndent(parent[0]) + 1 + getIndent(node) - sourceIndent,
+  }));
+
+  editor.tf.withoutNormalizing(() => {
+    paths.slice().reverse().forEach((path) => removeNodes({ at: path }));
+    const currentParent = getTanaNodeEntry(editor, location.parentNodeId);
+    if (!currentParent) return;
+    const children = getTanaDirectChildPaths(editor.children, currentParent[1]);
+    const next = location.nextSiblingId
+      ? children.find((path) => editor.api.node(path)?.[0]?.id === location.nextSiblingId)
+      : undefined;
+    const previous = location.previousSiblingId
+      ? children.find((path) => editor.api.node(path)?.[0]?.id === location.previousSiblingId)
+      : undefined;
+    let insertionPath: Path;
+    if (next) insertionPath = next;
+    else if (previous) insertionPath = [getTanaNodeDescendantPaths(editor.children, previous).at(-1)?.[0] ?? previous[0] + 1];
+    else {
+      const descendants = getTanaNodeDescendantPaths(editor.children, currentParent[1]);
+      insertionPath = [(descendants.at(-1) ?? currentParent[1])[0] + 1];
+    }
+    if (previous && !next) {
+      const previousDescendants = getTanaNodeDescendantPaths(editor.children, previous);
+      insertionPath = [(previousDescendants.at(-1) ?? previous)[0] + 1];
+    }
+    editor.tf.insertNodes(relocatedNodes, { at: insertionPath });
+  });
+  return true;
+}
+
 function trash(
   editor: PlateEditor,
   removeNodes: PlateEditor['tf']['removeNodes'],
@@ -137,7 +201,13 @@ function trash(
 ): boolean {
   const entry = getTanaNodeEntry(editor, nodeId);
   if (!entry || !canMutateTanaNode(editor, entry[1], canTrash)) return false;
-  return moveSubtreeToSystem(editor, removeNodes, nodeId, 'trash', false);
+  const location = captureRestoreLocation(editor, entry[1]);
+  if (location) editor.tf.setNodes({ tanaRestoreLocation: location }, { at: entry[1] });
+  const moved = moveSubtreeToSystem(editor, removeNodes, nodeId, 'trash', false);
+  if (moved && editor.getOption(TanaZoomPlugin, 'focusedNodeId') === nodeId) {
+    editor.getApi(TanaZoomPlugin).zoom.resetInvalid({ includeTrash: true });
+  }
+  return moved;
 }
 
 function restore(
@@ -153,7 +223,24 @@ function restore(
     return false;
   }
 
-  return moveSubtreeToSystem(editor, removeNodes, nodeId, destination, false);
+  const location = source[0].tanaRestoreLocation;
+  const trashAncestor = trashNode[1];
+  if (destination === 'home' && location) {
+    const parent = getTanaNodeEntry(editor, location.parentNodeId);
+    if (parent && !isWithinSubtree(editor, parent[1], trashAncestor)) {
+      if (moveSubtreeToParent(editor, removeNodes, nodeId, location)) {
+        const restored = getTanaNodeEntry(editor, nodeId);
+        if (restored) editor.tf.unsetNodes('tanaRestoreLocation', { at: restored[1] });
+        return true;
+      }
+    }
+  }
+  const moved = moveSubtreeToSystem(editor, removeNodes, nodeId, destination, false);
+  if (moved) {
+    const restored = getTanaNodeEntry(editor, nodeId);
+    if (restored) editor.tf.unsetNodes('tanaRestoreLocation', { at: restored[1] });
+  }
+  return moved;
 }
 
 function deletePermanently(
@@ -184,6 +271,54 @@ function deletePermanently(
       .forEach((path) => removeNodes({ at: path }));
   });
 
+  return true;
+}
+
+function hardDeleteIncludingReferences(
+  editor: PlateEditor,
+  removeNodes: PlateEditor['tf']['removeNodes'],
+  nodeId: NodeId
+): boolean {
+  const target = getTanaNodeEntry(editor, nodeId);
+  if (!target || target[0].tanaSystemNode !== undefined) return false;
+  const trashNode = getSystemNodeEntry(editor, 'trash');
+  if (!trashNode) return false;
+  if (!isWithinSubtree(editor, target[1], trashNode[1])) {
+    if (!trash(editor, removeNodes, nodeId)) return false;
+  }
+  const referencePaths = editor.children.flatMap((node, index) =>
+    ElementApi.isElement(node) &&
+    node.tanaReferenceTargetId === nodeId &&
+    node.id !== nodeId
+      ? [[index] as Path]
+      : []
+  );
+  editor.tf.withoutNormalizing(() =>
+    referencePaths.toSorted((a, b) => b[0] - a[0]).forEach((path) => removeNodes({ at: path }))
+  );
+  if (editor.getOption(TanaZoomPlugin, 'focusedNodeId') === nodeId) {
+    editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
+  }
+  return true;
+}
+
+function emptyTrash(
+  editor: PlateEditor,
+  removeNodes: PlateEditor['tf']['removeNodes']
+): boolean {
+  const trashNode = getSystemNodeEntry(editor, 'trash');
+  if (!trashNode) return false;
+  const rootIds = getTanaDirectChildPaths(editor.children, trashNode[1])
+    .map((path) => editor.api.node(path)?.[0]?.id)
+    .filter((id): id is NodeId => typeof id === 'string');
+  if (rootIds.length === 0) return true;
+  editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
+    rootIds.forEach((id) => deletePermanently(editor, removeNodes, id));
+  }));
+  const focusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+  if (focusedNodeId && rootIds.includes(focusedNodeId)) {
+    editor.getApi(TanaZoomPlugin).zoom.resetInvalid();
+  }
   return true;
 }
 
@@ -317,10 +452,10 @@ function replaceSubtreesRaw(
 
 /**
  * Owns the ordinary Node lifecycle without adding placement/history state:
- * removal moves canonical subtrees to the existing Trash Node, restore appends
- * them to Home by default, and permanent deletion is restricted to Trash
- * descendants. A semantic caller may restore a canonical Node to another
- * existing system container without recording placement state.
+ * removal moves canonical subtrees to the existing Trash Node, restore returns
+ * them to captured parent/order when possible (falling back to Home), and
+ * permanent deletion is restricted to Trash descendants. A semantic caller may
+ * restore a canonical Node to another existing system container explicitly.
  */
 export const TanaNodeLifecyclePlugin = createPlatePlugin({
   key: TANA_NODE_LIFECYCLE_PLUGIN_KEY,
@@ -338,6 +473,11 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
         void nodeId;
         return false;
       },
+      hardDeleteIncludingReferences: (nodeId: NodeId): boolean => {
+        void nodeId;
+        return false;
+      },
+      emptyTrash: (): boolean => false,
       restore: (nodeId: NodeId, destination?: TanaRestoreDestination): boolean => {
         void nodeId;
         void destination;
@@ -371,6 +511,9 @@ export const TanaNodeLifecyclePlugin = createPlatePlugin({
   transforms: {
     node: {
       deletePermanently: (nodeId: NodeId) => deletePermanently(editor, removeNodes, nodeId),
+      hardDeleteIncludingReferences: (nodeId: NodeId) =>
+        hardDeleteIncludingReferences(editor, removeNodes, nodeId),
+      emptyTrash: () => emptyTrash(editor, removeNodes),
       restore: (nodeId: NodeId, destination?: TanaRestoreDestination) =>
         restore(editor, removeNodes, nodeId, destination),
       trash: (nodeId: NodeId) => trash(editor, removeNodes, nodeId),

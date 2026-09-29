@@ -431,10 +431,16 @@ function restore(
   return true;
 }
 
-function resetInvalid(editor: PlateEditor) {
+function resetInvalid(editor: PlateEditor, options?: { includeTrash?: boolean }) {
   const focusedNodeId = getFocusedNodeId(editor);
 
-  if (!focusedNodeId || getTanaNodeEntry(editor, focusedNodeId)) return false;
+  if (!focusedNodeId || (getTanaNodeEntry(editor, focusedNodeId) && !options?.includeTrash)) return false;
+  if (focusedNodeId && getTanaNodeEntry(editor, focusedNodeId) && options?.includeTrash) {
+    const index = buildTanaIndex(editor.children);
+    const trashId = index.systemNodeIds.get('trash');
+    const parentId = index.parentNodeIds.get(focusedNodeId);
+    if (!trashId || parentId !== trashId) return false;
+  }
 
   return zoomRoot(editor, { record: false, urlMode: 'replace' });
 }
@@ -460,7 +466,7 @@ export const TanaZoomPlugin = createPlatePlugin<
     zoom: {
       focus: (nodeId: NodeId) => focus(editor, nodeId),
       pruneBlockSelection: () => pruneBlockSelection(editor),
-      resetInvalid: () => resetInvalid(editor),
+      resetInvalid: (options?: { includeTrash?: boolean }) => resetInvalid(editor, options),
       reveal: (nodeId: NodeId) => reveal(editor, nodeId),
       restore: (nodeId: NodeId | null, browserState?: unknown) => restore(editor, nodeId, browserState),
     },

@@ -55,6 +55,13 @@ export type TanaWorkspaceUi = {
   quickAddDraft?: TanaCaptureDraft;
 };
 
+/** Original placement captured on a trashed subtree root for deterministic restore. */
+export type TanaRestoreLocation = {
+  parentNodeId: NodeId;
+  previousSiblingId?: NodeId;
+  nextSiblingId?: NodeId;
+};
+
 export type FieldVisibilityPolicy =
   "always" | "never" | "when-empty" | "when-non-empty" | "when-default";
 
@@ -251,6 +258,7 @@ export type TanaBlockElement = TElement & {
    * Plate NodeId and points at the canonical target NodeId.
    */
   tanaReferenceTargetId?: NodeId;
+  tanaRestoreLocation?: TanaRestoreLocation;
   tanaSearchDefinition?: TanaSearchDefinition;
   /** Semantic Supertag membership. Inline `#` elements are presentation only. */
   tanaSupertagIds?: readonly NodeId[];

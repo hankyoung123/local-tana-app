@@ -260,7 +260,7 @@ export function BlockContextMenu({ children }: { children: React.ReactNode }) {
                   editor.tf.focus();
                 }}
               >
-                删除
+                {selectedNodes.some(([node]) => node.tanaReferenceTargetId) ? '删除引用' : '删除节点'}
               </ContextMenuItem>
             )}
             {canDuplicateSelection && (

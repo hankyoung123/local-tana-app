@@ -14,6 +14,7 @@ import { getTanaNodePath } from '@/lib/tana/outliner';
 import { createAndQuery, runTanaQuery } from '@/lib/tana/query';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 import { TanaFieldPlugin } from './tana-field-plugin';
+import { TanaZoomPlugin } from './tana-zoom-plugin';
 
 function createEditor(value: Value) {
   const editor = createPlateEditor({
@@ -116,7 +117,7 @@ describe('Tana Node lifecycle', () => {
     ]);
   });
 
-  test('restores a trashed subtree to Home without requiring placement history', () => {
+  test('restores a trashed subtree to its original parent and sibling position', () => {
     const editor = createEditor(workspaceWithLifecycleSubtree());
 
     assert.equal(lifecycle(editor).trash('project-node'), true);
@@ -124,9 +125,9 @@ describe('Tana Node lifecycle', () => {
 
     assert.deepEqual(
       editor.children.slice(1, 6).map((node) => node.id),
-      ['home', 'project-reference', 'project-node', 'project-status', 'project-status-value']
+      ['home', 'project-node', 'project-status', 'project-status-value', 'project-reference']
     );
-    assert.equal(getTanaNodePath(editor.children, 'project-node')?.[0], 3);
+    assert.equal(getTanaNodePath(editor.children, 'project-node')?.[0], 2);
     assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('project-node'), 'home');
   });
 
@@ -188,6 +189,37 @@ describe('Tana Node lifecycle', () => {
     assert.deepEqual(index.backlinks.get('project-node')?.map(({ sourceNodeId }) => sourceNodeId), [
       'project-reference',
     ]);
+  });
+
+  test('hard delete trashes the canonical target and removes direct block references', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+
+    assert.equal(lifecycle(editor).hardDeleteIncludingReferences('project-node'), true);
+    const index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.has('project-node'), true);
+    assert.equal(index.nodesById.has('project-reference'), false);
+    assert.equal(index.referenceTargetsByNode.has('project-reference'), false);
+    assert.equal(index.parentNodeIds.get('project-node'), 'trash');
+  });
+
+  test('empty Trash permanently removes every trashed root in one lifecycle operation', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+
+    assert.equal(lifecycle(editor).trash('project-node'), true);
+    assert.equal(lifecycle(editor).trash('status'), true);
+    assert.equal(lifecycle(editor).emptyTrash(), true);
+    const index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.has('project-node'), false);
+    assert.equal(index.nodesById.has('status'), false);
+    assert.equal(index.referenceTargetsByNode.get('project-reference'), 'project-node');
+  });
+
+  test('trashing the focused page returns Zoom to the workspace root', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+
+    assert.equal(editor.getTransforms(TanaZoomPlugin).zoom.to('project-node'), true);
+    assert.equal(lifecycle(editor).trash('project-node'), true);
+    assert.equal(editor.getOption(TanaZoomPlugin, 'focusedNodeId'), null);
   });
 
   test('keeps Field occurrences broken through definition Trash and permanent delete without same-name rebinding', () => {

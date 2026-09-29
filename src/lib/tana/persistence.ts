@@ -178,6 +178,7 @@ function hasValidSemanticData(element: TElement): boolean {
     tanaDefaultChildSupertagId?: unknown;
     tanaPresentation?: unknown;
     tanaReferenceTargetId?: unknown;
+    tanaRestoreLocation?: unknown;
     tanaSearchDefinition?: unknown;
     tanaSupertagIds?: unknown;
     tanaSupertagDefinition?: unknown;
@@ -240,6 +241,26 @@ function hasValidSemanticData(element: TElement): boolean {
       semantic.tanaReferenceTargetId.length === 0)
   ) {
     return false;
+  }
+
+  if (semantic.tanaRestoreLocation !== undefined) {
+    const location = semantic.tanaRestoreLocation as Record<string, unknown>;
+    if (
+      !location ||
+      typeof location !== 'object' ||
+      Array.isArray(location) ||
+      !Object.keys(location).every((key) =>
+        ['parentNodeId', 'previousSiblingId', 'nextSiblingId'].includes(key)
+      ) ||
+      typeof location.parentNodeId !== 'string' ||
+      location.parentNodeId.length === 0 ||
+      (location.previousSiblingId !== undefined &&
+        (typeof location.previousSiblingId !== 'string' || location.previousSiblingId.length === 0)) ||
+      (location.nextSiblingId !== undefined &&
+        (typeof location.nextSiblingId !== 'string' || location.nextSiblingId.length === 0))
+    ) {
+      return false;
+    }
   }
 
   if (
@@ -550,6 +571,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       tanaDefaultChildSupertagId?: unknown;
       tanaPresentation?: unknown;
       tanaReferenceTargetId?: unknown;
+      tanaRestoreLocation?: unknown;
       tanaSearchDefinition?: unknown;
       tanaSupertagIds?: unknown;
       tanaSupertagDefinition?: unknown;
@@ -574,6 +596,7 @@ export function isValidTanaDocument(value: unknown): value is Value {
       semantic.tanaDefaultChildSupertagId !== undefined ||
       semantic.tanaPresentation !== undefined ||
       semantic.tanaReferenceTargetId !== undefined ||
+      semantic.tanaRestoreLocation !== undefined ||
       semantic.tanaSearchDefinition !== undefined ||
       semantic.tanaSupertagIds !== undefined ||
       semantic.tanaSupertagDefinition !== undefined ||
