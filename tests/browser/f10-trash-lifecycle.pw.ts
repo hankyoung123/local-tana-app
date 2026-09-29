@@ -72,8 +72,10 @@ test('Permanent delete removes a Trash root after confirmation', async ({ page }
   const title = await createDisposableNode(page, 'permanent');
   await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '永久删除…', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('可使用编辑器的撤销恢复');
+  await expect(page.getByRole('alertdialog')).not.toContainText('无法撤销');
+  await page.getByRole('alertdialog').getByRole('button', { name: '永久删除', exact: true }).click();
   await expect(page.getByText(title, { exact: true })).toHaveCount(0);
 });
 
@@ -93,8 +95,8 @@ test('Empty Trash removes all Trash roots in one confirmed action', async ({ pag
   const title = await createDisposableNode(page, 'empty');
   await deleteNode(page, title);
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '清空废纸篓', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '清空废纸篓', exact: true }).click();
   await expect(page.getByText('废纸篓为空', { exact: true })).toBeVisible();
 });
 
@@ -144,8 +146,8 @@ test('Hard delete preserves inline References to the trashed target', async ({ p
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '删除节点及引用…', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '删除块引用', exact: true }).click();
 
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(inlineReference).toHaveCount(1);
@@ -162,8 +164,8 @@ test('Hard delete removes block References while retaining the target identity i
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
   await page.getByTestId('tana-sidebar').getByRole('button', { name: '回收站', exact: true }).click();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '删除节点及引用…', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '删除块引用', exact: true }).click();
 
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' })).toHaveCount(0);

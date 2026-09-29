@@ -27,11 +27,22 @@ import {
 } from "@/lib/tana";
 import { createCloseGuard } from "@/lib/tana/close-guard";
 import { initialDocument } from "@/lib/tana/initial-document";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function PlateEditor() {
   const [loadedDocument, setLoadedDocument] = React.useState<Value>();
   const [loadError, setLoadError] = React.useState<string>();
   const [attempt, setAttempt] = React.useState(0);
+  const [resetConfirmationOpen, setResetConfirmationOpen] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -65,23 +76,40 @@ export function PlateEditor() {
           重试
         </button>
         <button
-          onClick={async () => {
-            if (!window.confirm("永久清空当前工作区并重置？此操作无法撤销。"))
-              return;
-            setLoadError(undefined);
-            try {
-              await resetPlateDocument(initialDocument);
-              setLoadError(undefined);
-              setAttempt((value) => value + 1);
-            } catch (error) {
-              setLoadError(
-                error instanceof Error ? error.message : String(error),
-              );
-            }
-          }}
+          onClick={() => setResetConfirmationOpen(true)}
         >
           清空并重置工作区…
         </button>
+        <AlertDialog open={resetConfirmationOpen} onOpenChange={setResetConfirmationOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>清空并重置工作区？</AlertDialogTitle>
+              <AlertDialogDescription>
+                当前保存的数据将被永久清空，并重新载入初始工作区。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={async () => {
+                  setResetConfirmationOpen(false);
+                  setLoadError(undefined);
+                  try {
+                    await resetPlateDocument(initialDocument);
+                    setAttempt((value) => value + 1);
+                  } catch (error) {
+                    setLoadError(
+                      error instanceof Error ? error.message : String(error),
+                    );
+                  }
+                }}
+              >
+                清空并重置
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     );
   }

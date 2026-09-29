@@ -146,6 +146,30 @@ describe('Tana Node lifecycle', () => {
     assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('target'), 'home');
   });
 
+  test('falls back to Home when the original parent no longer owns canonical children', () => {
+    for (const parentSemantics of [
+      { tanaReferenceTargetId: 'other' },
+      { tanaSearchDefinition: { query: createAndQuery([{ kind: 'text-contains', text: 'Target' }]) } },
+      { tanaFieldDefinition: { type: 'plain' as const } },
+    ]) {
+      const editor = createEditor([
+        { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+        { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+        { children: [{ text: 'Parent' }], id: 'parent', indent: 2, type: KEYS.p },
+        { children: [{ text: 'Target' }], id: 'target', indent: 3, type: KEYS.p },
+        { children: [{ text: 'Other' }], id: 'other', indent: 2, type: KEYS.p },
+        { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+      ]);
+
+      assert.equal(lifecycle(editor).trash('target'), true);
+      editor.tf.setNodes(parentSemantics, { at: getTanaNodePath(editor.children, 'parent') });
+      assert.equal(lifecycle(editor).restore('target'), true);
+      const index = buildTanaIndex(editor.children);
+      assert.equal(index.parentNodeIds.get('target'), 'home');
+      assert.equal(index.nodesById.get('target')?.node.tanaRestoreLocation, undefined);
+    }
+  });
+
   test('keeps Trash subtrees indexed for references while excluding them from ordinary Search and View queries', () => {
     const editor = createEditor(workspaceWithLifecycleSubtree());
     const query = createAndQuery([{ kind: 'text-contains', text: 'Project' }]);

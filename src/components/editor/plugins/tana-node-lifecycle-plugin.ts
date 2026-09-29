@@ -1,5 +1,5 @@
 import { canMutateTanaNode } from '../mutation-policy';
-import { canTrash } from '@/lib/tana/node-behavior';
+import { canDrop, canTrash } from '@/lib/tana/node-behavior';
 import { ElementApi } from 'platejs';
 import type { Path, TElement } from 'platejs';
 import { createPlatePlugin, type PlateEditor } from 'platejs/react';
@@ -157,7 +157,18 @@ function moveSubtreeToParent(
 ): boolean {
   const source = getTanaNodeEntry(editor, nodeId);
   const parent = getTanaNodeEntry(editor, location.parentNodeId);
-  if (!source || !parent || source[0].tanaSystemNode !== undefined || source[1][0] === parent[1][0]) return false;
+  if (
+    !source ||
+    !parent ||
+    source[0].tanaSystemNode !== undefined ||
+    source[1][0] === parent[1][0] ||
+    !canDrop(
+      source[0],
+      parent[0],
+      { document: editor.children, path: source[1] },
+      { document: editor.children, path: parent[1] }
+    )
+  ) return false;
   const subtree = getSubtree(editor, source[1]);
   if (!subtree) return false;
   const [paths, nodes] = subtree;
