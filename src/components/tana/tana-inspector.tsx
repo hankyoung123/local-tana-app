@@ -2,7 +2,14 @@
 
 import * as React from 'react';
 
-import { ArrowUpRightIcon, Link2Icon, Settings2Icon } from 'lucide-react';
+import {
+  ArrowUpRightIcon,
+  GripVerticalIcon,
+  Link2Icon,
+  PlusIcon,
+  Settings2Icon,
+  XIcon,
+} from 'lucide-react';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
@@ -84,8 +91,15 @@ export function TanaInspector({ activeNodeId, onClose }: {
 
   if (!node) {
     return (
-      <aside aria-label="检查器" className="relative h-full w-80 max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
-        <button className="absolute top-2 right-3 rounded px-2 py-1 text-xs focus-visible:ring-2" aria-label="关闭检查器" onClick={onClose}>关闭</button>
+      <aside aria-label="检查器" className="tana-inspector relative h-full w-[21rem] max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
+        <button
+          aria-label="关闭检查器"
+          className="absolute top-2.5 right-3 grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:ring-2"
+          type="button"
+          onClick={onClose}
+        >
+          <XIcon className="size-3.5" />
+        </button>
         <h2 className="font-medium text-sm">检查器</h2>
         <p className="mt-3 text-[var(--tana-text-tertiary)] text-xs">选择一个节点以查看详细信息。</p>
       </aside>
@@ -100,6 +114,10 @@ export function TanaInspector({ activeNodeId, onClose }: {
   const isSearch = node.searchDefinition !== undefined;
   const isView = node.viewDefinition !== undefined;
   const isOrdinaryNode = !isFieldDefinition && !isSupertagDefinition && !isSearch && !isView;
+  const inspectorTabs = isSupertagDefinition
+    ? ['信息', '字段', '关联']
+    : ['属性', '字段', '引用'];
+  const activeInspectorTab = isSupertagDefinition ? '字段' : '属性';
   const parentNode = index.parentNodeIds.get(node.id)
     ? index.nodesById.get(index.parentNodeIds.get(node.id)!)
     : undefined;
@@ -122,15 +140,44 @@ export function TanaInspector({ activeNodeId, onClose }: {
     });
 
   return (
-    <aside aria-label="检查器" className="relative h-full w-80 max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
-      <div className="flex justify-end px-3 pt-2"><button className="rounded px-2 py-1 text-xs focus-visible:ring-2" aria-label="关闭检查器" onClick={onClose}>关闭</button></div>
-      <div className="px-5 pt-5 pb-4">
-        <p className="mb-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.12em]">
-          配置
-        </p>
-        <h2 className="truncate font-medium text-[15px] text-[var(--tana-text)]">
-          {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
-        </h2>
+    <aside aria-label="检查器" className="tana-inspector relative h-full w-[21rem] max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
+      <div className="sticky top-0 z-10 border-b border-[var(--tana-divider)] bg-[color:var(--tana-sidebar)]/95 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 pt-2.5">
+          <p className="text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.14em]">
+            配置
+          </p>
+          <button
+            aria-label="关闭检查器"
+            className="grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:ring-2"
+            type="button"
+            onClick={onClose}
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-3 px-4 pt-3 pb-4">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--tana-accent-soft)] font-medium text-[var(--tana-accent)] text-sm">
+            {isSupertagDefinition ? '#' : <Settings2Icon className="size-4" />}
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate font-medium text-[15px] text-[var(--tana-text)]">
+              {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
+            </h2>
+            <p className="mt-0.5 truncate text-[11px] text-[var(--tana-text-tertiary)]">
+              {isSupertagDefinition ? '超级标签' : '节点属性'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 px-4" aria-label="检查器分区">
+          {inspectorTabs.map((tab) => (
+            <span
+              key={tab}
+              className={`border-b-2 px-1.5 pb-2 text-[12px] transition-colors ${tab === activeInspectorTab ? 'border-[var(--tana-accent)] font-medium text-[var(--tana-text)]' : 'border-transparent text-[var(--tana-text-tertiary)]'}`}
+            >
+              {tab}
+            </span>
+          ))}
+        </div>
       </div>
 
       {isFieldDefinition && (
@@ -158,7 +205,7 @@ export function TanaInspector({ activeNodeId, onClose }: {
       )}
 
       {isSupertagDefinition && (
-        <SupertagFieldsSection fields={customFields} nodeId={node.id} />
+        <SupertagFieldsSection nodeId={node.id} />
       )}
 
       {isSupertagDefinition && (
@@ -191,8 +238,8 @@ function FieldSection({
   title: string;
 }) {
   return (
-    <section className="border-t border-[var(--tana-divider)] px-5 py-4">
-      <h3 className="mb-2.5 font-medium text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
+    <section className="border-t border-[var(--tana-divider)] px-4 py-5">
+      <h3 className="mb-3 font-medium text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.14em]">
         {title}
       </h3>
       {children}
@@ -258,26 +305,110 @@ function OrdinaryNodeProperties({
 
 /** A Supertag Definition exposes its real template Field Nodes, not instance data. */
 function SupertagFieldsSection({
-  fields,
   nodeId,
 }: {
-  fields: readonly TanaFieldDescriptor[];
   nodeId: NodeId;
 }) {
+  const editor = useEditorRef();
+  const index = useTanaIndex();
+  const [addingField, setAddingField] = React.useState(false);
+  const [fieldName, setFieldName] = React.useState('');
+  const [error, setError] = React.useState<string>();
+  const fields = getSupertagTemplateFields(index, nodeId).map((template) => ({
+    fieldId: template.fieldId,
+    key: template.fieldId,
+    label: template.field.text || '未命名字段',
+    pinned: template.pinned,
+    source: 'supertag' as const,
+    visible: true,
+  }));
+
+  const addField = () => {
+    const name = fieldName.trim();
+
+    if (!name) return;
+
+    const duplicate = fields.some(
+      (field) => field.label.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0
+    );
+
+    if (duplicate) {
+      setError('此标签已包含同名字段。');
+      return;
+    }
+
+    const fieldId = editor.getTransforms(TanaFieldPlugin).field.createDefinition(
+      name,
+      { type: 'plain' },
+      nodeId
+    );
+
+    if (!fieldId) {
+      setError('字段创建失败，请重试。');
+      return;
+    }
+
+    setFieldName('');
+    setAddingField(false);
+    setError(undefined);
+  };
+
   return (
     <FieldSection title="字段">
-      {fields.length === 0 ? (
-        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无模板字段。</p>
-      ) : (
-        <div className="space-y-0.5">
-          {fields.map((field) => (
-            <PresentationFieldRow key={field.key} descriptor={field} nodeId={nodeId} />
-          ))}
-        </div>
-      )}
+      <div className="space-y-0.5">
+        {fields.map((field) => (
+          <PresentationFieldRow key={field.key} descriptor={field} nodeId={nodeId} />
+        ))}
+        {addingField ? (
+          <div className="tana-inspector-row flex min-h-9 items-center gap-2 rounded-md px-1.5 text-xs">
+            <PlusIcon className="size-3.5 shrink-0 text-[var(--tana-accent)]" />
+            <input
+              aria-label="新字段名称"
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent text-[var(--tana-text)] outline-none placeholder:text-[var(--tana-text-tertiary)]"
+              placeholder="字段名称…"
+              value={fieldName}
+              onChange={(event) => {
+                setFieldName(event.currentTarget.value);
+                setError(undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  addField();
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setFieldName('');
+                  setAddingField(false);
+                  setError(undefined);
+                }
+              }}
+            />
+            <span className="shrink-0 text-[10px] text-[var(--tana-text-tertiary)]">Enter</span>
+          </div>
+        ) : (
+          <button
+            aria-label="添加字段"
+            className="tana-inspector-row group flex min-h-9 w-full items-center gap-2 rounded-md px-1.5 text-left text-xs text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text-secondary)]"
+            type="button"
+            onClick={() => {
+              setAddingField(true);
+              setError(undefined);
+            }}
+          >
+            <span className="grid size-5 shrink-0 place-items-center rounded-full border border-[var(--tana-divider)] text-[var(--tana-text-tertiary)] transition-colors group-hover:border-[var(--tana-accent)] group-hover:text-[var(--tana-accent)]">
+              <PlusIcon className="size-3" />
+            </span>
+            <span className="flex-1">添加字段…</span>
+            <span className="text-[10px] opacity-0 transition-opacity group-hover:opacity-100">Enter</span>
+          </button>
+        )}
+      </div>
       <p className="mt-2 text-[var(--tana-text-tertiary)] text-[11px]">
-        在正文空节点输入 &gt; 添加字段
+        新字段默认为文本类型；点击字段名称可修改类型。
       </p>
+      {error && <p aria-live="polite" className="mt-1 text-[11px] text-destructive">{error}</p>}
     </FieldSection>
   );
 }
@@ -488,7 +619,8 @@ function PresentationFieldRow({
 
   if (descriptor.brokenFieldDefinition) {
     return (
-      <div className="flex min-h-8 items-center gap-2 rounded px-1.5 text-xs text-[var(--tana-text-tertiary)]">
+      <div className="tana-inspector-row group flex min-h-9 items-center gap-2 rounded-md px-1.5 text-xs text-[var(--tana-text-tertiary)]">
+        <GripVerticalIcon className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
         <span className="min-w-0 flex-1 truncate" role="status">{descriptor.label}</span>
         {descriptor.fieldDefinitionInTrash && descriptor.fieldId && (
           <button
@@ -505,7 +637,9 @@ function PresentationFieldRow({
   }
 
   return (
-    <div className="group flex min-h-8 items-center gap-2 rounded px-1.5 text-xs hover:bg-[var(--tana-hover)]">
+    <div className="tana-inspector-row group flex min-h-9 items-center gap-2 rounded-md px-1.5 text-xs transition-colors hover:bg-[var(--tana-hover)]">
+      <GripVerticalIcon className="size-3.5 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 transition-opacity group-hover:opacity-45" />
+      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-[var(--tana-accent)] opacity-70" />
       <button
         className={
           descriptor.visible

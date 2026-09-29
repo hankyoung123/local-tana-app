@@ -19,7 +19,7 @@ test('Node bullet opens the canonical page and reload restores the deep link', a
   await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText(firstNodeTitle);
 });
 
-test('empty page navigation stays read-only until the body affordance is activated', async ({ page }) => {
+test('empty page navigation stays read-only until the body affordance receives text', async ({ page }) => {
   await page.goto('/editor');
   const editor = page.locator('[data-slate-editor]');
   await editor.getByText(firstNodeTitle, { exact: true }).click();
@@ -27,10 +27,13 @@ test('empty page navigation stays read-only until the body affordance is activat
   await page.keyboard.press('Shift+Enter');
 
   await page.keyboard.press('ControlOrMeta+.');
-  await expect(page.getByRole('button', { name: '输入内容…' })).toBeVisible();
+  const bodyInput = page.getByRole('textbox', { name: '输入内容…' });
+  await expect(bodyInput).toBeVisible();
   expect(await canonicalNodeCount(page)).toBe(1);
 
-  await page.getByRole('button', { name: '输入内容…' }).click();
+  await bodyInput.click();
+  await expect(bodyInput).toBeVisible();
+  expect(await canonicalNodeCount(page)).toBe(1);
   await page.keyboard.type('F09 lazy body');
   await expect(editor).toContainText('F09 lazy body');
   expect(await canonicalNodeCount(page)).toBe(2);
@@ -40,7 +43,7 @@ test('field pages keep a trailing Body input on the last line', async ({ page })
   await page.goto('/editor?node=node-project-example');
 
   const editor = page.locator('[data-slate-editor]');
-  const bodyInput = page.getByRole('button', { name: '输入内容…' });
+  const bodyInput = page.getByRole('textbox', { name: '输入内容…' });
   await expect(bodyInput).toBeVisible();
 
   const lastRow = editor.locator('[data-tana-semantic]').last();
@@ -64,29 +67,11 @@ test('field pages keep a trailing Body input on the last line', async ({ page })
 
   const before = await canonicalNodeCount(page);
   await bodyInput.click();
-  await expect(bodyInput).toHaveCount(0);
-
-  const materializedRow = editor.locator('[data-tana-semantic="content"]').last();
-  const materializedRowBox = await materializedRow.boundingBox();
-  const materializedBulletBox = await materializedRow
-    .locator('.tana-nodeGutter button[aria-label^="聚焦"] svg')
-    .boundingBox();
-
-  expect(materializedRowBox).not.toBeNull();
-  expect(materializedBulletBox).not.toBeNull();
-  expect(Math.abs(materializedRowBox!.y - bodyInputBox!.y)).toBeLessThan(1);
-  expect(Math.abs(
-    materializedBulletBox!.x + materializedBulletBox!.width / 2 -
-    (bodyBulletBox!.x + bodyBulletBox!.width / 2)
-  )).toBeLessThan(1);
-  expect(Math.abs(
-    materializedBulletBox!.y + materializedBulletBox!.height / 2 -
-    (bodyBulletBox!.y + bodyBulletBox!.height / 2)
-  )).toBeLessThan(1);
-
+  await expect(bodyInput).toBeVisible();
+  expect(await canonicalNodeCount(page)).toBe(before);
   await page.keyboard.type('F09 trailing body');
   await expect(editor).toContainText('F09 trailing body');
-  await expect(page.getByRole('button', { name: '输入内容…' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: '输入内容…' })).toBeVisible();
   expect(await canonicalNodeCount(page)).toBe(before + 1);
 });
 
