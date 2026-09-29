@@ -366,14 +366,6 @@ export function validateNode(
     }
   }
 
-  if (
-    node.tanaSupertagIds?.some(
-      (supertagId) => !context.supertagDefinitionIds.has(supertagId)
-    )
-  ) {
-    return 'missing-supertag-membership';
-  }
-
   if (hasMissingDefaultChildSupertag(node, context)) {
     return 'missing-default-child-supertag';
   }
@@ -443,16 +435,13 @@ export function repairNode(
       );
       return true;
     case 'missing-supertag-membership': {
-      const supertagIds = (node.tanaSupertagIds ?? []).filter((supertagId) =>
-        context.supertagDefinitionIds.has(supertagId)
-      );
-
-      if (supertagIds.length === 0) {
-        editor.tf.unsetNodes('tanaSupertagIds', { at: path });
-      } else {
-        editor.tf.setNodes({ tanaSupertagIds: supertagIds }, { at: path });
-      }
-      return true;
+      // Membership is historical NodeId data. A deleted Definition leaves a
+      // broken relation that can become live again only if that same NodeId
+      // is restored; never silently prune it or rebind by name.
+      void editor;
+      void node;
+      void path;
+      return false;
     }
     case 'missing-default-child-supertag': {
       if (node.tanaDefaultChildSupertagId !== undefined) {

@@ -248,7 +248,7 @@ function restoreTarget(editor: PlateEditor, referenceOrTargetNodeId: NodeId): bo
 
   if (
     !targetNodeId ||
-    resolution.status !== 'trashed-or-unavailable' ||
+    resolution.status !== 'trashed' ||
     !isTanaNodeInTrash(index, targetNodeId)
   ) {
     return false;

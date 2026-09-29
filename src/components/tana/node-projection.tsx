@@ -118,7 +118,9 @@ function ProjectedTitleNode({
     const target = getTanaReferenceTargetResolution(index, element.key);
     const label = target.status === 'live'
       ? getNodeDisplayNameFromIndex(index, target.target.id)
-      : target.status === 'missing' ? '目标已删除' : '目标不可用';
+      : target.status === 'missing' ? '目标已删除'
+        : target.status === 'trashed' ? `目标在废纸篓：${target.target.text || '未命名节点'}`
+          : '目标不可用';
 
     return <span className="rounded bg-muted px-1 text-[var(--tana-reference)]">@{label}</span>;
   }
@@ -588,10 +590,10 @@ export function NodeProjection({
     const resolution = occurrence?.referenceTargetId
       ? getTanaReferenceTargetResolution(index, occurrence.referenceTargetId)
       : undefined;
-    const unavailableLabel = resolution?.status === 'trashed-or-unavailable'
-      ? '目标不可用'
-      : '目标已删除';
-    const canRestore = resolution?.status === 'trashed-or-unavailable' &&
+    const unavailableLabel = resolution?.status === 'trashed'
+      ? `目标在废纸篓：${resolution.target.text || '未命名节点'}`
+      : resolution?.status === 'invalid' ? '目标不可用' : '目标已删除';
+    const canRestore = resolution?.status === 'trashed' &&
       typeof occurrence?.referenceTargetId === 'string' &&
       isTanaNodeInTrash(index, occurrence.referenceTargetId);
 

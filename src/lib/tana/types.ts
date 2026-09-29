@@ -344,6 +344,14 @@ export type ReferenceRelation = {
   targetNodeId: NodeId;
 };
 
+/** Derived configuration relation shown by the Trash inspector. */
+export type TanaInternalReference = {
+  kind: "field" | "search" | "supertag" | "view";
+  relation: string;
+  sourceNodeId: NodeId;
+  targetNodeId: NodeId;
+};
+
 export type TanaDateObject = {
   path: Path;
   sourceNodeId: NodeId;

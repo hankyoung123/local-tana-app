@@ -107,7 +107,7 @@ describe("Tana relation integrity", () => {
     );
   });
 
-  test("removes a deleted Supertag from Node-level membership without touching Field data", () => {
+  test("preserves a deleted Supertag NodeId in membership without touching Field data", () => {
     const editor = createEditor([
       {
         children: [{ text: "Project" }],
@@ -145,9 +145,9 @@ describe("Tana relation integrity", () => {
 
     editor.tf.removeNodes({ at: [0] });
 
-    assert.equal(
+    assert.deepEqual(
       editor.children.find((node) => node.id === "task")?.tanaSupertagIds,
-      undefined,
+      ["project"],
     );
     assert.equal(
       editor.children.some((node) => node.id === "task-status"),

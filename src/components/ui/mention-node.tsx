@@ -162,7 +162,9 @@ export function MentionElement(
   const navigable = target.status === 'live' && canNavigateNode(element);
   const canonicalName = target.status === 'live'
     ? getNodeDisplayNameFromIndex(index, target.target.id)
-    : target.status === 'missing' ? '目标已删除' : '目标不可用';
+    : target.status === 'missing' ? '目标已删除'
+      : target.status === 'trashed' ? `目标在废纸篓：${target.target.text || '未命名节点'}`
+        : '目标不可用';
   const alias = typeof element.value === 'string' && element.value.trim()
     ? element.value.trim()
     : undefined;
@@ -225,7 +227,9 @@ export function MentionElement(
         'aria-label': navigable
           ? `打开引用 ${displayName}${alias && alias !== canonicalName ? `（${canonicalName}）` : ''}`
           : `引用：${displayName}`,
-        'aria-disabled': navigable ? undefined : true,
+        // This wrapper also contains the Trash restore action. `aria-disabled`
+        // would disable that descendant in the accessibility tree even though
+        // the Reference itself is not navigable.
         'data-reference-status': target.status,
         'data-target-node-id': targetNodeId,
         draggable: navigable,
@@ -250,7 +254,7 @@ export function MentionElement(
           {props.children}
         </>
       )}
-      {target.status === 'trashed-or-unavailable' && isTanaNodeInTrash(index, targetNodeId) && (
+      {target.status === 'trashed' && isTanaNodeInTrash(index, targetNodeId) && (
         <button
           aria-label="恢复原节点"
           className="ml-1 rounded px-1 text-[10px] text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"

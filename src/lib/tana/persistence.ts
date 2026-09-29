@@ -779,10 +779,6 @@ export function isValidTanaDocument(value: unknown): value is Value {
 
     const supertagIds = node.tanaSupertagIds ?? [];
 
-    if (supertagIds.some((supertagId) => !supertagDefinitionIds.has(supertagId))) {
-      return false;
-    }
-
     const defaultChildSupertagId =
       node.tanaDefaultChildSupertagId ??
       node.tanaSupertagDefinition?.defaultChildSupertagId;
@@ -805,12 +801,13 @@ export function isValidTanaDocument(value: unknown): value is Value {
       }
     }
 
-    // A final `#` token mirrors membership. It may be absent, but it must
-    // never name a missing/non-Definition target or contradict membership.
+    // A final `#` token mirrors membership. It may point at a missing
+    // Definition after permanent deletion; the NodeId remains historical
+    // relation identity and must not be rebound by name. It must still match
+    // the membership metadata exactly.
     if (
       getPresentationSupertagIds(node).some(
-        (supertagId) =>
-          !supertagDefinitionIds.has(supertagId) || !supertagIds.includes(supertagId)
+        (supertagId) => !supertagIds.includes(supertagId)
       )
     ) {
       return false;

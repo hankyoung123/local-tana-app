@@ -4,7 +4,7 @@ import { useEditorRef } from 'platejs/react';
 
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
-import type { TanaIndex, TanaNode } from '@/lib/tana';
+import { getTanaInternalReferences, type TanaIndex, type TanaNode } from '@/lib/tana';
 
 import { TanaNodeRowChrome } from './node-projection';
 
@@ -31,6 +31,7 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
       {children.map((id) => {
         const target = index.nodesById.get(id);
         if (!target) return null;
+        const internalReferences = getTanaInternalReferences(index, id);
 
         return (
           <div key={id} className="flex items-center gap-4 border-b py-3">
@@ -43,8 +44,14 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
                 {(index.fieldNodesByParent.get(id)?.length ?? 0) > 0 && (
                   <span className="ml-3">字段：{index.fieldNodesByParent.get(id)!.map((field) => field.fieldId).join('、')}</span>
                 )}
-                {(index.backlinks.get(id)?.length ?? 0) > 0 && (
-                  <span className="ml-3">内部引用：{index.backlinks.get(id)!.length}</span>
+                {internalReferences.length > 0 && (
+                  <span className="ml-3" aria-label="内部引用">
+                    内部引用：{internalReferences.length}（
+                    {internalReferences
+                      .map((reference) => index.nodesById.get(reference.sourceNodeId)?.text ?? reference.sourceNodeId)
+                      .join('、')}
+                    ）
+                  </span>
                 )}
               </div>
             </div>

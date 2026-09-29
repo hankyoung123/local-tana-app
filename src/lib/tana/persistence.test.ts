@@ -208,6 +208,31 @@ describe('Plate document persistence', () => {
     );
   });
 
+  test('persists and reload-validates the minimal Trash restore location', () => {
+    const document = minimalWorkspace();
+    document.splice(2, 0, {
+      children: [{ text: 'Trashed' }],
+      id: 'trashed',
+      indent: 2,
+      tanaRestoreLocation: {
+        parentNodeId: 'ws-home',
+        previousSiblingId: 'before',
+        nextSiblingId: 'after',
+      },
+      type: 'p',
+    });
+    assert.equal(isValidTanaDocument(document), true);
+    const reloaded = structuredClone(document) as Value;
+    assert.equal(isValidTanaDocument(reloaded), true);
+    assert.deepEqual(
+      (reloaded[2] as TanaBlockElement).tanaRestoreLocation,
+      { parentNodeId: 'ws-home', previousSiblingId: 'before', nextSiblingId: 'after' },
+    );
+    const invalid = structuredClone(document) as Value;
+    (invalid[2] as TanaBlockElement & { tanaRestoreLocation: Record<string, unknown> }).tanaRestoreLocation.unexpected = true;
+    assert.equal(isValidTanaDocument(invalid), false);
+  });
+
   test('treats obsolete Field metadata as a breaking schema', () => {
     assert.equal(CURRENT_SCHEMA_VERSION, 6);
     assert.equal(

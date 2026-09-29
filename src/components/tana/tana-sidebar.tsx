@@ -12,6 +12,7 @@ import {
   SearchIcon,
   Settings2Icon,
   SparklesIcon,
+  Trash2Icon,
 } from "lucide-react";
 import * as React from "react";
 import { useEditorRef, usePluginOption } from "platejs/react";
@@ -237,6 +238,7 @@ export function TanaSidebar({
       node.semanticTypes.includes("supertag-definition"),
   );
   const homeNodeId = index.systemNodeIds.get("home");
+  const trashNodeId = index.systemNodeIds.get("trash");
   const recents = Array.from(index.nodesById.values())
     .filter(
       (node) =>
@@ -778,6 +780,15 @@ export function TanaSidebar({
           </div>
           {homeNodeId && openIds.has(homeNodeId) && (
             <div className="mt-0.5">{renderWorkspaceTree(homeNodeId)}</div>
+          )}
+          {trashNodeId && (
+            <SidebarButton
+              active={activeNodeId === trashNodeId}
+              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(trashNodeId)}
+            >
+              <Trash2Icon className="size-3.5 text-[var(--tana-text-tertiary)]" />
+              回收站
+            </SidebarButton>
           )}
           <button
             aria-label="新建 Home 子节点"

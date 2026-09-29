@@ -23,6 +23,8 @@ import type {
   FieldId,
   FieldValidationIssue,
   FieldValue,
+  TanaInternalReference,
+  TanaQueryExpression,
   TanaCalendarDateReference,
   TanaDateObject,
   NodeId,
@@ -51,7 +53,8 @@ export type SupertagCandidate = NodeReferenceCandidate & {
  */
 export type TanaReferenceTargetResolution =
   | { status: 'live'; target: TanaNode }
-  | { status: 'missing' | 'trashed-or-unavailable' };
+  | { status: 'missing' | 'invalid' }
+  | { status: 'trashed'; target: TanaNode };
 
 /** Resolves a definition's ancestors in parent-first order without recursion loops. */
 export function getSupertagInheritance(
@@ -816,9 +819,162 @@ export function getTanaReferenceTargetResolution(
 
   if (!target) return { status: 'missing' };
 
-  return target.referenceTargetId === undefined && isTanaNodeActive(index, target.id)
-    ? { status: 'live', target }
-    : { status: 'trashed-or-unavailable' };
+  if (isTanaNodeInTrash(index, target.id)) return { status: 'trashed', target };
+  if (target.systemNode !== undefined || target.referenceTargetId !== undefined) {
+    return { status: 'invalid' };
+  }
+  return { status: 'live', target };
+}
+
+function addInternalReference(
+  references: TanaInternalReference[],
+  seen: Set<string>,
+  sourceNodeId: NodeId,
+  targetNodeId: NodeId | undefined,
+  kind: TanaInternalReference['kind'],
+  relation: string,
+  requestedTargetId: NodeId
+) {
+  if (!targetNodeId || targetNodeId !== requestedTargetId) return;
+  const key = `${sourceNodeId}:${kind}:${relation}:${targetNodeId}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  references.push({ kind, relation, sourceNodeId, targetNodeId });
+}
+
+function visitSearchInternalReferences(
+  expression: TanaQueryExpression,
+  sourceNodeId: NodeId,
+  requestedTargetId: NodeId,
+  references: TanaInternalReference[],
+  seen: Set<string>
+) {
+  if (expression.type === 'and' || expression.type === 'or') {
+    expression.children.forEach((child) =>
+      visitSearchInternalReferences(child, sourceNodeId, requestedTargetId, references, seen)
+    );
+    return;
+  }
+  if (expression.type === 'not') {
+    visitSearchInternalReferences(expression.child, sourceNodeId, requestedTargetId, references, seen);
+    return;
+  }
+  if (expression.type !== 'predicate') return;
+  const predicate = expression.predicate;
+  if ('fieldId' in predicate) {
+    addInternalReference(references, seen, sourceNodeId, predicate.fieldId, 'search', `field:${predicate.kind}`, requestedTargetId);
+  }
+  if ('supertagId' in predicate) {
+    addInternalReference(references, seen, sourceNodeId, predicate.supertagId, 'search', `supertag:${predicate.kind}`, requestedTargetId);
+  }
+  if ('nodeId' in predicate) {
+    addInternalReference(references, seen, sourceNodeId, predicate.nodeId, 'search', `node:${predicate.kind}`, requestedTargetId);
+  }
+}
+
+/**
+ * Derives configuration relations to a Node for the Trash inspector. Direct
+ * block and inline References intentionally remain in `backlinks` and are not
+ * included here.
+ */
+export function getTanaInternalReferences(
+  index: TanaIndex,
+  requestedTargetId: NodeId
+): readonly TanaInternalReference[] {
+  const references: TanaInternalReference[] = [];
+  const seen = new Set<string>();
+
+  for (const field of index.fieldNodesById.values()) {
+    addInternalReference(references, seen, field.id, field.fieldId, 'field', 'definition', requestedTargetId);
+    for (const valueNodeId of field.valueNodeIds) {
+      const value = field.valueByNodeId.get(valueNodeId);
+      if (value && (value.type === 'options' || value.type === 'from-supertag')) {
+        addInternalReference(references, seen, field.id, value.value, 'field', `value:${value.type}`, requestedTargetId);
+      }
+    }
+  }
+
+  for (const node of index.nodesById.values()) {
+    const element = node.node as TanaBlockElement;
+    (node.supertagIds ?? []).forEach((supertagId) =>
+      addInternalReference(references, seen, node.id, supertagId, 'supertag', 'membership', requestedTargetId)
+    );
+    const definition = node.supertagDefinition;
+    if (definition) {
+      (definition.extends ?? []).forEach((parentId) =>
+        addInternalReference(references, seen, node.id, parentId, 'supertag', 'extends', requestedTargetId)
+      );
+      addInternalReference(
+        references,
+        seen,
+        node.id,
+        definition.defaultChildSupertagId,
+        'supertag',
+        'default-child-supertag',
+        requestedTargetId
+      );
+    }
+    addInternalReference(
+      references,
+      seen,
+      node.id,
+      element.tanaDefaultChildSupertagId,
+      'supertag',
+      'default-child-supertag',
+      requestedTargetId
+    );
+    addInternalReference(
+      references,
+      seen,
+      node.id,
+      node.fieldDefinition?.type === 'from-supertag'
+        ? node.fieldDefinition.sourceSupertagId ?? undefined
+        : undefined,
+      'field',
+      'source-supertag',
+      requestedTargetId
+    );
+    if (node.searchDefinition) {
+      visitSearchInternalReferences(
+        node.searchDefinition.query,
+        node.id,
+        requestedTargetId,
+        references,
+        seen
+      );
+    }
+    const view = node.viewDefinition;
+    if (view) {
+      addInternalReference(references, seen, node.id, view.groupFieldId, 'view', 'group-field', requestedTargetId);
+      (view.calendarDateFieldIds ?? []).forEach((fieldId) =>
+        addInternalReference(references, seen, node.id, fieldId, 'view', 'calendar-field', requestedTargetId)
+      );
+      (view.visibleFieldIds ?? []).forEach((fieldId) =>
+        addInternalReference(references, seen, node.id, fieldId, 'view', 'visible-field', requestedTargetId)
+      );
+      (view.sort ?? []).forEach((criterion) =>
+        addInternalReference(
+          references,
+          seen,
+          node.id,
+          criterion.fieldId === '$title' ? undefined : criterion.fieldId,
+          'view',
+          'sort-field',
+          requestedTargetId
+        )
+      );
+      (view.filter?.clauses ?? []).forEach((clause) => {
+        if ('fieldId' in clause) {
+          addInternalReference(references, seen, node.id, clause.fieldId, 'view', `filter:${clause.kind}`, requestedTargetId);
+        }
+        if ('supertagId' in clause) {
+          addInternalReference(references, seen, node.id, clause.supertagId, 'view', `filter:${clause.kind}`, requestedTargetId);
+        }
+      });
+    }
+  }
+
+  return references;
 }
 
 /** Resolve a projection to one live canonical Node, never follow Reference chains. */
@@ -840,6 +996,8 @@ export function getActiveSupertagInstances(
   index: TanaIndex,
   supertagId: NodeId
 ): TanaNode[] {
+  const definition = index.nodesById.get(supertagId);
+  if (!definition?.supertagDefinition || !isTanaNodeActive(index, supertagId)) return [];
   return (index.nodesBySupertag.get(supertagId) ?? []).flatMap((nodeId) => {
     const node = index.nodesById.get(nodeId);
 

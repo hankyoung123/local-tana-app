@@ -70,8 +70,8 @@ test('Inline Mention exposes link semantics only for a direct live canonical tar
     { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
     { children: [{ text: 'Project' }], id: 'target', indent: 1, type: KEYS.p },
   ]);
-  assert.match(unavailable, /data-reference-status="trashed-or-unavailable"/);
-  assert.match(unavailable, /引用：目标不可用/);
+  assert.match(unavailable, /data-reference-status="trashed"/);
+  assert.match(unavailable, /引用：目标在废纸篓/);
   assert.match(unavailable, /恢复原节点/);
   assert.doesNotMatch(unavailable, /role="link"/);
 
@@ -80,7 +80,7 @@ test('Inline Mention exposes link semantics only for a direct live canonical tar
     { children: [{ text: 'Project' }], id: 'target', type: KEYS.p },
     { children: [{ text: '' }], id: 'occurrence', tanaReferenceTargetId: 'target', type: KEYS.p },
   ]);
-  assert.match(chained, /data-reference-status="trashed-or-unavailable"/);
+  assert.match(chained, /data-reference-status="invalid"/);
   assert.doesNotMatch(chained, /role="link"/);
 
   const missing = renderMention(mentionValue('missing', undefined));
@@ -201,7 +201,7 @@ test('Inline Mention follows target Trash, restore, permanent delete, and replac
 
   assert.equal(status(), 'live');
   assert.equal(lifecycle.trash('target'), true);
-  assert.equal(status(), 'trashed-or-unavailable');
+  assert.equal(status(), 'trashed');
   assert.equal(mentionKey(), 'target');
   assert.equal(lifecycle.restore('target'), true);
   assert.equal(status(), 'live');

@@ -751,5 +751,5 @@ test('Supertag Definition trash and restore preserve membership without same-nam
   const replacement = supertag.create('Project');
   assert.ok(replacement);
   assert.notEqual(replacement, 'project');
-  assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.supertagIds, []);
+  assert.deepEqual(buildTanaIndex(editor.children).nodesById.get('task')?.supertagIds, ['project']);
 });

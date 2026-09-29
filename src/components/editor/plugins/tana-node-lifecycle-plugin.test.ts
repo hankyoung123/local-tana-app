@@ -131,6 +131,21 @@ describe('Tana Node lifecycle', () => {
     assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('project-node'), 'home');
   });
 
+  test('falls back to Home when the captured parent is later moved to Trash', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Home' }], id: 'home', indent: 1, tanaSystemNode: 'home', type: KEYS.p },
+      { children: [{ text: 'Parent' }], id: 'parent', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Target' }], id: 'target', indent: 3, type: KEYS.p },
+      { children: [{ text: 'Trash' }], id: 'trash', indent: 1, tanaSystemNode: 'trash', type: KEYS.p },
+    ]);
+
+    assert.equal(lifecycle(editor).trash('target'), true);
+    assert.equal(lifecycle(editor).trash('parent'), true);
+    assert.equal(lifecycle(editor).restore('target'), true);
+    assert.equal(buildTanaIndex(editor.children).parentNodeIds.get('target'), 'home');
+  });
+
   test('keeps Trash subtrees indexed for references while excluding them from ordinary Search and View queries', () => {
     const editor = createEditor(workspaceWithLifecycleSubtree());
     const query = createAndQuery([{ kind: 'text-contains', text: 'Project' }]);
@@ -192,7 +207,14 @@ describe('Tana Node lifecycle', () => {
   });
 
   test('hard delete trashes the canonical target and removes direct block references', () => {
-    const editor = createEditor(workspaceWithLifecycleSubtree());
+    const document = workspaceWithLifecycleSubtree();
+    const home = document.find((node) => node.id === 'home')!;
+    home.children.push({
+      children: [{ text: '' }],
+      key: 'project-node',
+      type: KEYS.mention,
+    } as never);
+    const editor = createEditor(document);
 
     assert.equal(lifecycle(editor).hardDeleteIncludingReferences('project-node'), true);
     const index = buildTanaIndex(editor.children);
@@ -200,6 +222,12 @@ describe('Tana Node lifecycle', () => {
     assert.equal(index.nodesById.has('project-reference'), false);
     assert.equal(index.referenceTargetsByNode.has('project-reference'), false);
     assert.equal(index.parentNodeIds.get('project-node'), 'trash');
+    assert.deepEqual(
+      index.references
+        .filter((reference) => reference.targetNodeId === 'project-node')
+        .map(({ kind, sourceNodeId }) => ({ kind, sourceNodeId })),
+      [{ kind: 'inline', sourceNodeId: 'home' }]
+    );
   });
 
   test('empty Trash permanently removes every trashed root in one lifecycle operation', () => {
@@ -207,11 +235,16 @@ describe('Tana Node lifecycle', () => {
 
     assert.equal(lifecycle(editor).trash('project-node'), true);
     assert.equal(lifecycle(editor).trash('status'), true);
+    const beforeEmpty = structuredClone(editor.children);
     assert.equal(lifecycle(editor).emptyTrash(), true);
     const index = buildTanaIndex(editor.children);
     assert.equal(index.nodesById.has('project-node'), false);
     assert.equal(index.nodesById.has('status'), false);
     assert.equal(index.referenceTargetsByNode.get('project-reference'), 'project-node');
+    editor.tf.undo();
+    assert.deepEqual(editor.children, beforeEmpty);
+    editor.tf.redo();
+    assert.equal(buildTanaIndex(editor.children).nodesById.has('project-node'), false);
   });
 
   test('trashing the focused page returns Zoom to the workspace root', () => {
@@ -275,6 +308,26 @@ describe('Tana Node lifecycle', () => {
     assert.equal(occurrence?.brokenFieldDefinition, true);
     assert.equal(descriptor?.fieldDefinitionInTrash, false);
     assert.equal(descriptor?.label, '已删除字段');
+  });
+
+  test('keeps Supertag membership by old NodeId through Definition Trash and delete', () => {
+    const editor = createEditor(workspaceWithLifecycleSubtree());
+
+    assert.equal(lifecycle(editor).trash('project-tag'), true);
+    let index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project-node']);
+    assert.equal(index.nodesById.get('project-tag')?.systemNode, undefined);
+    assert.equal(lifecycle(editor).restore('project-tag'), true);
+    assert.equal(lifecycle(editor).trash('project-tag'), true);
+    assert.equal(lifecycle(editor).deletePermanently('project-tag'), true);
+    editor.tf.insertNodes(
+      { children: [{ text: 'Project tag replacement' }], id: 'replacement-tag', indent: 2, tanaSupertagDefinition: {}, type: KEYS.p },
+      { at: [8] },
+    );
+    index = buildTanaIndex(editor.children);
+    assert.deepEqual(index.nodesBySupertag.get('project-tag'), ['project-node']);
+    assert.equal(index.nodesById.has('replacement-tag'), true);
+    assert.equal(index.nodesById.get('project-node')?.supertagIds.includes('replacement-tag'), false);
   });
 
   test('routes ordinary root removal into Trash and never permits system Nodes in lifecycle transforms', () => {
@@ -376,7 +429,7 @@ test('Reference projection closes the trash/restore/delete lifecycle without reb
   const brokenMarkup = () => renderToStaticMarkup(createElement(NodeProjection, {
     index: buildTanaIndex(editor.children), targetNodeId: 'project-reference', variant: 'block-reference',
   }));
-  assert.match(brokenMarkup(), /目标不可用/);
+  assert.match(brokenMarkup(), /目标在废纸篓/);
   assert.match(brokenMarkup(), /恢复原节点/);
   assert.doesNotMatch(brokenMarkup(), /<input/);
   const trashMarkup = renderToStaticMarkup(createElement(Plate, { editor,

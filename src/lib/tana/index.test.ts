@@ -7,6 +7,7 @@ import {
   buildTanaIndex,
   getTanaCalendarDateReferences,
   getTanaCalendarReferenceNodeIds,
+  getTanaInternalReferences,
   getNodeReferenceCandidatesFromIndex,
   getTanaReferenceTargetResolution,
   searchTanaNodes,
@@ -95,7 +96,7 @@ describe('buildTanaIndex', () => {
       target: index.nodesById.get('a'),
     });
     assert.deepEqual(getTanaReferenceTargetResolution(index, 'b'), {
-      status: 'trashed-or-unavailable',
+      status: 'invalid',
     });
   });
 
@@ -151,6 +152,40 @@ describe('buildTanaIndex', () => {
       { kind: 'inline', sourceNodeId: 'task', targetNodeId: 'project' },
     ]);
     assert.equal(index.backlinks.get('project')?.length, 2);
+  });
+
+  test('derives Internal references from configuration without mixing block or inline References', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Target Field' }], id: 'target', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
+      { children: [{ text: 'Host' }], id: 'host', type: 'p' },
+      { children: [{ text: '' }], id: 'occurrence', indent: 1, tanaFieldId: 'target', type: 'p' },
+      {
+        children: [{ text: 'Search' }],
+        id: 'search',
+        tanaSearchDefinition: { query: { type: 'predicate', predicate: { kind: 'has-field', fieldId: 'target' } } },
+        type: 'p',
+      },
+      { children: [{ text: 'Parent tag' }], id: 'parent-tag', tanaSupertagDefinition: {}, type: 'p' },
+      { children: [{ text: 'Child tag' }], id: 'child-tag', tanaSupertagDefinition: { extends: ['target'] }, type: 'p' },
+      {
+        children: [{ text: 'View' }],
+        id: 'view',
+        tanaViewDefinition: { type: 'table', groupFieldId: 'target' },
+        type: 'p',
+      },
+      { children: [{ text: 'Block reference' }], id: 'block-reference', tanaReferenceTargetId: 'target', type: 'p' },
+      { children: [{ text: 'Inline ' }, { children: [{ text: '' }], key: 'target', type: 'mention' }], id: 'inline-reference', type: 'p' },
+    ]);
+
+    assert.deepEqual(
+      getTanaInternalReferences(index, 'target').map(({ kind, relation, sourceNodeId }) => ({ kind, relation, sourceNodeId })),
+      [
+        { kind: 'field', relation: 'definition', sourceNodeId: 'occurrence' },
+        { kind: 'search', relation: 'field:has-field', sourceNodeId: 'search' },
+        { kind: 'supertag', relation: 'extends', sourceNodeId: 'child-tag' },
+        { kind: 'view', relation: 'group-field', sourceNodeId: 'view' },
+      ]
+    );
   });
 
   test('derives Date Object and Date Field calendar references without persisting Calendar links', () => {
