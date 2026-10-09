@@ -274,7 +274,7 @@ export function TanaCalendarView({
         {days.map((day) => (
           <section
             key={day}
-            className="overflow-hidden rounded-lg border bg-[var(--tana-canvas)]"
+            className="tana-view-card"
             onDragOver={(event) => defaultDateFieldId && event.preventDefault()}
             onDrop={(event) => {
               const payload = event.dataTransfer.getData('application/x-tana-calendar-entry');
@@ -285,7 +285,7 @@ export function TanaCalendarView({
               writeDate(nodeId, dateFieldId, day);
             }}
           >
-            <h2 className="flex items-center justify-between border-b bg-muted/30 px-3 py-2 font-medium text-sm">
+            <h2 className="flex items-center justify-between border-b border-[var(--tana-divider)] bg-[var(--tana-surface-raised)] px-3 py-2 font-medium text-sm">
               {formatTanaDay(day)}
               {defaultDateFieldId && <button className="text-xs text-[var(--tana-link)]" type="button" onClick={() => addOnDay(day)}>添加</button>}
             </h2>
@@ -312,7 +312,7 @@ export function TanaCalendarView({
         ))}
       </div>
 
-      <section className="rounded-lg border border-dashed p-3">
+      <section className="tana-view-card border-dashed p-3">
         <h2 className="mb-2 text-xs font-medium text-[var(--tana-text-tertiary)]">未安排 · {undated.length}</h2>
         {undated.length === 0 ? <p className="text-xs text-muted-foreground">没有未安排节点</p> : (
           <div className="flex flex-wrap gap-2">
@@ -332,7 +332,7 @@ export function TanaCalendarView({
         )}
       </section>
       {entries.length === 0 && undated.length === 0 && (
-        <div className="grid min-h-32 place-items-center rounded-lg border border-dashed text-center">
+        <div className="tana-empty-state">
           <div><CalendarDaysIcon className="mx-auto mb-2 size-5 text-muted-foreground" /><p className="font-medium text-sm">没有可显示节点</p></div>
         </div>
       )}

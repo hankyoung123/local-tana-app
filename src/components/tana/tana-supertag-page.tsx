@@ -55,15 +55,15 @@ export function TanaSupertagPage({ index, node }: { index: TanaIndex; node: Tana
   const children = getTanaSupertagPageChildren(index, node);
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
-      <header className="shrink-0 px-6 pt-6 sm:px-10">
-        <h1 className="flex min-h-7 items-center gap-2 font-medium text-[19px] tracking-[-0.015em]">
+    <section className="tana-view-surface flex min-w-0 flex-1 flex-col">
+      <header className="tana-view-toolbar shrink-0">
+        <h1 className="tana-view-header flex min-h-7 items-center gap-2">
           <span className="text-[var(--tana-accent)]">
             <TanaNodeBullet semanticType="supertag-definition" />
           </span>
           {node.text || '未命名超级标签'}
         </h1>
-        <nav aria-label="超级标签内容" className="mt-2 flex gap-1 overflow-x-auto border-b border-[var(--tana-divider)] text-[13px]">
+        <nav aria-label="超级标签内容" className="tana-view-toolbar-controls mt-3 flex gap-1 overflow-x-auto border-b border-[var(--tana-divider)] text-[13px]">
           <button
             aria-current="page"
             className="shrink-0 border-[var(--tana-accent)] border-b-2 px-2 pb-1.5 font-medium text-[var(--tana-accent)]"
@@ -85,16 +85,16 @@ export function TanaSupertagPage({ index, node }: { index: TanaIndex; node: Tana
           ))}
         </nav>
         <button
-          className="mt-3 rounded-md bg-[var(--tana-accent)] px-2.5 py-1.5 font-medium text-white text-xs hover:brightness-95"
+          className="mt-3 inline-flex min-h-8 items-center rounded-lg bg-[var(--tana-accent)] px-3 font-medium text-white text-xs shadow-sm hover:brightness-95"
           type="button"
           onClick={() => editor.getTransforms(TanaSupertagPlugin).supertag.createInstance(node.id)}
         >
           新建实例
         </button>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 sm:px-10">
+      <div className="tana-view-content min-h-0 flex-1 overflow-y-auto">
         {instances.length === 0 ? (
-          <p className="text-[var(--tana-text-tertiary)] text-xs">暂无超级标签实例。</p>
+          <div className="tana-empty-state text-xs">暂无超级标签实例。</div>
         ) : (
           <TanaTableView index={index} results={instances} view={node} />
         )}

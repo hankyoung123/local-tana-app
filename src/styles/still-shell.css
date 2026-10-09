@@ -1,0 +1,167 @@
+/* Window > work container > overlay > control. No component owns document state. */
+.tana-workspace-viewport { height: 100dvh; padding: var(--still-window-inset); }
+.tana-workspace-shell {
+  position: relative; display: flex; height: 100%; min-width: 0; min-height: 0;
+  isolation: isolate; overflow: hidden; color: var(--still-text);
+  background: var(--still-shell); border: 1px solid var(--still-boundary);
+  border-radius: var(--still-window-radius); box-shadow: var(--still-window-shadow);
+}
+.tana-workspace-viewport:has([data-desktop]) { padding: 0; }
+.tana-workspace-shell[data-desktop] { border: 0; box-shadow: none; }
+.still-native-titlebar { display: none; }
+.tana-workspace-shell[data-desktop] .still-native-titlebar { display: block; position: absolute; top: 0; left: 0; width: 88px; height: 40px; }
+.tana-workspace-shell[data-desktop] .tana-sidebar { padding-top: 40px; }
+.tana-workspace-shell[data-desktop]:not(:has(.tana-sidebar)) .tana-commandbar,
+.tana-workspace-shell[data-desktop][data-focus-mode] .tana-commandbar { padding-left: 88px; }
+.tana-workspace-main {
+  display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0;
+  margin: var(--still-panel-gap); margin-left: 0; overflow: hidden;
+  background: var(--still-canvas); border: 1px solid var(--still-boundary);
+  border-radius: var(--still-work-radius);
+}
+.tana-workspace-shell:not(:has(.tana-sidebar)) .tana-workspace-main { margin-left: var(--still-panel-gap); }
+.tana-content-region { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+.tana-sidebar { min-width: 176px; background: transparent; border: 0; padding: 12px; }
+.tana-sidebar-header { height: var(--still-toolbar-height); padding: 0 8px; border: 0; }
+.tana-brand-mark { color: var(--still-canvas); background: var(--still-text); border-radius: 7px; }
+.tana-sidebar-search { display: flex; width: 100%; align-items: center; gap: 9px; height: 34px; margin: 10px 0 14px; padding: 0 10px; border-radius: var(--still-control-radius); color: var(--still-muted); font-size: 12px; }
+.tana-sidebar-search:hover { color: var(--still-text); background: var(--still-hover); }
+.tana-sidebar-scroll { padding: 0; scrollbar-width: thin; scrollbar-color: var(--still-selected) transparent; }
+.tana-sidebar-section { margin-top: 22px; }
+.tana-sidebar-section-title { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0 10px 8px; color: var(--still-muted); font-size: 11px; font-weight: 500; }
+.tana-sidebar-item { position: relative; height: 34px; padding-inline: 10px; gap: 10px; font-size: 12.5px; color: var(--still-text-secondary); }
+.tana-sidebar-item svg { color: var(--still-muted); stroke-width: 1.6; }
+.tana-sidebar-item:hover { background: var(--still-hover); color: var(--still-text); }
+.tana-sidebar-item-active { background: var(--still-selected); color: var(--still-text); font-weight: 550; }
+.tana-sidebar-item-active svg { color: var(--still-text-secondary); }
+.tana-sidebar-footer { display: flex; align-items: center; gap: 8px; margin: 12px -12px -12px; padding: 10px 14px; border-top: 1px solid var(--still-border); font-size: 11px; color: var(--still-muted); }
+.tana-sidebar-footer-label { flex: 1; }
+.tana-shell-control, .tana-commandbar-button {
+  display: inline-grid; flex: 0 0 auto; width: 29px; height: 29px; place-items: center;
+  border-radius: var(--still-control-radius); color: var(--still-muted); cursor: pointer;
+  transition: color var(--still-duration-fast), background-color var(--still-duration-fast);
+}
+.tana-shell-control:hover, .tana-commandbar-button:hover { background: var(--still-hover); color: var(--still-text); }
+.tana-shell-control:disabled { opacity: 0.32; cursor: default; }
+.tana-shell-control:disabled:hover { background: transparent; }
+.tana-shell-control[aria-pressed='true'] { background: var(--still-selected); color: var(--still-text); }
+.tana-shell-control:focus-visible, .tana-sidebar-search:focus-visible, .tana-sidebar-item:focus-visible,
+.tana-inspector-tab:focus-visible, .tana-view-toolbar-control:focus-visible {
+  outline: 2px solid var(--still-accent); outline-offset: 2px;
+}
+.tana-commandbar { display: flex; align-items: center; flex-shrink: 0; gap: 8px; height: var(--still-toolbar-height); padding: 0 17px; border-bottom: 1px solid var(--still-border); background: var(--still-canvas); }
+.tana-commandbar-leading, .tana-commandbar-actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.tana-commandbar-leading { padding-right: 6px; border-right: 1px solid var(--still-border); }
+.tana-commandbar-create { background: var(--still-surface); border: 1px solid var(--still-boundary); }
+.tana-toolbar-search { display: none; }
+.tana-workspace-shell:not(:has(.tana-sidebar)) .tana-toolbar-search,
+.tana-workspace-shell[data-focus-mode] .tana-toolbar-search { display: inline-grid; }
+.tana-breadcrumbs { display: flex; align-items: center; gap: 3px; min-width: 0; flex: 1; font-size: 12px; color: var(--still-muted); }
+.tana-breadcrumbs button { max-width: 170px; border-radius: 5px; padding: 4px; }
+.tana-breadcrumbs button:hover { background: var(--still-hover); color: var(--still-text); }
+.tana-breadcrumb-current { min-width: 0; font-weight: 530; color: var(--still-text-secondary); }
+.tana-breadcrumb-more-group { display: none; align-items: center; gap: 3px; }
+.tana-breadcrumb-more { display: inline-flex; align-items: center; justify-content: center; }
+.tana-persistence-status { color: var(--still-muted); font-size: 11px; }
+.tana-keycap { color: var(--still-faint); font-size: 10px; font-family: var(--still-font-mono); }
+.tana-editor-canvas, .tana-editor-surface { position: relative; background: var(--still-canvas); }
+.tana-editor-surface { scrollbar-width: thin; scrollbar-color: var(--still-selected) transparent; }
+.tana-editor-column { position: relative; width: min(var(--still-document-width), calc(100% - 112px)); margin-inline: auto; }
+.tana-editor-document { position: relative; overflow: visible; font-size: 14px; line-height: 1.85; }
+.tana-editor-document--body { padding-top: 77px; padding-bottom: 90px; }
+.tana-editor-document--has-input { padding-bottom: 0; }
+.tana-editor-document--references { padding-bottom: 64px; }
+.tana-editor-document [data-slate-placeholder] { color: var(--still-faint); }
+.tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'],
+.tana-editor-document--root > .tana-node:first-child > .slate-blockWrapper > [data-slate-node='element'] { font-size: 31px; font-weight: 630; letter-spacing: -0.025em; line-height: 1.35; }
+.tana-supertag-token { gap: 2px; padding: 1px 6px; border-radius: var(--still-tag-radius); background: var(--still-accent-soft); color: var(--still-muted); font-size: 11px; font-weight: 400; line-height: 1.7; }
+.tana-supertag-token:hover { background: var(--still-hover); color: var(--still-text-secondary); }
+[data-slate-editor] { caret-color: var(--still-text); }
+[data-slate-editor] ::selection { background: var(--still-selected); }
+.tana-inspector-region { position: relative; flex: 0 0 auto; margin: var(--still-panel-gap); margin-left: 0; min-width: 0; max-width: calc(100% - 16px); }
+.tana-inspector { width: 100%; min-width: 0; height: 100%; overflow-y: auto; background: var(--still-surface); border: 1px solid var(--still-boundary); border-radius: var(--still-work-radius); scrollbar-width: thin; scrollbar-color: var(--still-selected) transparent; animation: stillPanelEnter var(--still-duration) var(--still-ease); }
+.tana-inspector-header { position: sticky; top: 0; z-index: 10; background: var(--still-surface); border-bottom: 1px solid var(--still-border); }
+.tana-inspector-heading { display: flex; align-items: center; justify-content: space-between; height: var(--still-toolbar-height); padding-inline: 18px; color: var(--still-muted); font-size: 11px; }
+.tana-inspector-identity { padding: 10px 20px 20px; }
+.tana-inspector-identity h2 { font-size: 19px; font-weight: 550; line-height: 1.4; }
+.tana-inspector-tabs { padding: 0 16px 12px; }
+.tana-inspector-tabs [role='tablist'] { display: flex; gap: 3px; padding: 3px; border-radius: var(--still-control-radius); background: var(--still-hover); }
+.tana-inspector-tab { flex: 1; padding: 5px 8px; border-radius: 6px; color: var(--still-muted); font-size: 11px; }
+.tana-inspector-tab[data-state='active'] { background: var(--still-canvas); color: var(--still-text); }
+.tana-inspector-section { padding: 20px; border-bottom: 1px solid var(--still-border); }
+.tana-inspector-section h3 { margin-bottom: 12px; font-size: 11px; font-weight: 550; color: var(--still-muted); }
+.tana-inspector-row { border-radius: var(--still-control-radius); }
+.tana-property-row { position: relative; display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 36px; margin-bottom: 8px; font-size: 12px; }
+.tana-property-label { color: var(--still-muted); font-size: 11.5px; }
+.tana-property-values { min-width: 0; }
+.tana-property-value { display: flex; align-items: center; flex-wrap: wrap; min-width: 0; gap: 3px; }
+.tana-property-value input, .tana-property-value [role='combobox'], .tana-property-input { width: 100%; min-width: 0; height: 32px; padding: 5px 8px; border: 1px solid var(--still-boundary); border-radius: var(--still-control-radius); background: var(--still-canvas); color: var(--still-text-secondary); font-size: 12px; outline: none; }
+.tana-property-value input, .tana-property-value [role='combobox'] { flex: 1; width: auto; }
+.tana-property-value [role='status'] { flex-basis: 100%; }
+.tana-property-input:focus, .tana-property-value input:focus { border-color: var(--still-muted); }
+.tana-property-action { position: absolute; right: 0; top: -11px; }
+.tana-panel-resizer { width: 8px; cursor: col-resize; touch-action: none; }
+.tana-panel-resizer:hover { background: color-mix(in srgb, var(--still-accent) 12%, transparent); }
+.tana-panel-resizer:focus-visible { outline: 2px solid var(--still-accent); outline-offset: -1px; }
+.tana-page-surface, .tana-view-surface { min-width: 0; background: var(--still-canvas); }
+.tana-page-scroll { min-height: 0; overflow: auto; padding: 52px clamp(24px, 4vw, 56px) 64px; }
+.tana-page-column { width: min(100%, var(--still-document-width)); margin-inline: auto; }
+.tana-view-content { min-width: 0; margin-inline: auto; padding: 24px clamp(24px, 4vw, 56px) 64px; }
+.tana-view-toolbar { padding: 40px clamp(24px, 4vw, 56px) 0; }
+.tana-view-toolbar-controls { min-height: 36px; align-items: center; }
+.tana-view-header h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+.tana-view-toolbar-control { border-radius: var(--still-control-radius); color: var(--still-text-secondary); }
+.tana-view-toolbar-control:hover { color: var(--still-text); background: var(--still-hover); }
+.tana-view-card { overflow: hidden; border: 1px solid var(--still-boundary); border-radius: var(--still-work-radius); background: var(--still-surface); }
+.tana-section-heading { display: flex; justify-content: space-between; align-items: center; min-height: 36px; border-bottom: 1px solid var(--still-border); color: var(--still-text-secondary); font-size: 12px; font-weight: 550; }
+.tana-control-field { min-height: 30px; border: 1px solid var(--still-boundary); border-radius: var(--still-control-radius); background: var(--still-canvas); color: var(--still-text-secondary); font-size: 12px; }
+.tana-control-field:focus-within { border-color: var(--still-muted); }
+.tana-empty-state { display: grid; place-items: center; min-height: 160px; color: var(--still-muted); font-size: 12px; }
+.tana-destructive-action { color: var(--still-error); }
+.tana-destructive-action:hover { background: var(--still-error-surface); }
+.tana-validation-warning { color: var(--still-text-secondary); background: var(--still-warning-surface); }
+.tana-error-row { color: var(--still-error); background: var(--still-error-surface); }
+.tana-clipper-window { background: var(--still-shell); }
+.tana-clipper-panel { border: 1px solid var(--still-boundary); border-radius: var(--still-work-radius); background: var(--still-canvas); box-shadow: var(--still-overlay-shadow); }
+.tana-navigation-scrim { display: none; }
+.tana-workspace-shell[data-focus-mode] > .tana-sidebar,
+.tana-workspace-shell[data-focus-mode] > .tana-inspector-region { display: none; }
+.tana-workspace-shell[data-focus-mode] .tana-workspace-main { margin-left: var(--still-panel-gap); }
+@media (max-width: 1199px) {
+  .tana-inspector-region { position: absolute; z-index: 30; top: var(--still-panel-gap); bottom: var(--still-panel-gap); right: var(--still-panel-gap); margin: 0; box-shadow: var(--still-overlay-shadow); border-radius: var(--still-work-radius); }
+}
+@media (max-width: 1000px) {
+  .tana-editor-column { width: calc(100% - 88px); }
+  .tana-editor-document--body { padding-top: 56px; }
+  .tana-breadcrumb-overflow { display: none; }
+  .tana-breadcrumb-more-group { display: inline-flex; }
+  .tana-breadcrumbs button { max-width: 100px; }
+}
+@media (max-width: 800px) {
+  .tana-workspace-viewport { padding: 9px; }
+  .tana-sidebar { position: absolute; inset: calc(var(--still-toolbar-height) + 2 * var(--still-panel-gap)) auto var(--still-panel-gap) var(--still-panel-gap); height: auto; z-index: 40; border-radius: var(--still-work-radius); background: var(--still-shell); transform: translateX(calc(-100% - 20px)); visibility: hidden; }
+  .tana-workspace-shell[data-navigation-open] .tana-sidebar { transform: none; visibility: visible; box-shadow: var(--still-overlay-shadow); }
+  .tana-navigation-scrim { display: block; position: absolute; inset: 0; z-index: 35; background: rgb(0 0 0 / 0.12); }
+  .tana-workspace-shell[data-navigation-open] .tana-commandbar-leading { position: relative; z-index: 50; }
+  .tana-workspace-main { margin-left: var(--still-panel-gap); }
+  .tana-toolbar-search { display: inline-grid; }
+  .tana-workspace-shell[data-desktop] .tana-commandbar { padding-left: 88px; }
+  .tana-commandbar { gap: 5px; padding-inline: 12px; }
+  .tana-commandbar-leading { gap: 0; }
+  .tana-commandbar-history { display: none; }
+  .tana-editor-column { width: calc(100% - 80px); }
+  .tana-persistence-status { display: none; }
+  .tana-view-toolbar, .tana-view-content, .tana-page-scroll { padding-inline: 20px; }
+}
+@media (max-width: 520px) {
+  .tana-workspace-viewport { padding: 0; }
+  .tana-workspace-shell { border: 0; border-radius: 0; box-shadow: none; }
+  .tana-workspace-main { border: 0; border-radius: 0; margin: 0 !important; }
+  .tana-editor-column { width: calc(100% - 72px); margin-left: 52px; margin-right: 20px; }
+  .tana-editor-document--body { padding-top: 40px; }
+  .tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] { font-size: 28px; }
+}
+@keyframes stillPanelEnter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tana-workspace-shell *, .tana-workspace-shell *::before, .tana-workspace-shell *::after { animation: none !important; transition: none !important; }
+}

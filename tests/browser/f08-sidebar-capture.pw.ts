@@ -1,17 +1,54 @@
 import { expect, test } from "@playwright/test";
 
-test("Sidebar cycles through full, mini, hidden and recovers", async ({
+test("Toolbar owns navigation visibility without duplicate sidebar controls", async ({
   page,
 }) => {
   await page.goto("/editor");
   const sidebar = page.getByTestId("tana-sidebar");
   await expect(sidebar).toBeVisible();
-  await page.getByRole("button", { name: "收起导航" }).click();
-  await expect(page.getByTestId("tana-sidebar-mini")).toBeVisible();
-  await page.getByRole("button", { name: "隐藏导航" }).click();
+  await expect(sidebar.getByRole("button", { name: /导航/ })).toHaveCount(0);
+  await expect(sidebar.getByRole("button", { name: /专注模式/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "侧栏设置" }).click();
+  await expect(page.getByRole("button", { name: "完整", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "迷你", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "隐藏", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "收起导航", exact: true }).click();
   await expect(page.getByTestId("tana-sidebar")).toHaveCount(0);
-  await page.getByRole("button", { name: "恢复侧栏" }).click();
+  await page.getByRole("button", { name: "展开导航", exact: true }).click();
   await expect(page.getByTestId("tana-sidebar")).toBeVisible();
+});
+
+test("Legacy mini sidebar preferences keep full navigation and the shared toggle", async ({ page }) => {
+  await page.goto("/editor");
+  await page.getByRole("button", { name: "收起导航", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const raw = sessionStorage.getItem("local-tana:plate-document");
+    return raw ? JSON.parse(raw)[0]?.tanaWorkspaceUi?.sidebar?.mode : null;
+  })).toBe("hidden");
+  await page.evaluate(() => {
+    const key = "local-tana:plate-document";
+    const document = JSON.parse(sessionStorage.getItem(key)!);
+    document[0].tanaWorkspaceUi.sidebar.mode = "mini";
+    sessionStorage.setItem(key, JSON.stringify(document));
+  });
+  await page.reload();
+  await expect(page.getByTestId("tana-sidebar")).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起导航", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: "收起导航", exact: true }).click();
+  await expect(page.getByTestId("tana-sidebar")).toHaveCount(0);
+  await page.getByRole("button", { name: "展开导航", exact: true }).click();
+  await expect(page.getByTestId("tana-sidebar")).toBeVisible();
+});
+
+test("Sidebar stays a navigation surface instead of duplicating the Plate outline", async ({ page }) => {
+  await page.goto("/editor");
+  const sidebar = page.getByTestId("tana-sidebar");
+  await expect(sidebar.getByRole("button", { name: "主页", exact: true })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "全部节点", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(sidebar.getByText("Plate 提供编辑器能力，Local Tana 只补充语义。", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".tana-page-header")).toHaveCount(0);
+  await expect(page.locator("[data-slate-editor]")).toContainText("Plate 提供编辑器能力，Local Tana 只补充语义。");
 });
 
 test("Sidebar resize and top item visibility are canonical preferences", async ({
@@ -33,19 +70,10 @@ test("Sidebar resize and top item visibility are canonical preferences", async (
   await expect(page.getByTestId("tana-sidebar")).toHaveCSS("width", `${after!.width}px`);
 
   await page.getByRole("button", { name: "侧栏设置" }).click();
-  await page.getByRole("button", { name: "隐藏 Today" }).click();
+  await page.getByRole("button", { name: "隐藏 今日笔记" }).click();
   await expect(page.getByTestId("sidebar-today")).toHaveCount(0);
-  await page.getByRole("button", { name: "显示 Today" }).click();
+  await page.getByRole("button", { name: "显示 今日笔记" }).click();
   await expect(page.getByTestId("sidebar-today")).toBeVisible();
-});
-
-test("displayed top items expose context-menu hide and reorder actions", async ({ page }) => {
-  await page.goto("/editor");
-  await page.getByTestId("sidebar-top-item-today").click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "隐藏", exact: true })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "下移", exact: true })).toBeVisible();
-  await page.getByRole("menuitem", { name: "隐藏", exact: true }).click();
-  await expect(page.getByTestId("sidebar-today")).toHaveCount(0);
 });
 
 test("Create New creates a focused ordinary Today child", async ({ page }) => {
@@ -56,7 +84,7 @@ test("Create New creates a focused ordinary Today child", async ({ page }) => {
       exact: true,
     })
     .click();
-  await page.getByTestId("sidebar-create-new").click();
+  await page.getByRole("button", { name: "新建节点", exact: true }).click();
   await expect(
     page.getByRole("navigation", { name: "路径导航" }),
   ).toContainText("未命名节点");
@@ -66,6 +94,8 @@ test("Create New creates a focused ordinary Today child", async ({ page }) => {
 test("Quick Add preserves a draft on Escape and commits without navigating from the current page", async ({
   page,
 }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message.slice(0, 120)));
   await page.goto("/editor");
   const editor = page.locator("[data-slate-editor]");
   await page
@@ -94,6 +124,7 @@ test("Quick Add preserves a draft on Escape and commits without navigating from 
     page.getByRole("navigation", { name: "路径导航" }),
   ).toContainText("Plate 提供编辑器能力");
   await expect(editor).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("Global Search uses ControlOrMeta+S", async ({ page }) => {
@@ -104,6 +135,17 @@ test("Global Search uses ControlOrMeta+S", async ({ page }) => {
   await expect(
     page.getByRole("combobox", { name: "搜索所有节点" }),
   ).toBeVisible();
+});
+
+test('Command palette uses the shared workspace command registry', async ({ page }) => {
+  await page.goto('/editor');
+  await expect(page.locator('[data-slate-editor]')).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+P');
+  await expect(page.getByRole('dialog', { name: '命令面板' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('新建节点', { exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('option', { name: /新建节点/ }).click();
+  await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('未命名节点');
+  await expect(page.locator('[data-slate-editor]')).toBeFocused();
 });
 
 test("block context menu pins a canonical node once and exposes it in Sidebar", async ({
@@ -120,7 +162,7 @@ test("block context menu pins a canonical node once and exposes it in Sidebar", 
     page.getByRole("menuitem", { name: "固定到侧栏", exact: true }),
   ).toBeVisible();
   await page.getByRole("menuitem", { name: "固定到侧栏", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Pinned" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "固定" })).toBeVisible();
   await expect(page.getByTestId("tana-sidebar")).toContainText(
     "Plate 提供编辑器能力",
   );
@@ -152,7 +194,7 @@ test("Recents is derived from entity nodes and excludes Field and Value children
   page,
 }) => {
   await page.goto("/editor");
-  await page.getByRole("button", { name: /Recents/ }).click();
+  await page.getByRole("button", { name: /最近/ }).click();
   const sidebar = page.getByTestId("tana-sidebar");
   await expect(sidebar.getByText("全部项目", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("截止日期", { exact: true })).toHaveCount(0);

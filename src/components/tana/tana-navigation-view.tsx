@@ -19,7 +19,7 @@ export function TanaNavigationView({
   const navigationClass = type === 'tabs'
     ? 'flex flex-wrap gap-1 border-b border-[var(--tana-divider)] pb-2'
     : type === 'side-menu'
-      ? 'max-w-64 space-y-1 rounded-md border p-2'
+      ? 'tana-view-card max-w-64 space-y-1 p-2'
       : 'space-y-1';
 
   return (

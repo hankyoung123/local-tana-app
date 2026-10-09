@@ -4,12 +4,12 @@ import * as React from 'react';
 
 import {
   ArrowUpRightIcon,
-  GripVerticalIcon,
   Link2Icon,
   PlusIcon,
   Settings2Icon,
   XIcon,
 } from 'lucide-react';
+import { Tabs as TabsPrimitive } from 'radix-ui';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
@@ -19,7 +19,6 @@ import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs } from '@heroui/react';
 import {
   Select,
   SelectContent,
@@ -40,6 +39,7 @@ import {
   type TanaBlockElement,
   type TanaFieldDescriptor,
   type TanaIndex,
+  type TanaNode,
 } from '@/lib/tana';
 
 import { useTanaIndex } from './tana-index-context';
@@ -47,6 +47,8 @@ import {
   TanaSearchDefinitionEditor,
   TanaViewConfigurationEditor,
 } from './tana-view-editor';
+import { TanaShellControl } from './tana-shell-control';
+import { TanaFieldValueEditor } from './node-renderer-registry';
 
 const fieldTypeLabels: Record<FieldType, string> = {
   checkbox: '复选框',
@@ -82,26 +84,17 @@ const fieldVisibilityPolicyLabels: Record<FieldVisibilityPolicy, string> = {
  * The Inspector owns semantic configuration, Field source navigation, and
  * body visibility. Node creation and Field Values stay in the Plate outline.
  */
-export function TanaInspector({ activeNodeId, onClose }: {
+export function TanaInspector({ activeNodeId, initialTab, onClose }: {
   activeNodeId: NodeId | null;
+  initialTab?: string;
   onClose: () => void;
 }) {
-  const editor = useEditorRef();
   const index = useTanaIndex();
   const node = activeNodeId ? index.nodesById.get(activeNodeId) : undefined;
-  const defaultInspectorTab = node?.semanticTypes.includes('supertag-definition') ? '字段' : '属性';
-  const [inspectorSelection, setInspectorSelection] = React.useState<{
-    nodeId: NodeId | null;
-    tab: string;
-  }>({ nodeId: null, tab: '' });
-  const activeInspectorTab =
-    inspectorSelection.nodeId === activeNodeId && inspectorSelection.tab
-      ? inspectorSelection.tab
-      : defaultInspectorTab;
 
   if (!node) {
     return (
-      <aside aria-label="检查器" className="tana-inspector relative h-full w-80 max-w-full shrink-0 border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-5">
+      <aside aria-label="检查器" className="tana-inspector relative p-5">
         <button
           aria-label="关闭检查器"
           className="absolute top-2.5 right-3 grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:ring-2"
@@ -116,6 +109,22 @@ export function TanaInspector({ activeNodeId, onClose }: {
     );
   }
 
+  return <TanaInspectorPanel key={`${node.id}:${initialTab ?? "default"}`} index={index} node={node} initialTab={initialTab} onClose={onClose} />;
+}
+
+function TanaInspectorPanel({
+  index,
+  node,
+  initialTab,
+  onClose,
+}: {
+  index: TanaIndex;
+  node: TanaNode;
+  initialTab?: string;
+  onClose: () => void;
+}) {
+  const editor = useEditorRef();
+
   const descriptors = getNodeFieldDescriptors(index, node.id);
   const systemFields = descriptors.filter(({ source }) => source === 'system');
   const customFields = descriptors.filter(({ source }) => source === 'custom');
@@ -125,8 +134,18 @@ export function TanaInspector({ activeNodeId, onClose }: {
   const isView = node.viewDefinition !== undefined;
   const isOrdinaryNode = !isFieldDefinition && !isSupertagDefinition && !isSearch && !isView;
   const inspectorTabs = isSupertagDefinition
-    ? ['信息', '字段', '关联']
-    : ['属性', '字段', '引用'];
+    ? [
+        { value: 'overview', label: '信息' },
+        { value: 'fields', label: '字段' },
+        { value: 'relations', label: '关联' },
+      ]
+    : [
+        { value: 'properties', label: '属性' },
+        { value: 'fields', label: '字段' },
+        { value: 'references', label: '引用' },
+      ];
+  const defaultInspectorTab = initialTab ?? ((isSupertagDefinition || isOrdinaryNode) ? 'fields' : 'properties');
+  const [activeInspectorTab, setActiveInspectorTab] = React.useState(defaultInspectorTab);
   const parentNode = index.parentNodeIds.get(node.id)
     ? index.nodesById.get(index.parentNodeIds.get(node.id)!)
     : undefined;
@@ -149,99 +168,81 @@ export function TanaInspector({ activeNodeId, onClose }: {
     });
 
   return (
-    <aside aria-label="检查器" className="tana-inspector relative h-full w-80 max-w-full shrink-0 overflow-y-auto border-l border-[var(--tana-divider)] bg-[var(--tana-sidebar)]">
-      <div className="sticky top-0 z-10 border-b border-[var(--tana-divider)] bg-[color:var(--tana-sidebar)]/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 pt-2.5">
-          <p className="text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.14em]">
-            配置
-          </p>
-          <button
-            aria-label="关闭检查器"
-            className="grid size-7 place-items-center rounded-md text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] focus-visible:ring-2"
-            type="button"
-            onClick={onClose}
-          >
-            <XIcon className="size-3.5" />
-          </button>
+    <aside aria-label="检查器" className="tana-inspector">
+      <div className="tana-inspector-header">
+        <div className="tana-inspector-heading">
+          <span>节点属性</span>
+          <TanaShellControl label="关闭检查器" onClick={onClose}><XIcon className="size-3.5" /></TanaShellControl>
         </div>
-        <div className="flex items-center gap-3 px-4 pt-3 pb-4">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--tana-accent-soft)] font-medium text-[var(--tana-accent)] text-sm">
-            {isSupertagDefinition ? '#' : <Settings2Icon className="size-4" />}
-          </span>
-          <div className="min-w-0">
-            <h2 className="truncate font-medium text-[15px] text-[var(--tana-text)]">
-              {resolveTanaNodeTitle(index, node.id) || '未命名节点'}
-            </h2>
-            <p className="mt-0.5 truncate text-[11px] text-[var(--tana-text-tertiary)]">
-              {isSupertagDefinition ? '超级标签' : '节点属性'}
-            </p>
-          </div>
+        <div className="tana-inspector-identity">
+          <h2>{resolveTanaNodeTitle(index, node.id) || '未命名节点'}</h2>
+          <p className="mt-1 text-xs text-[var(--still-muted)]">{isSupertagDefinition ? '超级标签' : isFieldDefinition ? '字段定义' : '属性修改即时保存'}</p>
         </div>
-        <Tabs
-          aria-label="检查器分区"
-          className="w-full !gap-0 px-3"
-          selectedKey={activeInspectorTab}
-          variant="secondary"
-          align="start"
-          onSelectionChange={(key) =>
-            setInspectorSelection({ nodeId: activeNodeId, tab: String(key) })
-          }
+        <TabsPrimitive.Root
+          className="tana-inspector-tabs"
+          value={activeInspectorTab}
+          onValueChange={setActiveInspectorTab}
         >
-          <Tabs.ListContainer className="!w-full !rounded-none !bg-transparent">
-            <Tabs.List className="!w-full !min-w-0 !justify-start !gap-0 !p-0">
-              {inspectorTabs.map((tab) => (
-                <Tabs.Tab
-                  key={tab}
-                  id={tab}
-                  className="!h-9 !flex-1 !rounded-none !px-2 !text-[12px]"
-                >
-                  {tab}
-                </Tabs.Tab>
-              ))}
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
+          <TabsPrimitive.List aria-label="检查器分区" className="flex items-center gap-1">
+            {inspectorTabs.map((tab) => (
+              <TabsPrimitive.Trigger
+                key={tab.value}
+                className="tana-inspector-tab"
+                value={tab.value}
+              >
+                {tab.label}
+              </TabsPrimitive.Trigger>
+            ))}
+          </TabsPrimitive.List>
+        </TabsPrimitive.Root>
       </div>
 
-      {isFieldDefinition && (
+      {activeInspectorTab === 'properties' && isFieldDefinition && (
         <FieldDefinitionEditor
           definition={node.fieldDefinition!}
           fieldId={node.id}
         />
       )}
 
-      {isSupertagTemplateField && (
+      {activeInspectorTab === 'fields' && isSupertagTemplateField && (
         <TemplateFieldOptionalSection
           optional={(node.node as TanaBlockElement).tanaFieldOptional === true}
           templateNodeId={node.id}
         />
       )}
 
-      {isOrdinaryNode && activeInspectorTab !== '引用' && (
+      {activeInspectorTab === 'properties' && isOrdinaryNode && (
         <OrdinaryNodeProperties
-          customFields={customFields}
-          index={index}
-          nodeId={node.id}
-          supertagGroups={supertagGroups}
           systemFields={systemFields}
         />
       )}
 
-      {isSupertagDefinition && activeInspectorTab === '字段' && (
+      {activeInspectorTab === 'fields' && isOrdinaryNode && (
+        <OrdinaryNodeFields
+          customFields={customFields}
+          index={index}
+          nodeId={node.id}
+          supertagGroups={supertagGroups}
+        />
+      )}
+
+      {activeInspectorTab === 'fields' && isSupertagDefinition && (
         <SupertagFieldsSection nodeId={node.id} />
       )}
 
-      {isSupertagDefinition && activeInspectorTab === '信息' && (
+      {activeInspectorTab === 'relations' && isSupertagDefinition && (
         <SupertagInheritanceSection supertagId={node.id} />
       )}
 
-      {isSupertagDefinition && activeInspectorTab === '信息' && <SupertagPresentationSection supertagId={node.id} />}
+      {activeInspectorTab === 'overview' && isSupertagDefinition && (
+        <SupertagPresentationSection supertagId={node.id} />
+      )}
 
-      {((isOrdinaryNode && activeInspectorTab === '引用') || (isSupertagDefinition && activeInspectorTab === '关联')) && (
+      {activeInspectorTab === 'references' && isOrdinaryNode && (
         <ReferencesConfigurationSection nodeId={node.id} />
       )}
 
-      {isSearch && (
+      {activeInspectorTab === 'properties' && isSearch && (
         <TanaSearchDefinitionEditor
           editor={editor}
           index={index}
@@ -250,7 +251,9 @@ export function TanaInspector({ activeNodeId, onClose }: {
         />
       )}
 
-      {isView && <TanaViewConfigurationEditor index={index} nodeId={node.id} />}
+      {activeInspectorTab === 'properties' && isView && (
+        <TanaViewConfigurationEditor index={index} nodeId={node.id} />
+      )}
     </aside>
   );
 }
@@ -263,8 +266,8 @@ function FieldSection({
   title: string;
 }) {
   return (
-    <section className="border-t border-[var(--tana-divider)] px-4 py-5">
-      <h3 className="mb-3 font-medium text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.14em]">
+    <section className="tana-inspector-section">
+      <h3 className="mb-3 font-medium text-[var(--still-muted)] text-[11px]">
         {title}
       </h3>
       {children}
@@ -274,28 +277,40 @@ function FieldSection({
 
 /** Ordinary Nodes expose only their derived properties and reference actions. */
 function OrdinaryNodeProperties({
-  customFields,
-  index,
-  nodeId,
-  supertagGroups,
   systemFields,
 }: {
-  customFields: readonly TanaFieldDescriptor[];
-  index: TanaIndex;
-  nodeId: NodeId;
-  supertagGroups: ReadonlyMap<NodeId, readonly TanaFieldDescriptor[]>;
   systemFields: readonly TanaFieldDescriptor[];
 }) {
   return (
-    <FieldSection title="属性">
+    <FieldSection title="摘要">
       <div className="space-y-0.5">
         {systemFields.map((field) => (
           <SystemFieldRow key={field.key} descriptor={field} />
         ))}
       </div>
+      {systemFields.length === 0 && (
+        <p className="text-[var(--tana-text-tertiary)] text-xs">暂无系统属性。</p>
+      )}
+    </FieldSection>
+  );
+}
+
+function OrdinaryNodeFields({
+  customFields,
+  index,
+  nodeId,
+  supertagGroups,
+}: {
+  customFields: readonly TanaFieldDescriptor[];
+  index: TanaIndex;
+  nodeId: NodeId;
+  supertagGroups: ReadonlyMap<NodeId, readonly TanaFieldDescriptor[]>;
+}) {
+  return (
+    <FieldSection title="字段">
 
       {supertagGroups.size > 0 && (
-        <div className="mt-3 space-y-3 border-t border-[var(--tana-divider)] pt-3">
+        <div className="space-y-3">
           {Array.from(supertagGroups.entries()).map(([supertagId, fields]) => (
             <div key={supertagId}>
               <p className="mb-1 text-[var(--tana-accent)] text-[11px]">
@@ -638,6 +653,8 @@ function PresentationFieldRow({
   nodeId: NodeId;
 }) {
   const editor = useEditorRef();
+  const index = useTanaIndex();
+  const values = descriptor.fieldNodeId ? index.fieldNodesById.get(descriptor.fieldNodeId)?.valueNodeIds ?? [] : [];
   const presentation = editor.getTransforms(TanaPresentationPlugin).presentation;
   const zoom = editor.getTransforms(TanaZoomPlugin).zoom;
   const lifecycle = editor.getTransforms(TanaNodeLifecyclePlugin).node;
@@ -645,7 +662,6 @@ function PresentationFieldRow({
   if (descriptor.brokenFieldDefinition) {
     return (
       <div className="tana-inspector-row group flex min-h-9 items-center gap-2 rounded-md px-1.5 text-xs text-[var(--tana-text-tertiary)]">
-        <GripVerticalIcon className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
         <span className="min-w-0 flex-1 truncate" role="status">{descriptor.label}</span>
         {descriptor.fieldDefinitionInTrash && descriptor.fieldId && (
           <button
@@ -662,14 +678,12 @@ function PresentationFieldRow({
   }
 
   return (
-    <div className="tana-inspector-row group flex min-h-9 items-center gap-2 rounded-md px-1.5 text-xs transition-colors hover:bg-[var(--tana-hover)]">
-      <GripVerticalIcon className="size-3.5 shrink-0 text-[var(--tana-text-tertiary)] opacity-0 transition-opacity group-hover:opacity-45" />
-      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-[var(--tana-accent)] opacity-70" />
+    <div className="tana-inspector-row tana-property-row group">
       <button
         className={
           descriptor.visible
-            ? 'min-w-0 flex-1 truncate text-left hover:text-[var(--tana-link)]'
-            : 'min-w-0 flex-1 truncate text-left text-[var(--tana-text-tertiary)] line-through hover:text-[var(--tana-text-secondary)]'
+            ? 'tana-property-label truncate text-left hover:text-[var(--tana-link)]'
+            : 'tana-property-label truncate text-left text-[var(--tana-text-tertiary)] line-through hover:text-[var(--tana-text-secondary)]'
         }
         title="打开字段定义"
         type="button"
@@ -677,8 +691,11 @@ function PresentationFieldRow({
       >
         {descriptor.label}
       </button>
+      {values.length > 0 && <div className="tana-property-values">
+        {values.map((valueId) => <TanaFieldValueEditor key={valueId} index={index} nodeId={valueId} inline />)}
+      </div>}
       <button
-        className="opacity-0 text-[var(--tana-text-tertiary)] text-[11px] transition-opacity hover:text-[var(--tana-text)] focus:opacity-100 group-hover:opacity-100"
+        className="tana-property-action opacity-0 text-[var(--tana-text-tertiary)] text-[10px] transition-opacity hover:text-[var(--tana-text)] focus:opacity-100 group-hover:opacity-100"
         type="button"
         onClick={() => {
           if (!descriptor.fieldNodeId) return;
@@ -883,7 +900,7 @@ function FieldDefinitionEditor({
           </SelectContent>
         </Select>
         {cardinalityNotice && (
-          <p className="mt-1.5 text-amber-700 text-xs" role="status">
+          <p className="tana-validation-warning mt-1.5 rounded px-2 py-1 text-xs" role="status">
             {cardinalityNotice}
           </p>
         )}

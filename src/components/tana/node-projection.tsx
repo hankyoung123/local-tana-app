@@ -552,7 +552,7 @@ function ProjectionFieldValueControl({
 
 function ProjectionFieldWarning({ id, warning }: { id: string; warning: boolean }) {
   return warning ? (
-    <span className="text-amber-700 dark:text-amber-300" id={id} role="status">
+    <span className="tana-validation-warning rounded px-1 text-[11px]" id={id} role="status">
       需修正：字段值需要修正
     </span>
   ) : null;
@@ -600,7 +600,7 @@ export function NodeProjection({
     return (
       <div
         aria-label={variant === 'block-reference' ? `引用：${unavailableLabel}` : `搜索结果：${unavailableLabel}`}
-        className={`${projectionRowClassName} text-[#9a736d]`}
+        className={`${projectionRowClassName} text-destructive`}
         contentEditable={false}
         data-reference-status={resolution?.status ?? 'missing'}
       >

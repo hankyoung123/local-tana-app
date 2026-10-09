@@ -95,14 +95,14 @@ export function OutlineNodeView({
     <TanaZoomPresentationProvider
       baseIndent={baseIndent ?? 0}
     >
-      <section className="flex min-w-0 flex-1 flex-col bg-[var(--tana-canvas)]">
-        <EditorContainer className="min-h-0 flex-1" variant="default">
+      <section className="tana-editor-canvas flex min-w-0 flex-1 flex-col">
+        <EditorContainer className="tana-editor-surface min-h-0 flex-1" variant="default">
           <Editor
-            className={`px-8 pt-10 ${showBodyAffordance ? 'pb-0' : 'pb-8'} text-[15px] leading-6 sm:px-[max(64px,calc(50%-374px))]`}
+            className={`tana-editor-column tana-editor-document tana-editor-document--body ${focusedNodeId ? '' : 'tana-editor-document--root'} ${showBodyAffordance ? 'tana-editor-document--has-input' : ''}`}
             variant="none"
           />
           {focusedNodeId && showBodyAffordance && (
-            <div className="px-8 sm:px-[max(64px,calc(50%-374px))]">
+            <div className="tana-editor-column tana-editor-document">
               <div
                 aria-label="输入内容…"
                 className="tana-bodyAffordance slate-blockWrapper relative flow-root block h-8 min-h-8 w-full border-0 bg-transparent px-0 py-1 text-left text-[15px] leading-6 outline-none"
@@ -156,7 +156,7 @@ export function OutlineNodeView({
             </div>
           )}
           {focusedNodeId && (
-            <div className="px-8 pb-12 sm:px-[max(64px,calc(50%-374px))]">
+            <div className="tana-editor-column tana-editor-document tana-editor-document--references">
               <TanaReferencesSection index={index} nodeId={focusedNodeId} />
             </div>
           )}

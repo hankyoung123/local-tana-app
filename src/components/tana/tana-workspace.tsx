@@ -2,16 +2,8 @@
 
 import * as React from "react";
 
-import {
-  CornerDownLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  EllipsisIcon,
-  PanelRightIcon,
-  SearchIcon,
-  Settings2Icon,
-} from "lucide-react";
-import { Button, Kbd } from "@heroui/react";
+import { BlockSelectionPlugin } from '@platejs/selection/react';
+import { CornerDownLeftIcon, SearchIcon } from "lucide-react";
 import {
   type PlateEditor,
   useEditorRef,
@@ -32,6 +24,9 @@ import {
   TanaZoomPlugin,
 } from "@/components/editor/plugins/tana-zoom-plugin";
 import { TanaCapturePlugin } from "@/components/editor/plugins/tana-capture-plugin";
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
+import { TanaShortcutsPlugin } from '@/components/editor/plugins/tana-shortcuts-plugin';
 import { TanaTimePlugin } from "@/components/editor/plugins/tana-time-plugin";
 import {
   Command,
@@ -41,14 +36,6 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   getTanaAncestorPaths,
   getTanaProjectionTarget,
@@ -71,9 +58,22 @@ import { TanaNodeViewHost } from "./tana-node-view-host";
 import { TanaOutlinerOpenState } from "./tana-outliner-open-state";
 import { TanaSidebar } from "./tana-sidebar";
 import { TanaCaptureComposer } from "./tana-capture-composer";
+import { TanaCommandPalette } from './tana-command-palette';
+import { TanaPanelResizer } from './tana-panel-resizer';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  isTanaWorkspaceCommandId,
+  runTanaWorkspaceCommand,
+  type TanaWorkspaceCommandHandlers,
+  type TanaWorkspaceCommandId,
+} from './tana-workspace-commands';
+import { TanaWorkspaceToolbar } from './tana-workspace-toolbar';
+import { TanaWorkspaceShell } from './tana-workspace-shell';
+import { TanaInspectorContext } from './tana-inspector-context';
+import { useStillAppearance } from './use-still-appearance';
+import type { PersistenceStatus } from './tana-workspace-types';
 
-export type PersistenceStatus =
-  "browser-preview" | "error" | "saved" | "saving";
+export type { PersistenceStatus } from './tana-workspace-types';
 
 export function SearchResult({
   index,
@@ -147,10 +147,17 @@ function TanaWorkspaceContent({
   const editor = useEditorRef();
   const index = useTanaIndex();
   const [fieldPanelOpen, setFieldPanelOpen] = React.useState(false);
+  const [inspectedNodeId, setInspectedNodeId] = React.useState<string | null>(null);
+  const [focusMode, setFocusMode] = React.useState(false);
+  const [navigationOpen, setNavigationOpen] = React.useState(false);
+  const narrowWindow = useIsMobile(801);
+  const { appearance, changeAppearance } = useStillAppearance();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
   const [quickAddOpen, setQuickAddOpen] = React.useState(false);
   const [quickAddSession, setQuickAddSession] = React.useState(0);
+  const [inspectorWidth, setInspectorWidth] = React.useState(320);
   const [quickAddDraft, setQuickAddDraft] = React.useState<TanaCaptureDraft>(() =>
     normalizeTanaCaptureDraft(""),
   );
@@ -162,6 +169,8 @@ function TanaWorkspaceContent({
   const workspaceUi = normalizeTanaWorkspaceUi(
     workspaceId ? index.nodesById.get(workspaceId)?.workspaceUi : undefined,
   );
+  const navigationExpanded = !focusMode && workspaceUi.sidebar?.mode !== 'hidden' &&
+    (!narrowWindow || navigationOpen);
 
   const updateWorkspaceUi = React.useCallback(
     (next: TanaWorkspaceUi) => {
@@ -284,6 +293,31 @@ function TanaWorkspaceContent({
   });
   const searchResults = searchTanaNodes(index, search);
   const activeNodeId = focusedNodeId ?? selectedNodeId;
+  const inspectNode = React.useCallback((nodeId: string) => {
+    setInspectedNodeId(nodeId);
+    setFieldPanelOpen(true);
+    setFocusMode(false);
+  }, []);
+  const closeInspector = React.useCallback(() => {
+    setFieldPanelOpen(false);
+    setInspectedNodeId(null);
+    editor.tf.focus();
+  }, [editor]);
+  const toggleNavigation = React.useCallback(() => {
+    setFocusMode(false);
+    if (narrowWindow) {
+      if (workspaceUi.sidebar?.mode === 'hidden') {
+        updateWorkspaceUi({ ...workspaceUi, sidebar: { ...workspaceUi.sidebar, mode: 'full' } });
+      }
+      setNavigationOpen(!navigationExpanded);
+    } else {
+      const mode = navigationExpanded ? 'hidden' : 'full';
+      updateWorkspaceUi({ ...workspaceUi, sidebar: { ...workspaceUi.sidebar, mode } });
+    }
+  }, [narrowWindow, navigationExpanded, updateWorkspaceUi, workspaceUi]);
+  const resizeInspector = React.useCallback((delta: number) => {
+    setInspectorWidth((width) => Math.min(420, Math.max(280, width + delta)));
+  }, []);
 
   const navigateToSearchResult = (nodeId: string) => {
     selectTanaSearchResult(editor, nodeId, setSearch, setSearchOpen);
@@ -294,327 +328,300 @@ function TanaWorkspaceContent({
     setSearchOpen(true);
   }, []);
 
+  const openCommandPalette = React.useCallback(() => {
+    setCommandPaletteOpen(true);
+  }, []);
+
+  const copyLink = React.useCallback(() => {
+    const href = new URL(
+      getTanaEditorHref(focusedNodeId),
+      window.location.origin,
+    ).href;
+    void navigator.clipboard?.writeText(href);
+  }, [focusedNodeId]);
+
+  const commandTargetNodeId = selectedNodeId ?? focusedNodeId;
+  const commandHandlers = React.useMemo<TanaWorkspaceCommandHandlers>(() => {
+    return {
+      'new-node': createNew,
+      'quick-add': openQuickAdd,
+      search: openSearch,
+      'open-command-palette': openCommandPalette,
+      today: () => editor.getTransforms(TanaTimePlugin).time.today(),
+      'navigate-back': () => editor.getTransforms(TanaZoomPlugin).zoom.previous(),
+      'navigate-forward': () => editor.getTransforms(TanaZoomPlugin).zoom.next(),
+      'navigate-root': () => editor.getTransforms(TanaZoomPlugin).zoom.root(),
+      'toggle-inspector': () => {
+        if (fieldPanelOpen && !focusMode) closeInspector();
+        else {
+          setInspectedNodeId(null);
+          setFieldPanelOpen(true);
+          setFocusMode(false);
+        }
+      },
+      'open-field-inspector': () => {
+        if (commandTargetNodeId) inspectNode(commandTargetNodeId);
+      },
+      'toggle-focus-mode': () => {
+        setFocusMode((active) => !active);
+        setNavigationOpen(false);
+        editor.tf.focus();
+      },
+      'toggle-sidebar': toggleNavigation,
+      'copy-link': copyLink,
+      undo: () => editor.undo(),
+      redo: () => editor.redo(),
+      duplicate: () => {
+        if (!commandTargetNodeId) return;
+        editor.setOption(BlockSelectionPlugin, 'selectedIds', new Set([commandTargetNodeId]));
+        editor.getTransforms(BlockSelectionPlugin).blockSelection.duplicate();
+      },
+      trash: () => {
+        if (!commandTargetNodeId) return;
+        editor.getTransforms(TanaNodeLifecyclePlugin).node.trash(commandTargetNodeId);
+      },
+      'toggle-done': () => {
+        if (!commandTargetNodeId) return;
+        editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.toggleDone(commandTargetNodeId);
+      },
+      'collapse-node': () => editor.getTransforms(TanaShortcutsPlugin).tanaShortcuts.collapseCurrentNode(),
+      'expand-node': () => editor.getTransforms(TanaShortcutsPlugin).tanaShortcuts.expandCurrentNode(),
+    };
+  }, [
+    closeInspector,
+    fieldPanelOpen,
+    focusMode,
+    inspectNode,
+    commandTargetNodeId,
+    copyLink,
+    createNew,
+    editor,
+    openCommandPalette,
+    openQuickAdd,
+    openSearch,
+    toggleNavigation,
+  ]);
+
+  const runWorkspaceCommand = React.useCallback(
+    (command: TanaWorkspaceCommandId) => runTanaWorkspaceCommand(commandHandlers, command),
+    [commandHandlers],
+  );
+
+  React.useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (!isTauri()) return;
+      const { listen } = await import('@tauri-apps/api/event');
+      const cleanup = await listen<unknown>('tana-menu-command', (event) => {
+        if (!disposed && isTanaWorkspaceCommandId(event.payload)) {
+          runWorkspaceCommand(event.payload);
+        }
+      });
+      if (disposed) cleanup();
+      else unlisten = cleanup;
+    })();
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [runWorkspaceCommand]);
+
   React.useEffect(() => {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key.toLowerCase();
-      if (key === "s" && !event.shiftKey) {
+      if ((key === "s" || key === "k") && !event.shiftKey) {
         event.preventDefault();
-        openSearch();
+        runWorkspaceCommand('search');
+      } else if (key === 'p' && !event.shiftKey) {
+        event.preventDefault();
+        runWorkspaceCommand('open-command-palette');
       } else if (key === "e" && !event.shiftKey) {
         event.preventDefault();
-        openQuickAdd();
-      } else if (key === "d" && event.shiftKey) {
+        runWorkspaceCommand('quick-add');
+      } else if (key === 'f' && event.shiftKey) {
         event.preventDefault();
-        editor.getTransforms(TanaTimePlugin).time.today();
+        runWorkspaceCommand('toggle-focus-mode');
+      } else if (key === "t" && event.shiftKey) {
+        event.preventDefault();
+        runWorkspaceCommand('today');
       }
     };
     document.addEventListener("keydown", onGlobalKeyDown, true);
     return () => document.removeEventListener("keydown", onGlobalKeyDown, true);
-  }, [editor, openQuickAdd, openSearch]);
+  }, [runWorkspaceCommand]);
 
   return (
-    <div className="tana-workspace-shell flex h-dvh min-w-0 overflow-hidden text-[var(--tana-text)]">
+    <TanaInspectorContext.Provider value={inspectNode}>
       <TanaOutlinerOpenState />
-      <TanaSidebar
-        activeNodeId={activeNodeId}
-        index={index}
-        onCreateNew={createNew}
-        onOpenSearch={openSearch}
-        onQuickAdd={openQuickAdd}
-        onUpdateUi={updateWorkspaceUi}
-      />
-
-      {workspaceUi.sidebar?.mode === "hidden" && (
-        <button
-          aria-label="恢复侧栏"
-          className="absolute left-2 top-2 z-40 grid size-8 place-items-center rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] shadow"
-          type="button"
-          onClick={() =>
-            updateWorkspaceUi({
-              ...workspaceUi,
-              sidebar: { ...workspaceUi.sidebar, mode: "full" },
-            })
-          }
-        >
-          恢复侧栏
-        </button>
-      )}
-
-      <main className="relative flex min-w-0 flex-1 flex-col">
-        <div className="tana-topbar relative z-20 flex shrink-0 items-center gap-2 px-3 sm:px-5">
-          <Button
-            aria-label="返回上一页"
-            className="tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
-            isDisabled={(usePluginOption(TanaZoomPlugin, "historyIndex") ?? 0) <= 0}
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            type="button"
-            onPress={() => editor.getTransforms(TanaZoomPlugin).zoom.previous()}
-          >
-            <ChevronLeftIcon className="size-4" />
-          </Button>
-          <Button
-            aria-label="前进到下一页"
-            className="tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
-            isDisabled
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            type="button"
-          >
-            <ChevronRightIcon className="size-4" />
-          </Button>
-          <div className="mx-1 hidden h-5 w-px bg-[var(--tana-divider)] sm:block" />
-          <nav
-            aria-label="路径导航"
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--tana-text-tertiary)] text-xs"
-          >
-            <button
-              className="tana-breadcrumb-label truncate rounded px-1.5 py-1 hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)] disabled:text-[var(--tana-text)]"
-              disabled={!focusedNodeId}
-              type="button"
-              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.root()}
-            >
-              工作区
-            </button>
-            {breadcrumbs.map((node, breadcrumbIndex) => {
-              const isCurrent = breadcrumbIndex === breadcrumbs.length - 1;
-
-              return (
-                <React.Fragment key={node.id}>
-                  <span
-                    aria-hidden="true"
-                    className="tana-breadcrumb-separator text-[var(--tana-text-tertiary)]/60"
-                  >
-                    /
-                  </span>
-                  {isCurrent ? (
-                    <span className="tana-current-location truncate rounded-lg px-2 py-1 font-medium text-[var(--tana-text)]">
-                      {node.text || "未命名节点"}
-                    </span>
-                  ) : (
-                    <button
-                      className="tana-breadcrumb-label truncate rounded px-1.5 py-1 hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-                      type="button"
-                      onClick={() =>
-                        editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
-                      }
-                    >
-                      {node.text || "未命名节点"}
-                    </button>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </nav>
-
-          <div className="ml-2 flex shrink-0 items-center gap-1.5 text-xs">
-            <Button
-              aria-label="打开全局搜索"
-              className="tana-search-pill hidden !h-8 !min-w-0 !justify-start !gap-2 !rounded-lg !px-2.5 text-[var(--tana-text-tertiary)] sm:flex"
-              size="sm"
-              variant="ghost"
-              type="button"
-              onPress={openSearch}
-            >
-              <SearchIcon className="size-3.5" />
-              <span className="text-[11px]">搜索</span>
-              <Kbd className="!h-5 !rounded-md !px-1 !text-[9px]">⌘S</Kbd>
-            </Button>
-            <Button
-              aria-label={fieldPanelOpen ? "关闭配置面板" : "打开配置面板"}
-              className={`tana-topbar-button !h-8 !min-w-8 !rounded-lg !p-0 ${fieldPanelOpen ? 'bg-[var(--tana-selected)] text-[var(--tana-accent)]' : 'text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]'}`}
-              isIconOnly
-              size="sm"
-              variant="ghost"
-              type="button"
-              onPress={() => setFieldPanelOpen((open) => !open)}
-            >
-              <PanelRightIcon className="size-4" />
-            </Button>
-            {persistenceStatus === "saving" && (
-              <span
-                aria-label="正在保存"
-                className="size-1.5 animate-pulse rounded-full bg-[var(--tana-text-tertiary)]"
-                title="正在保存"
-              />
-            )}
-            {persistenceStatus === "error" && (
-              <span className="font-medium text-destructive">保存失败</span>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  aria-label="更多页面操作"
-                  className="tana-topbar-button grid size-8 place-items-center rounded-lg text-[var(--tana-text-secondary)] hover:text-[var(--tana-text)]"
-                  type="button"
-                >
-                  <EllipsisIcon className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-36">
-                <DropdownMenuLabel className="text-[11px] text-[var(--tana-text-tertiary)]">
-                  当前页面
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    const href = new URL(
-                      getTanaEditorHref(focusedNodeId),
-                      window.location.origin,
-                    ).href;
-                    void navigator.clipboard?.writeText(href);
-                  }}
-                >
-                  复制链接
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setFieldPanelOpen(true)}>
-                  <Settings2Icon />
-                  配置…
-                </DropdownMenuItem>
-                {fieldPanelOpen && (
-                  <DropdownMenuItem onSelect={() => setFieldPanelOpen(false)}>
-                    关闭配置
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <Dialog
-            open={searchOpen}
-            onOpenChange={(open) => {
-              setSearchOpen(open);
-              if (!open) setSearch("");
-            }}
-          >
-            <DialogContent
-              onCloseAutoFocus={(event) => {
-                event.preventDefault();
-                focusAfterTanaSearch(editor);
-              }}
-            >
-              <DialogTitle>全局搜索</DialogTitle>
-              <DialogDescription>
-                搜索标题、字段、标签和引用。
-              </DialogDescription>
-              <Command
-                shouldFilter={false}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setSearchOpen(false);
-                    setSearch("");
-                  }
-                }}
-              >
-                <div className="mb-1 flex items-center gap-2 px-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
-                  <SearchIcon className="size-3" />
-                  全局搜索
-                </div>
-                <CommandInput
-                  autoFocus
-                  aria-label="搜索所有节点"
-                  className="h-9 text-sm"
-                  placeholder="搜索所有节点"
-                  value={search}
-                  onValueChange={setSearch}
-                />
-                <CommandList className="mt-2 max-h-80">
-                  {search.trim() ? (
-                    <>
-                      <CommandEmpty>没有匹配的节点</CommandEmpty>
-                      <CommandGroup heading="节点">
-                        {searchResults.map((node) => (
-                          <SearchResult
-                            key={node.id}
-                            index={index}
-                            node={node}
-                            onNavigate={navigateToSearchResult}
-                          />
-                        ))}
-                      </CommandGroup>
-                    </>
-                  ) : (
-                    <p className="px-2.5 py-5 text-center text-[var(--tana-text-tertiary)] text-xs">
-                      输入关键词搜索所有节点
-                    </p>
-                  )}
-                </CommandList>
-                <div className="mt-1 flex items-center justify-between border-t border-[var(--tana-divider)] px-2 pt-2 text-[var(--tana-text-tertiary)] text-[10px]">
-                  <span>↑↓ 选择 · Enter 打开</span>
-                  <span>Esc 关闭</span>
-                </div>
-              </Command>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog
-            open={quickAddOpen}
-            onOpenChange={(open) => {
-              if (!open && captureDraftHasText(quickAddDraftRef.current)) {
-                updateWorkspaceUi({
-                  ...workspaceUi,
-                  quickAddDraft: quickAddDraftRef.current,
-                });
+      <TanaWorkspaceShell
+        focusMode={focusMode}
+        navigationOpen={navigationOpen}
+        onDismissNavigation={() => setNavigationOpen(false)}
+        sidebar={
+          <TanaSidebar
+            activeNodeId={activeNodeId}
+            index={index}
+            onCreateNew={createNew}
+            onQuickAdd={openQuickAdd}
+            onSearch={openSearch}
+            onNavigate={() => setNavigationOpen(false)}
+            onUpdateUi={updateWorkspaceUi}
+            appearance={appearance}
+            onAppearanceChange={changeAppearance}
+          />
+        }
+        toolbar={
+          <TanaWorkspaceToolbar
+            breadcrumbs={breadcrumbs}
+            editor={editor}
+            fieldPanelOpen={fieldPanelOpen && !focusMode}
+            focusedNodeId={focusedNodeId}
+            onCommand={runWorkspaceCommand}
+            persistenceStatus={persistenceStatus}
+            navigationExpanded={navigationExpanded}
+            focusMode={focusMode}
+          />
+        }
+        inspector={fieldPanelOpen && (
+          <div
+            className="tana-inspector-region"
+            style={{ width: inspectorWidth }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !event.defaultPrevented) {
+                event.stopPropagation();
+                closeInspector();
               }
-              setQuickAddOpen(open);
             }}
           >
-            <DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
-              <DialogTitle>Quick Add</DialogTitle>
-              <DialogDescription>
-                添加到 Today；Esc 保留草稿。
-              </DialogDescription>
-              <TanaCaptureComposer
-                key={`quick-add-${quickAddSession}`}
-                ariaLabel="Quick Add 草稿"
-                document={editor.children}
-                index={index}
-                draft={quickAddDraft}
-                onChange={(draft) => {
-                  setQuickAddDraft(draft);
-                  quickAddDraftRef.current = draft;
-                  updateWorkspaceUi({
-                    ...workspaceUi,
-                    quickAddDraft: draft,
-                  });
-                }}
-                onSubmit={() => submitQuickAdd()}
-                onCancel={() => setQuickAddOpen(false)}
-              />
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        <div className="relative flex min-h-0 min-w-0 flex-1">
-          <div className="tana-page-surface flex min-w-0 flex-1">
-            <TanaNodeViewHost
-              focusedNodeId={focusedNodeId}
-              selectedNodeId={selectedNodeId}
+            <TanaPanelResizer
+              aria-label="调整检查器宽度"
+              className="absolute inset-y-0 -left-1 z-20"
+              direction={-1}
+              onResize={resizeInspector}
+            />
+            <TanaInspector
+              activeNodeId={inspectedNodeId ?? selectedNodeId ?? focusedNodeId}
+              initialTab={inspectedNodeId ? 'fields' : undefined}
+              onClose={closeInspector}
             />
           </div>
-          {fieldPanelOpen && (
-            <div
-              className="tana-inspector-surface absolute inset-y-0 right-0 z-30 max-w-full xl:relative xl:shrink-0"
+        )}
+      >
+        <TanaNodeViewHost focusedNodeId={focusedNodeId} selectedNodeId={selectedNodeId} />
+      </TanaWorkspaceShell>
+        <TanaCommandPalette
+          open={commandPaletteOpen}
+          onCommand={runWorkspaceCommand}
+          onOpenChange={setCommandPaletteOpen}
+        />
+
+        <Dialog
+          open={searchOpen}
+          onOpenChange={(open) => {
+            setSearchOpen(open);
+            if (!open) setSearch("");
+          }}
+        >
+          <DialogContent
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              focusAfterTanaSearch(editor);
+            }}
+          >
+            <DialogTitle>全局搜索</DialogTitle>
+            <DialogDescription>搜索标题、字段、标签和引用。</DialogDescription>
+            <Command
+              shouldFilter={false}
               onKeyDown={(event) => {
-                if (event.key === "Escape" && !event.defaultPrevented) {
+                if (event.key === "Escape") {
+                  event.preventDefault();
                   event.stopPropagation();
-                  setFieldPanelOpen(false);
+                  setSearchOpen(false);
+                  setSearch("");
                 }
               }}
             >
-              <TanaInspector
-                activeNodeId={activeNodeId}
-                onClose={() => setFieldPanelOpen(false)}
+              <div className="mb-1 flex items-center gap-2 px-2 text-[var(--tana-text-tertiary)] text-[10px] uppercase tracking-[0.1em]">
+                <SearchIcon className="size-3" />
+                全局搜索
+              </div>
+              <CommandInput
+                autoFocus
+                aria-label="搜索所有节点"
+                className="h-9 text-sm"
+                placeholder="搜索所有节点"
+                value={search}
+                onValueChange={setSearch}
               />
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+              <CommandList className="mt-2 max-h-80">
+                {search.trim() ? (
+                  <>
+                    <CommandEmpty>没有匹配的节点</CommandEmpty>
+                    <CommandGroup heading="节点">
+                      {searchResults.map((node) => (
+                        <SearchResult
+                          key={node.id}
+                          index={index}
+                          node={node}
+                          onNavigate={navigateToSearchResult}
+                        />
+                      ))}
+                    </CommandGroup>
+                  </>
+                ) : (
+                  <p className="px-2.5 py-5 text-center text-[var(--tana-text-tertiary)] text-xs">
+                    输入关键词搜索所有节点
+                  </p>
+                )}
+              </CommandList>
+              <div className="mt-1 flex items-center justify-between border-t border-[var(--tana-divider)] px-2 pt-2 text-[var(--tana-text-tertiary)] text-[10px]">
+                <span>↑↓ 选择 · Enter 打开</span>
+                <span>Esc 关闭</span>
+              </div>
+            </Command>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={quickAddOpen}
+          onOpenChange={(open) => {
+            if (!open && captureDraftHasText(quickAddDraftRef.current)) {
+              updateWorkspaceUi({
+                ...workspaceUi,
+                quickAddDraft: quickAddDraftRef.current,
+              });
+            }
+            setQuickAddOpen(open);
+          }}
+        >
+          <DialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
+            <DialogTitle>Quick Add</DialogTitle>
+            <DialogDescription>添加到 Today；Esc 保留草稿。</DialogDescription>
+            <TanaCaptureComposer
+              key={`quick-add-${quickAddSession}`}
+              ariaLabel="Quick Add 草稿"
+              document={editor.children}
+              index={index}
+              draft={quickAddDraft}
+              onChange={(draft) => {
+                setQuickAddDraft(draft);
+                quickAddDraftRef.current = draft;
+                updateWorkspaceUi({
+                  ...workspaceUi,
+                  quickAddDraft: draft,
+                });
+              }}
+              onSubmit={() => submitQuickAdd()}
+              onCancel={() => setQuickAddOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+
+    </TanaInspectorContext.Provider>
   );
 }

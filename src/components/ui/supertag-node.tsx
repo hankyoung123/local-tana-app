@@ -17,7 +17,7 @@ import {
 } from '@/lib/tana';
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
-import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
+import { useTanaInspector } from '@/components/tana/tana-inspector-context';
 import {
   getNodeDisplayNameFromIndex,
   getSupertagCandidatesFromIndex,
@@ -41,6 +41,7 @@ export function SupertagElement(
   props: PlateElementProps<SupertagElementType>
 ) {
   const { element, editor } = props;
+  const inspectNode = useTanaInspector();
   const index = useTanaIndex();
   const displayName = getNodeDisplayNameFromIndex(index, element.key);
   const target = index.nodesById.get(element.key);
@@ -49,19 +50,21 @@ export function SupertagElement(
   const trashed = !!target && isTanaNodeInTrash(index, target.id);
   const targetLabel = target?.text || (trashed ? '已移至回收站' : '已删除的超级标签');
   const inputPath = editor.api.findPath(element);
-  const hostId = inputPath ? (editor.children[inputPath[0]] as TElement | undefined)?.id : undefined;
+  const host = inputPath ? editor.children[inputPath[0]] : undefined;
+  const hostId = host && inputPath && isTanaNodeElement(host, [inputPath[0]]) ? host.id : undefined;
+  const canInspect = live && !!inspectNode && typeof hostId === 'string' && index.nodesById.has(hostId);
   const canRemove = typeof hostId === 'string' && typeof element.key === 'string';
 
-  const navigateToDefinition = React.useCallback(
+  const openProperties = React.useCallback(
     (event: React.MouseEvent | React.KeyboardEvent) => {
       if ('key' in event && event.key !== 'Enter' && event.key !== ' ') return;
       if (!live) return;
 
       event.preventDefault();
       event.stopPropagation();
-      editor.getTransforms(TanaZoomPlugin).zoom.to(element.key);
+      if (typeof hostId === 'string') inspectNode?.(hostId);
     },
-    [editor, element, live]
+    [hostId, inspectNode, live]
   );
 
   const removeFromHost = React.useCallback((event: React.MouseEvent | React.KeyboardEvent) => {
@@ -83,34 +86,34 @@ export function SupertagElement(
   return (
     <PlateElement
       {...props}
-      className="group inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline font-medium text-emerald-800 text-sm ring-emerald-500/40 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200"
+      className="tana-supertag-token group inline-flex items-center align-baseline"
       attributes={{
         ...props.attributes,
         contentEditable: false,
       }}
     >
-      {live ? (
+      {canInspect ? (
         <button
-          aria-label={`打开超级标签 ${displayName}`}
-          className="rounded-sm px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+          aria-label={`查看 ${displayName} 属性`}
+          className="rounded-sm px-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent)]/60"
           data-plate-prevent-deselect
-          role="link"
           tabIndex={0}
           type="button"
-          onClick={navigateToDefinition}
-          onKeyDown={navigateToDefinition}
+          onClick={openProperties}
+          onKeyDown={openProperties}
+          onMouseDown={(event) => event.preventDefault()}
         >
           #{displayName}
         </button>
       ) : (
-        <span aria-label={trashed ? `超级标签 ${targetLabel}（已移至回收站）` : `超级标签 ${targetLabel}（已删除）`}>
-          #{targetLabel}
+        <span aria-label={live ? undefined : trashed ? `超级标签 ${targetLabel}（已移至回收站）` : `超级标签 ${targetLabel}（已删除）`}>
+          #{live ? displayName : targetLabel}
         </span>
       )}
       {trashed && (
         <button
           aria-label="恢复超级标签定义"
-          className="ml-0.5 rounded-sm p-0.5 text-emerald-700 hover:bg-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+          className="ml-0.5 rounded-sm p-0.5 text-[var(--tana-accent)] hover:bg-[var(--tana-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent)]/60"
           data-plate-prevent-deselect
           title="恢复超级标签定义"
           type="button"
@@ -123,7 +126,7 @@ export function SupertagElement(
       {canRemove && (
         <button
           aria-label={`移除超级标签 ${displayName}`}
-          className="ml-0.5 rounded-sm p-0.5 text-emerald-700 opacity-0 hover:bg-emerald-200 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 group-hover:opacity-100"
+          className="ml-0.5 rounded-sm p-0.5 text-[var(--tana-accent)] opacity-0 hover:bg-[var(--tana-hover)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tana-accent)]/60 group-hover:opacity-100"
           data-plate-prevent-deselect
           title="移除超级标签"
           type="button"
@@ -192,7 +195,7 @@ export function SupertagInputElement(
         showTrigger={false}
         trigger="#"
       >
-        <span className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 align-baseline text-emerald-800 text-sm ring-emerald-500/40 focus-within:ring-2 dark:bg-emerald-950 dark:text-emerald-200">
+        <span className="tana-supertag-token inline-flex items-center align-baseline">
           <HashIcon className="mr-0.5 size-3" />
           <InlineComboboxInput />
         </span>
@@ -206,7 +209,7 @@ export function SupertagInputElement(
                 value={normalizedSearch}
                 onClick={createAndApplySupertag}
               >
-                <PlusIcon className="mr-2 text-emerald-700" />
+                <PlusIcon className="mr-2 text-[var(--tana-accent)]" />
                 <span className={cn('truncate')}>创建 #{normalizedSearch}</span>
               </InlineComboboxItem>
             )}
@@ -216,7 +219,7 @@ export function SupertagInputElement(
                 value={candidate.text}
                 onClick={() => applyCandidate(candidate.id)}
               >
-                <HashIcon className="mr-2 text-emerald-700" />
+                <HashIcon className="mr-2 text-[var(--tana-accent)]" />
                 <span className={cn('truncate')}>{candidate.text}</span>
               </InlineComboboxItem>
             ))}

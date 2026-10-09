@@ -6,14 +6,13 @@ import type {
 } from "./types";
 import { normalizeTanaCaptureDraft } from "./capture";
 
-export const TANA_SIDEBAR_DEFAULT_WIDTH = 224;
+export const TANA_SIDEBAR_DEFAULT_WIDTH = 240;
 export const TANA_SIDEBAR_MIN_WIDTH = 176;
 export const TANA_SIDEBAR_MAX_WIDTH = 420;
 
 export const TANA_SIDEBAR_TOP_ITEMS: readonly TanaSidebarTopItem[] = [
   "today",
   "create-new",
-  "search",
   "quick-add",
   "supertags",
   "recents",
@@ -21,9 +20,6 @@ export const TANA_SIDEBAR_TOP_ITEMS: readonly TanaSidebarTopItem[] = [
 
 export const DEFAULT_TANA_SIDEBAR_TOP_ITEMS: readonly TanaSidebarTopItem[] = [
   "today",
-  "create-new",
-  "search",
-  "quick-add",
   "supertags",
   "recents",
 ];

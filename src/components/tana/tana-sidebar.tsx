@@ -3,24 +3,23 @@
 import {
   CalendarDaysIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
   ChevronUpIcon,
   HashIcon,
   HomeIcon,
+  Layers3Icon,
   PinIcon,
   PlusIcon,
-  SearchIcon,
   Settings2Icon,
   SparklesIcon,
+  SearchIcon,
+  SunMoonIcon,
   Trash2Icon,
 } from "lucide-react";
 import * as React from "react";
-import { Button } from "@heroui/react";
 import { useEditorRef, usePluginOption } from "platejs/react";
 import { TogglePlugin } from "@platejs/toggle/react";
 import { TanaTimePlugin } from "@/components/editor/plugins/tana-time-plugin";
 import { TanaZoomPlugin } from "@/components/editor/plugins/tana-zoom-plugin";
-import { insertTanaChild } from "@/components/editor/plugins/tana-node-identity-plugin";
 import { TanaWorkspacePlugin } from "@/components/editor/plugins/tana-workspace-plugin";
 import {
   getActiveSupertagInstances,
@@ -29,7 +28,6 @@ import {
   runTanaQuery,
   type NodeId,
   type TanaIndex,
-  type TanaSidebarMode,
   type TanaSidebarTopItem,
   type TanaWorkspaceUi,
 } from "@/lib/tana";
@@ -49,47 +47,49 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { StillAppearance } from './use-still-appearance';
 
 type TanaSidebarProps = {
   activeNodeId: NodeId | null;
   index: TanaIndex;
-  onOpenSearch: () => void;
   onQuickAdd: () => void;
   onCreateNew: () => void;
   onUpdateUi: (ui: TanaWorkspaceUi) => void;
-  onModeChange?: (mode: TanaSidebarMode) => void;
+  onSearch: () => void;
+  onNavigate: () => void;
+  appearance: StillAppearance;
+  onAppearanceChange: (appearance: StillAppearance) => void;
 };
 
-export function cycleTanaSidebarMode(mode: TanaSidebarMode): TanaSidebarMode {
-  if (mode === "full") return "mini";
-  if (mode === "mini") return "hidden";
-  return "full";
-}
-
 const labels: Record<TanaSidebarTopItem, string> = {
-  today: "Today",
-  "create-new": "Create New",
-  search: "Search",
-  "quick-add": "Quick Add",
-  supertags: "Supertags",
-  recents: "Recents",
+  today: "今日笔记",
+  "create-new": "新建节点",
+  "quick-add": "快速记录",
+  supertags: "类型",
+  recents: "最近",
 };
 
 export function TanaSidebar({
   activeNodeId,
   index,
-  onOpenSearch,
   onQuickAdd,
   onCreateNew,
   onUpdateUi,
-  onModeChange,
+  onSearch,
+  onNavigate,
+  appearance,
+  onAppearanceChange,
 }: TanaSidebarProps) {
   const editor = useEditorRef();
   const workspaceId = index.systemNodeIds.get("workspace");
   const workspaceUi = normalizeTanaWorkspaceUi(
     workspaceId ? index.nodesById.get(workspaceId)?.workspaceUi : undefined,
   );
-  const mode = workspaceUi.sidebar?.mode ?? "full";
+  // `mini` is a legacy persisted value. It renders as the canonical full
+  // navigation surface so old workspaces never lose their navigation.
+  const sidebarHidden = workspaceUi.sidebar?.mode === "hidden";
   const width = workspaceUi.sidebar?.width ?? TANA_SIDEBAR_DEFAULT_WIDTH;
   const orderedItems = normalizeTanaSidebarTopItems(
     workspaceUi.sidebar?.topItems,
@@ -118,11 +118,15 @@ export function TanaSidebar({
   }, [resizeWidth, width]);
   const updateUi = (patch: Parameters<typeof mergeTanaWorkspaceUi>[1]) =>
     onUpdateUi(mergeTanaWorkspaceUi(workspaceUi, patch));
-  const setMode = (next: TanaSidebarMode) => {
-    updateUi({ sidebar: { mode: next } });
-    onModeChange?.(next);
+  const navigate = (nodeId?: NodeId) => {
+    onNavigate();
+    if (nodeId) editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
+    else editor.getTransforms(TanaZoomPlugin).zoom.root();
   };
-  const cycleMode = () => setMode(cycleTanaSidebarMode(mode));
+  const navigateToday = () => {
+    onNavigate();
+    editor.getTransforms(TanaTimePlugin).time.today();
+  };
   const resizeFromPointer = (clientX: number) => {
     const left = sidebarRef.current?.getBoundingClientRect().left ?? 0;
     const next = clampTanaSidebarWidth(clientX - left);
@@ -157,7 +161,6 @@ export function TanaSidebar({
     resizeListeners.current = null;
   };
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (mode !== "full") return;
     event.preventDefault();
     event.stopPropagation();
     resizing.current = true;
@@ -189,7 +192,7 @@ export function TanaSidebar({
     window.addEventListener("pointercancel", cancel);
   };
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!resizing.current && event.buttons === 1 && mode === "full") {
+    if (!resizing.current && event.buttons === 1) {
       resizing.current = true;
       resizePointerId.current = event.pointerId;
     }
@@ -203,42 +206,14 @@ export function TanaSidebar({
     }
     commitResize(resizeWidthRef.current ?? undefined);
   };
-  if (mode === "hidden") return null;
-  if (mode === "mini")
-    return (
-      <aside
-        aria-label="侧栏"
-        className="tana-sidebar flex h-full w-10 shrink-0 flex-col items-center border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)] pt-3"
-        data-testid="tana-sidebar-mini"
-      >
-        <SidebarIconButton label="隐藏导航" onPress={cycleMode}>
-          <Settings2Icon className="size-4" />
-        </SidebarIconButton>
-        <div className="mt-3 flex flex-col gap-1">
-          <SidebarIconButton
-            label="Today"
-            onPress={() => editor.getTransforms(TanaTimePlugin).time.today()}
-          >
-            <CalendarDaysIcon className="size-4" />
-          </SidebarIconButton>
-          <SidebarIconButton label="Create New" onPress={onCreateNew}>
-            <PlusIcon className="size-4" />
-          </SidebarIconButton>
-          <SidebarIconButton label="Search" onPress={onOpenSearch}>
-            <SearchIcon className="size-4" />
-          </SidebarIconButton>
-          <SidebarIconButton label="Quick Add" onPress={onQuickAdd}>
-            <SparklesIcon className="size-4" />
-          </SidebarIconButton>
-        </div>
-      </aside>
-    );
+  if (sidebarHidden) return null;
   const supertags = Array.from(index.nodesById.values()).filter(
     (node) =>
       isTanaNodeActive(index, node.id) &&
       node.semanticTypes.includes("supertag-definition"),
   );
   const homeNodeId = index.systemNodeIds.get("home");
+  const workspaceNodeId = index.systemNodeIds.get("workspace");
   const trashNodeId = index.systemNodeIds.get("trash");
   const recents = Array.from(index.nodesById.values())
     .filter(
@@ -279,10 +254,10 @@ export function TanaSidebar({
         <SidebarButton
           key={item}
           data-testid="sidebar-today"
-          onClick={() => editor.getTransforms(TanaTimePlugin).time.today()}
+          onClick={navigateToday}
         >
           <CalendarDaysIcon className="size-3.5 text-[var(--tana-accent)]" />
-          Today
+          今日笔记
         </SidebarButton>
       );
     if (item === "create-new")
@@ -293,21 +268,7 @@ export function TanaSidebar({
           onClick={onCreateNew}
         >
           <PlusIcon className="size-3.5 text-[var(--tana-accent)]" />
-          Create New
-        </SidebarButton>
-      );
-    if (item === "search")
-      return (
-        <SidebarButton
-          key={item}
-          data-testid="sidebar-search"
-          onClick={onOpenSearch}
-        >
-          <SearchIcon className="size-3.5 text-[var(--tana-accent)]" />
-          Search
-          <span className="ml-auto text-[var(--tana-text-tertiary)] text-[10px]">
-            ⌘ S
-          </span>
+          新建节点
         </SidebarButton>
       );
     if (item === "quick-add")
@@ -318,7 +279,7 @@ export function TanaSidebar({
           onClick={onQuickAdd}
         >
           <SparklesIcon className="size-3.5 text-[var(--tana-accent)]" />
-          Quick Add
+          快速记录
           <span className="ml-auto text-[var(--tana-text-tertiary)] text-[10px]">
             ⌘ E
           </span>
@@ -326,13 +287,13 @@ export function TanaSidebar({
       );
     if (item === "supertags")
       return (
-        <SidebarSection key={item} title="Supertags">
+        <SidebarSection key={item} title="类型">
           {supertags.map((node) => (
             <SidebarButton
               key={node.id}
               active={activeNodeId === node.id}
               onClick={() =>
-                editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
+                navigate(node.id)
               }
             >
               <HashIcon className="size-3.5 text-[var(--tana-accent)]" />
@@ -345,21 +306,21 @@ export function TanaSidebar({
         </SidebarSection>
       );
     return (
-      <section className="mt-5" key={item}>
+      <section className="tana-sidebar-section" key={item}>
         <button
           aria-expanded={recentsOpen}
-          className="flex w-full items-center justify-between px-2 py-1.5 text-left font-medium text-[11px] text-[var(--tana-text-tertiary)]"
+          className="tana-sidebar-section-title"
           type="button"
           onClick={() => setRecentsOpen((open) => !open)}
         >
-          Recents <span>{recentsOpen ? "−" : "+"}</span>
+          最近 <ChevronDownIcon className={cn("size-3 transition-transform", !recentsOpen && "-rotate-90")} />
         </button>
         {recentsOpen &&
           recents.map((node) => (
             <SidebarButton
               key={node.id}
               onClick={() =>
-                editor.getTransforms(TanaZoomPlugin).zoom.to(node.id)
+                navigate(node.id)
               }
             >
               <span className="size-1.5 rounded-full bg-[var(--tana-text-tertiary)]" />
@@ -369,150 +330,33 @@ export function TanaSidebar({
       </section>
     );
   };
-  const renderWorkspaceTree = (parentId: NodeId, depth = 0): React.ReactNode => {
-    const childIds = index.childrenByParent.get(parentId) ?? [];
-    return childIds.flatMap((childId) => {
-      const child = index.nodesById.get(childId);
-      if (!child || !isTanaNodeActive(index, child.id)) return [];
-      const descendants = index.childrenByParent.get(child.id) ?? [];
-      const expanded = openIds.has(child.id);
-      return [
-        <div key={child.id}>
-          <div className="flex items-center gap-0.5">
-            {descendants.length > 0 ? (
-              <button
-                aria-label={`${expanded ? "收起" : "展开"} ${child.text || "未命名节点"}`}
-                className="grid size-5 shrink-0 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
-                type="button"
-                onClick={() =>
-                  editor
-                    .getApi(TogglePlugin)
-                    .toggle.toggleIds([child.id], !expanded)
-                }
-              >
-                {expanded ? (
-                  <ChevronDownIcon className="size-3" />
-                ) : (
-                  <ChevronRightIcon className="size-3" />
-                )}
-              </button>
-            ) : (
-              <span className="size-5 shrink-0" />
-            )}
-            <SidebarButton
-              className="min-w-0 flex-1"
-              active={activeNodeId === child.id}
-              onClick={() =>
-                editor.getTransforms(TanaZoomPlugin).zoom.to(child.id)
-              }
-            >
-              <span className="truncate">
-                {child.text || "未命名节点"}
-              </span>
-            </SidebarButton>
-          </div>
-          {expanded && (
-            <div className="ml-3" style={{ paddingLeft: depth * 4 }}>
-              {renderWorkspaceTree(child.id, depth + 1)}
-            </div>
-          )}
-        </div>,
-      ];
-    });
-  };
-  const reorderTopItem = (item: TanaSidebarTopItem, direction: -1 | 1) => {
-    const itemIndex = orderedItems.indexOf(item);
-    const nextIndex = itemIndex + direction;
-    if (itemIndex < 0 || nextIndex < 0 || nextIndex >= orderedItems.length) return;
-    const next = [...orderedItems];
-    [next[itemIndex], next[nextIndex]] = [next[nextIndex]!, next[itemIndex]!];
-    updateUi({ sidebar: { topItems: next } });
-  };
-  const hideTopItem = (item: TanaSidebarTopItem) =>
-    updateUi({ sidebar: { topItems: orderedItems.filter((candidate) => candidate !== item) } });
-  const renderTopItemMenu = (item: TanaSidebarTopItem) => (
-    <ContextMenu key={item}>
-      <ContextMenuTrigger asChild>
-        <div data-testid={`sidebar-top-item-${item}`}>{renderTopItem(item)}</div>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={() => hideTopItem(item)}>隐藏</ContextMenuItem>
-        <ContextMenuItem
-          disabled={orderedItems.indexOf(item) === 0}
-          onSelect={() => reorderTopItem(item, -1)}
-        >
-          上移
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={orderedItems.indexOf(item) === orderedItems.length - 1}
-          onSelect={() => reorderTopItem(item, 1)}
-        >
-          下移
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  );
   return (
+    <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
     <aside
+      id="tana-sidebar"
       aria-label="侧栏"
-      className="tana-sidebar relative flex h-full shrink-0 flex-col border-r border-[var(--tana-divider)] bg-[var(--tana-sidebar)]"
+      className="tana-sidebar relative flex h-full shrink-0 flex-col"
       data-testid="tana-sidebar"
       ref={sidebarRef}
       style={{ width: resizeWidth ?? width }}
     >
-      <div className="tana-sidebar-header flex h-14 items-center justify-between border-b border-[var(--tana-divider)]/70 px-4">
-        <span className="flex items-center gap-2 font-medium text-[13px]">
-          <span className="grid size-6 place-items-center rounded-lg bg-[var(--tana-accent)] font-semibold text-[#15161a] text-[10px] shadow-[0_0_0_3px_var(--tana-accent-soft)]">
-            T
-          </span>
-          <span className="tracking-[-0.01em]">Local Tana</span>
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            aria-label="侧栏设置"
-            className="grid size-7 place-items-center rounded-lg text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-            type="button"
-            onClick={() => setSettingsOpen((open) => !open)}
-          >
-            <Settings2Icon className="size-3.5" />
-          </button>
-          <button
-            aria-label="收起导航"
-            className="grid size-7 place-items-center rounded-lg text-[var(--tana-text-tertiary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-            type="button"
-            onClick={cycleMode}
-          >
-            <ChevronDownIcon className="size-3.5" />
-          </button>
-        </div>
+      <div className="tana-sidebar-header flex shrink-0 items-center justify-between" data-tauri-drag-region>
+        <button aria-label="返回个人知识库" className="flex items-center gap-2.5 font-semibold text-[13px]" type="button" onClick={() => navigate()}>
+          <span aria-hidden="true" className="tana-brand-mark grid size-6 place-items-center text-[16px]">∴</span>
+          still
+        </button>
       </div>
-      {settingsOpen && (
-        <div
-          className="absolute right-2 top-11 z-50 w-56 rounded-md border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2 text-xs shadow-xl"
+      <button aria-label="打开全局搜索" className="tana-sidebar-search shrink-0" type="button" onClick={onSearch}>
+        <SearchIcon className="size-3.5" /><span className="flex-1 text-left">搜索知识库</span><kbd className="tana-keycap">⌘ K</kbd>
+      </button>
+        <PopoverContent
+          align="start"
+          side="top"
+          className="w-56 p-2 text-xs"
           data-testid="sidebar-settings"
         >
-          <p className="px-2 py-1 font-medium">侧栏显示</p>
-          <div className="grid grid-cols-3 gap-1 p-1">
-            {(["full", "mini", "hidden"] as const).map((next) => (
-              <button
-                key={next}
-                className={cn(
-                  "rounded px-2 py-1",
-                  mode === next &&
-                    "bg-[var(--tana-selected)] text-[var(--tana-accent)]",
-                )}
-                type="button"
-                onClick={() => {
-                  setMode(next);
-                  setSettingsOpen(false);
-                }}
-              >
-                {next === "full" ? "完整" : next === "mini" ? "迷你" : "隐藏"}
-              </button>
-            ))}
-          </div>
           <button
-            className="mt-1 w-full rounded px-2 py-1 text-left hover:bg-[var(--tana-hover)]"
+            className="w-full rounded px-2 py-1 text-left hover:bg-[var(--tana-hover)]"
             type="button"
             onClick={() =>
               updateUi({
@@ -652,18 +496,19 @@ export function TanaSidebar({
               </div>
             )}
           </div>
-        </div>
-      )}
-      <div className="tana-sidebar-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+        </PopoverContent>
+      <div className="tana-sidebar-scroll min-h-0 flex-1 overflow-y-auto pb-5">
         <nav aria-label="主导航" className="space-y-0.5">
           {visible
             .filter((item) => item !== "supertags" && item !== "recents")
-            .map(renderTopItemMenu)}
+            .map(renderTopItem)}
+          <SidebarButton active={!activeNodeId || activeNodeId === workspaceNodeId} onClick={() => navigate()}><Layers3Icon className="size-3.5" />全部节点</SidebarButton>
+          <SidebarButton active={activeNodeId === homeNodeId} onClick={() => navigate(homeNodeId)}><HomeIcon className="size-3.5" />主页</SidebarButton>
         </nav>
         {visible
           .filter((item) => item === "supertags" || item === "recents")
-          .map(renderTopItemMenu)}
-        <SidebarSection title="Pinned">
+          .map(renderTopItem)}
+        {pinned.length > 0 && <SidebarSection title="固定">
           <div className="space-y-0.5">
             {pinned.map(({ target, results }) => (
               <div key={target.id}>
@@ -671,7 +516,7 @@ export function TanaSidebar({
                   <SidebarButton
                     active={activeNodeId === target.id}
                     onClick={() =>
-                      editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)
+                      navigate(target.id)
                     }
                   >
                     <PinIcon className="size-3.5 text-[var(--tana-accent)]" />
@@ -713,7 +558,7 @@ export function TanaSidebar({
                       className="pl-6"
                       key={`${target.id}:${result.id}`}
                       onClick={() =>
-                        editor.getTransforms(TanaZoomPlugin).zoom.to(result.id)
+                        navigate(result.id)
                       }
                     >
                       <span className="truncate">
@@ -728,7 +573,7 @@ export function TanaSidebar({
                       className="pl-6"
                       key={target.id + ":" + result.id}
                       onClick={() =>
-                        editor.getTransforms(TanaZoomPlugin).zoom.to(result.id)
+                        navigate(result.id)
                       }
                     >
                       <span className="truncate">
@@ -739,70 +584,25 @@ export function TanaSidebar({
               </div>
             ))}
           </div>
+        </SidebarSection>}
+        <SidebarSection title="空间">
+          {trashNodeId && <SidebarButton active={activeNodeId === trashNodeId} onClick={() => navigate(trashNodeId)}><Trash2Icon className="size-3.5" />回收站</SidebarButton>}
         </SidebarSection>
-        <SidebarSection title="Workspace">
-          <div className="flex items-center gap-0.5">
-            {homeNodeId && (index.childrenByParent.get(homeNodeId)?.length ?? 0) > 0 ? (
-              <button
-                aria-label={`${openIds.has(homeNodeId) ? "收起" : "展开"} Home`}
-                className="grid size-5 shrink-0 place-items-center rounded text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
-                type="button"
-                onClick={() =>
-                  editor
-                    .getApi(TogglePlugin)
-                    .toggle.toggleIds([homeNodeId], !openIds.has(homeNodeId))
-                }
-              >
-                {openIds.has(homeNodeId) ? (
-                  <ChevronDownIcon className="size-3" />
-                ) : (
-                  <ChevronRightIcon className="size-3" />
-                )}
-              </button>
-            ) : (
-              <span className="size-5 shrink-0" />
-            )}
-            <SidebarButton
-              className="min-w-0 flex-1"
-              active={activeNodeId === homeNodeId}
-              onClick={(event) => {
-                if (event.altKey) {
-                  editor.getTransforms(TanaTimePlugin).time.today();
-                } else if (homeNodeId) {
-                  editor.getTransforms(TanaZoomPlugin).zoom.to(homeNodeId);
-                } else {
-                  editor.getTransforms(TanaZoomPlugin).zoom.root();
-                }
-              }}
-            >
-              <HomeIcon className="size-3.5" />
-              Home
-            </SidebarButton>
-          </div>
-          {homeNodeId && openIds.has(homeNodeId) && (
-            <div className="mt-0.5">{renderWorkspaceTree(homeNodeId)}</div>
-          )}
-          {trashNodeId && (
-            <SidebarButton
-              active={activeNodeId === trashNodeId}
-              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(trashNodeId)}
-            >
-              <Trash2Icon className="size-3.5 text-[var(--tana-text-tertiary)]" />
-              回收站
-            </SidebarButton>
-          )}
-          <button
-            aria-label="新建 Home 子节点"
-            className="mt-1 flex w-full items-center gap-2 rounded px-2 py-1 text-[10px] text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
-            type="button"
-            onClick={() => {
-              if (homeNodeId) insertTanaChild(editor, homeNodeId);
-            }}
-          >
-            <PlusIcon className="size-3" />
-            新建子节点
-          </button>
-        </SidebarSection>
+      </div>
+      <div className="tana-sidebar-footer">
+        <span className="tana-sidebar-footer-label">个人空间</span>
+        <PopoverTrigger asChild><button aria-label="侧栏设置" className="tana-shell-control" type="button"><Settings2Icon className="size-3.5" /></button></PopoverTrigger>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><button aria-label="切换明暗主题" className="tana-shell-control" type="button"><SunMoonIcon className="size-3.5" /></button></DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top">
+            {(['system', 'light', 'dark'] as const).map((value) => (
+              <DropdownMenuItem key={value} onSelect={() => onAppearanceChange(value)}>
+                {value === 'system' ? '跟随系统' : value === 'light' ? '浅色' : '深色'}
+                {appearance === value && <span className="ml-auto text-xs text-[var(--still-muted)]">当前</span>}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div
         aria-label="调整侧栏宽度"
@@ -817,6 +617,7 @@ export function TanaSidebar({
         }}
       />
     </aside>
+    </Popover>
   );
 }
 function SidebarSection({
@@ -827,8 +628,8 @@ function SidebarSection({
   title: string;
 }) {
   return (
-    <section className="mt-6">
-      <h2 className="px-2 py-1.5 font-medium text-[10px] uppercase tracking-[0.13em] text-[var(--tana-text-tertiary)]">
+    <section className="tana-sidebar-section">
+      <h2 className="tana-sidebar-section-title">
         {title}
       </h2>
       {children}
@@ -839,51 +640,21 @@ function SidebarButton({
   active,
   children,
   className,
-  disabled,
-  onClick,
   ...props
 }: React.ComponentProps<"button"> & { active?: boolean }) {
   return (
-    <Button
-      {...(props as React.ComponentProps<typeof Button>)}
-      isDisabled={disabled}
-      onPress={(event) =>
-        onClick?.(event as unknown as React.MouseEvent<HTMLButtonElement>)
-      }
+    <button
+      aria-current={active ? 'page' : undefined}
       className={cn(
-        "!h-8 !min-w-0 !w-full !justify-start !gap-2 !rounded-lg !px-2 !text-left !text-xs text-[var(--tana-text-secondary)] transition-colors hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]",
+        "tana-sidebar-item flex w-full items-center rounded-lg text-left",
         active &&
-          "bg-[var(--tana-selected)] font-medium text-[var(--tana-accent)] shadow-[inset_2px_0_0_var(--tana-accent)]",
+          "tana-sidebar-item-active",
         className,
       )}
-      size="sm"
-      variant="ghost"
       type="button"
+      {...props}
     >
       {children}
-    </Button>
-  );
-}
-function SidebarIconButton({
-  label,
-  children,
-  onPress,
-}: {
-  label: string;
-  children: React.ReactNode;
-  onPress: () => void;
-}) {
-  return (
-    <Button
-      aria-label={label}
-      className="!h-8 !min-w-8 !rounded-lg !p-0 text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)] hover:text-[var(--tana-text)]"
-      isIconOnly
-      size="sm"
-      variant="ghost"
-      type="button"
-      onPress={onPress}
-    >
-      {children}
-    </Button>
+    </button>
   );
 }

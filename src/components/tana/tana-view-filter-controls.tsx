@@ -109,7 +109,7 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button aria-label="筛选视图" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">
+        <button aria-label="筛选视图" className="tana-view-toolbar-control inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">
           <FilterIcon className="size-3.5" />筛选{clauses.length ? ` (${clauses.length})` : ''}
         </button>
       </DropdownMenuTrigger>

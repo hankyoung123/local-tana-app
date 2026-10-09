@@ -28,21 +28,48 @@ and local persistence.
 
 ```bash
 bun install
-bun run dev
+bun run dev --port 3187
 ```
 
-Open `http://localhost:3000/editor` for the browser preview. SQLite persistence
+Open `http://127.0.0.1:3187/editor` for the browser preview. SQLite persistence
 is enabled in the Tauri desktop app:
 
 ```bash
 bun run tauri:dev
 ```
 
+## STILL UI/UX
+
+The UI/UX design constraints are defined in
+[`docs/plans/2026-10-09-still-ui-ux-spec.md`](docs/plans/2026-10-09-still-ui-ux-spec.md).
+The design references the Codex desktop app, using neutral gray and white,
+low-contrast boundaries, and nested rounded containers. The Plate outliner
+remains the editor boundary; shared design tokens and interaction patterns
+guide the surrounding product UI.
+
+The surrounding framework is composed of `TanaWorkspaceShell` (window and
+panel layout), `TanaWorkspaceToolbar` (shared commands), and the sidebar and
+inspector. `src/styles/still-tokens.css` is the visual contract;
+`src/styles/still-shell.css` supplies its shared containers and controls.
+The default sidebar is 240px, the toolbar 52px, and the document at most 740px.
+Properties dock on wide windows and overlay the document on narrower windows.
+Clicking a Supertag opens its host's properties in place. Inline property
+controls write through the existing Plate Field transforms.
+
+Common shell shortcuts are `⌘ K` (also `⌘ S`) for Search, `⌘ P` for the
+Command Palette, `⌘ E` for Quick Add, `⇧⌘ T` for Today, and `⇧⌘ F` for
+Focus Mode. Appearance can follow the system or use a saved light/dark choice.
+
+Visual comparisons, interaction checks, and the native preview scope are
+recorded in [`design-qa.md`](design-qa.md).
+
 ## Verification
 
 ```bash
 bun test
 bun run typecheck
+bun run lint
+bun run test:ui
 bun run build
 bun run build:tauri
 bun run tauri:check

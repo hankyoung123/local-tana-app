@@ -5,20 +5,23 @@
   "identifier": "app.localtana.desktop",
   "build": {
     "frontendDist": "web/out",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://127.0.0.1:3187",
+    "beforeDevCommand": "bun run dev --port 3187",
     "beforeBuildCommand": "bun run build:tauri"
   },
   "app": {
     "windows": [
       {
-        "title": "Local Tana",
+        "title": "STILL",
         "width": 1280,
         "height": 820,
         "minWidth": 760,
         "minHeight": 520,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 18, "y": 37 },
+        "hiddenTitle": true
       }
     ],
     "security": {

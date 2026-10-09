@@ -1,105 +1,12 @@
-@import "@heroui/styles";
+@import "tailwindcss";
+@import "../styles/still-tokens.css";
+@import "../styles/still-shell.css";
+
+/* The browser and Tauri entry points share components outside web/app. */
+@source "../";
 
 @plugin "tailwind-scrollbar-hide";
-
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  --radius: 0.375rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.17 0.01 150);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.17 0.01 150);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.01 150);
-  --primary: oklch(0.44 0.1 158);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0.004 150);
-  --secondary-foreground: oklch(0.25 0.01 150);
-  --muted: oklch(0.97 0.004 150);
-  --muted-foreground: oklch(0.52 0.015 150);
-  --accent: oklch(0.95 0.012 150);
-  --accent-foreground: oklch(0.25 0.01 150);
-  --destructive: oklch(0.58 0.23 28);
-  --border: oklch(0.91 0.006 150);
-  --input: oklch(0.91 0.006 150);
-  --ring: oklch(0.55 0.09 158);
-  --highlight: oklch(0.88 0.16 92);
-  --brand: oklch(0.44 0.1 158);
-
-  /* Tana presentation hierarchy. Document semantics never depend on these. */
-  --tana-canvas: #ffffff;
-  --tana-sidebar: #fafbfa;
-  --tana-text: #202421;
-  --tana-text-secondary: #5f6862;
-  --tana-text-tertiary: #8b938d;
-  --tana-hover: #f1f5f2;
-  --tana-selected: #e7f0e9;
-  --tana-divider: #e6ebe8;
-  --tana-accent: #2d6a4f;
-  --tana-accent-soft: #eaf2ed;
-  --tana-link: #327356;
-  --tana-node-bullet: #66776d;
-  --tana-reference: #779083;
-}
-
-.dark {
-  --background: oklch(0.16 0.008 150);
-  --foreground: oklch(0.97 0.004 150);
-  --card: oklch(0.2 0.008 150);
-  --card-foreground: oklch(0.97 0.004 150);
-  --popover: oklch(0.2 0.008 150);
-  --popover-foreground: oklch(0.97 0.004 150);
-  --primary: oklch(0.7 0.12 158);
-  --primary-foreground: oklch(0.17 0.01 150);
-  --secondary: oklch(0.27 0.01 150);
-  --secondary-foreground: oklch(0.97 0.004 150);
-  --muted: oklch(0.27 0.01 150);
-  --muted-foreground: oklch(0.7 0.015 150);
-  --accent: oklch(0.3 0.02 150);
-  --accent-foreground: oklch(0.97 0.004 150);
-  --destructive: oklch(0.7 0.19 24);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.62 0.1 158);
-  --highlight: oklch(0.78 0.15 92);
-  --brand: oklch(0.7 0.12 158);
-  --tana-canvas: #111315;
-  --tana-sidebar: #17191c;
-  --tana-text: #f1f2f4;
-  --tana-text-secondary: #b4b8c0;
-  --tana-text-tertiary: #777d87;
-  --tana-hover: #22252a;
-  --tana-selected: #292d3a;
-  --tana-divider: #2b2e34;
-  --tana-accent: #a9b2ff;
-  --tana-accent-soft: #272b3c;
-  --tana-link: #bbc2ff;
-  --tana-node-bullet: #b9bec8;
-  --tana-reference: #b3baff;
-
-  /* HeroUI v3 theme tokens match the Plate canvas and local panels. */
-  --background: #111315;
-  --foreground: #f1f2f4;
-  --surface: #1a1c20;
-  --surface-secondary: #202329;
-  --surface-tertiary: #282b32;
-  --surface-foreground: #f1f2f4;
-  --overlay: #23262c;
-  --overlay-foreground: #f1f2f4;
-  --default: #292c33;
-  --default-foreground: #e5e7ec;
-  --accent: #a9b2ff;
-  --accent-foreground: #171a2b;
-  --muted: #9197a3;
-  --separator: #2b2e34;
-  --border: #343841;
-  --focus: #a9b2ff;
-  --field-background: #252830;
-  --field-foreground: #f1f2f4;
-  --field-placeholder: #888e99;
-  --radius: 0.625rem;
-}
+@custom-variant dark (&:is(.dark *, [data-appearance="dark"] *));
 
 @theme inline {
   --color-background: var(--background);
@@ -122,8 +29,8 @@
   --color-ring: var(--ring);
   --color-highlight: var(--highlight);
   --color-brand: var(--brand);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--tana-font-sans);
+  --font-mono: var(--tana-font-mono);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
@@ -135,167 +42,29 @@
     @apply border-border outline-ring/50;
   }
 
+  html,
+  body {
+    min-height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-geist-sans), sans-serif;
-    letter-spacing: 0;
-    background: var(--tana-canvas);
-  }
-}
-
-/* Graphite workspace chrome. The editor keeps Plate in charge while these
- * layers give navigation, focus and panels a quiet, physical surface. */
-.tana-workspace-shell {
-  position: relative;
-  isolation: isolate;
-  background:
-    radial-gradient(circle at 66% -18%, color-mix(in srgb, var(--tana-accent) 11%, transparent), transparent 34%),
-    radial-gradient(circle at 4% 100%, color-mix(in srgb, #44518d 7%, transparent), transparent 32%),
-    var(--tana-canvas);
-}
-
-.tana-topbar {
-  min-height: 3.5rem;
-  background: linear-gradient(180deg, rgb(31 33 38 / 86%), rgb(20 22 25 / 78%));
-  border-bottom: 1px solid rgb(255 255 255 / 7%);
-  backdrop-filter: blur(22px) saturate(135%);
-  box-shadow: 0 10px 35px rgb(0 0 0 / 14%);
-}
-
-.tana-topbar-button {
-  border: 1px solid transparent;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
-}
-
-.tana-topbar-button:hover {
-  border-color: var(--tana-divider);
-  background: var(--tana-hover);
-}
-
-.tana-topbar-button:active {
-  transform: translateY(1px);
-}
-
-.tana-search-pill {
-  border: 1px solid var(--tana-divider);
-  background: color-mix(in srgb, var(--tana-sidebar) 76%, transparent);
-  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
-}
-
-.tana-search-pill:hover,
-.tana-search-pill:focus-visible {
-  border-color: color-mix(in srgb, var(--tana-accent) 55%, var(--tana-divider));
-  background: var(--tana-hover);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tana-accent) 12%, transparent);
-}
-
-.tana-page-surface {
-  position: relative;
-  isolation: isolate;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--tana-canvas) 94%, #ffffff 6%), var(--tana-canvas));
-}
-
-.tana-page-surface::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse at 18% 5%, color-mix(in srgb, var(--tana-accent) 8%, transparent), transparent 36%),
-    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, #313a70 6%, transparent), transparent 36%);
-  content: '';
-  pointer-events: none;
-}
-
-.tana-inspector-surface {
-  background: linear-gradient(180deg, rgb(30 32 37 / 94%), rgb(21 23 26 / 95%));
-  backdrop-filter: blur(28px) saturate(135%);
-  box-shadow: -24px 0 55px rgb(0 0 0 / 28%);
-}
-
-.tana-sidebar {
-  background: linear-gradient(180deg, rgb(26 28 33 / 96%), rgb(19 21 24 / 96%));
-  backdrop-filter: blur(26px) saturate(130%);
-  box-shadow: 16px 0 38px rgb(0 0 0 / 12%);
-}
-
-.tana-sidebar-header {
-  background: linear-gradient(180deg, rgb(255 255 255 / 4%), transparent);
-}
-
-.tana-sidebar-scroll {
-  scrollbar-gutter: stable;
-}
-
-.tana-current-location {
-  background: rgb(255 255 255 / 6%);
-  border: 1px solid rgb(255 255 255 / 7%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
-}
-
-.tana-inspector-row {
-  border: 1px solid transparent;
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
-}
-
-.tana-inspector-row:hover {
-  border-color: color-mix(in srgb, var(--tana-divider) 80%, transparent);
-}
-
-.tana-inspector section {
-  border-color: color-mix(in srgb, var(--tana-divider) 84%, transparent);
-}
-
-.tana-inspector [role='tab'] {
-  color: var(--tana-text-tertiary) !important;
-  font-weight: 500;
-}
-
-.tana-inspector [role='tab']:hover {
-  color: var(--tana-text-secondary) !important;
-}
-
-.tana-inspector [role='tab'][aria-selected='true'] {
-  color: var(--tana-text) !important;
-  background: transparent !important;
-}
-
-.tana-inspector [role='tab']::after {
-  background: var(--tana-accent) !important;
-}
-
-@media (max-width: 900px) {
-  .tana-topbar .tana-breadcrumb-label {
-    display: none;
+    font-family: var(--tana-font-sans);
+    font-size: 13px;
+    letter-spacing: -0.005em;
+    text-rendering: optimizeLegibility;
   }
 
-  .tana-topbar .tana-breadcrumb-separator {
-    display: none;
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
   }
-}
 
-.tana-sidebar,
-.tana-inspector {
-  scrollbar-color: color-mix(in srgb, var(--tana-text-tertiary) 35%, transparent) transparent;
-  scrollbar-width: thin;
-}
-
-.tana-sidebar::-webkit-scrollbar,
-.tana-inspector::-webkit-scrollbar {
-  width: 8px;
-}
-
-.tana-sidebar::-webkit-scrollbar-track,
-.tana-inspector::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tana-sidebar::-webkit-scrollbar-thumb,
-.tana-inspector::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
-  background-color: color-mix(in srgb, var(--tana-text-tertiary) 28%, transparent);
+  ::selection {
+    background: color-mix(in srgb, var(--tana-accent) 24%, transparent);
+  }
 }
 
 /* Node spacing belongs to the outer wrapper; the element owns its own line box. */
@@ -318,19 +87,6 @@
   height: 1lh;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-}
-
-/* The focused Plate Node is the page title; no duplicated heading is rendered. */
-.tana-focusedNode > .slate-blockWrapper > [data-slate-node='element'] {
-  color: var(--tana-text);
-  font-size: 1.625rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.35;
-}
-
-.tana-focusedNode .tana-nodeGutter {
-  color: var(--tana-text-tertiary);
 }
 
 .tana-nodeFields [data-radix-select-trigger] svg {
@@ -409,7 +165,7 @@
 .tana-bodyAffordance:focus-visible {
   color: var(--tana-text-secondary);
   background: color-mix(in srgb, var(--tana-hover) 86%, transparent);
-  box-shadow: inset 0 0 0 1px var(--tana-divider);
+  box-shadow: none;
 }
 
 .tana-bodyAffordanceBullet {
@@ -426,29 +182,4 @@
 
 .tana-bodyAffordanceLabel {
   opacity: 0.8;
-}
-
-.tana-inspector {
-  animation: tanaInspectorEnter 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes tanaInspectorEnter {
-  from {
-    opacity: 0;
-    transform: translateX(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tana-bodyAffordance,
-  .tana-bodyAffordanceBullet,
-  .tana-inspector {
-    animation: none;
-    transition: none;
-  }
 }

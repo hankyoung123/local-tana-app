@@ -51,7 +51,7 @@ export function TanaViewSortControls({ index, results, view }: { index: TanaInde
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button aria-label="排序视图结果" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">
+        <button aria-label="排序视图结果" className="tana-view-toolbar-control inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs hover:bg-[var(--tana-hover)]" type="button">
           <ArrowDownAZIcon className="size-3.5" />排序{criteria.length ? ` (${criteria.length})` : ''}
         </button>
       </DropdownMenuTrigger>

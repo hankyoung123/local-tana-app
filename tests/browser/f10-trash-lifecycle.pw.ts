@@ -52,7 +52,7 @@ test('Delete → Trash → Restore keeps the canonical title', async ({ page }) 
   await expect(page.getByRole('heading', { name: '废纸篓' })).toBeVisible();
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '恢复', exact: true }).click();
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: '主页', exact: true }).click();
   await expect(page.locator('[data-slate-editor]').getByText(title, { exact: true })).toBeVisible();
 });
 
@@ -118,7 +118,7 @@ test('Deleting the focused Node page returns to Workspace', async ({ page }) => 
   await page.locator('[data-slate-editor]').getByText(title, { exact: true }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('menuitem', { name: '删除节点', exact: true }).click();
-  await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('工作区');
+  await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('个人知识库');
   await expect(page).toHaveURL(/\/editor$/);
 });
 
@@ -149,7 +149,7 @@ test('Hard delete preserves inline References to the trashed target', async ({ p
   await page.getByRole('button', { name: '删除节点及引用…', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '删除块引用', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: '主页', exact: true }).click();
   await expect(inlineReference).toHaveCount(1);
   await expect(inlineReference).toHaveAttribute('data-reference-status', 'trashed');
 });
@@ -167,6 +167,6 @@ test('Hard delete removes block References while retaining the target identity i
   await page.getByRole('button', { name: '删除节点及引用…', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '删除块引用', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole('button', { name: '主页', exact: true }).click();
   await expect(page.getByRole('button', { name: '打开 Plate 文档是唯一真相源。' })).toHaveCount(0);
 });

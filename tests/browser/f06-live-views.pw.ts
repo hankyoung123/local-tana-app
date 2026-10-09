@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 /** Opens the real persisted Search + View sample through the user-facing dialog. */
 async function openProjectsView(page: Page) {
   await page.goto('/editor');
-  await page.getByRole('button', { name: /Search/ }).click();
+  await page.getByRole('button', { name: '打开全局搜索' }).click();
   const input = page.getByRole('combobox', { name: '搜索所有节点' });
   await expect(input).toBeFocused();
   await input.fill('全部项目');

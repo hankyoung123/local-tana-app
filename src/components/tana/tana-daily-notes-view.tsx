@@ -115,10 +115,10 @@ export function TanaDailyNotesView({
   };
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-white">
-      <header className="shrink-0 border-b px-6 py-5 sm:px-10">
-        <p className="mb-1 text-muted-foreground text-xs">每日笔记</p>
-        <h1 className="font-semibold text-2xl">{resolveTanaNodeTitle(index, node.id)}</h1>
+    <section className="tana-view-surface flex min-w-0 flex-1 flex-col">
+      <header className="tana-view-toolbar shrink-0">
+        <p className="tana-page-eyebrow">每日笔记</p>
+        <h1 className="tana-page-title">{resolveTanaNodeTitle(index, node.id)}</h1>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button
             aria-label="前一天"
@@ -142,7 +142,7 @@ export function TanaDailyNotesView({
           >
             <ArrowRightIcon />
           </Button>
-          <label className="ml-1 flex h-8 items-center rounded border bg-white px-2">
+          <label className="tana-control-field ml-1 flex items-center px-2">
             <span className="sr-only">前往指定日期</span>
             <input
               aria-label="前往指定日期"
@@ -170,7 +170,7 @@ export function TanaDailyNotesView({
           >
             本周
           </Button>
-          <label className="flex h-8 items-center rounded border bg-white px-2">
+          <label className="tana-control-field flex items-center px-2">
             <span className="sr-only">前往指定周</span>
             <input
               aria-label="前往指定周"
@@ -196,7 +196,7 @@ export function TanaDailyNotesView({
           >
             本月
           </Button>
-          <label className="flex h-8 items-center rounded border bg-white px-2">
+          <label className="tana-control-field flex items-center px-2">
             <span className="sr-only">前往指定月份</span>
             <input
               aria-label="前往指定月份"
@@ -222,7 +222,7 @@ export function TanaDailyNotesView({
           >
             今年
           </Button>
-          <label className="flex h-8 items-center rounded border bg-white px-2">
+          <label className="tana-control-field flex items-center px-2">
             <span className="sr-only">前往指定年份</span>
             <input
               aria-label="前往指定年份"
@@ -244,9 +244,9 @@ export function TanaDailyNotesView({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10">
+      <div className="tana-view-content min-h-0 flex-1 overflow-y-auto">
         {groups.length === 0 ? (
-          <div className="grid min-h-48 place-items-center rounded-lg border border-dashed text-center">
+          <div className="tana-empty-state">
             <div>
               <CalendarDaysIcon className="mx-auto mb-2 size-5 text-muted-foreground" />
               <p className="font-medium text-sm">尚未创建每日笔记</p>
@@ -258,7 +258,7 @@ export function TanaDailyNotesView({
             {groups.map((group) => (
               <section key={group.label}>
                 <h2 className="mb-2 font-medium text-muted-foreground text-xs">{group.label}</h2>
-                <div className="mx-auto max-w-3xl divide-y rounded-lg border">
+                <div className="tana-view-card mx-auto max-w-3xl divide-y">
                   {group.nodes.map((dayNode) => (
                     <button
                       key={dayNode.id}

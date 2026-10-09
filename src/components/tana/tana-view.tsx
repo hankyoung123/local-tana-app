@@ -20,7 +20,7 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
   const viewType = view.viewDefinition?.type ?? "outline";
 
   return (
-    <section className="flex min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-[var(--tana-canvas)]">
+    <section className="tana-view-surface flex min-w-0 max-w-full flex-1 flex-col overflow-hidden">
       <TanaViewToolbar
         controls={
           viewType === "table" ? <><TanaViewSortControls index={index} results={source.nodes} view={view} /><TanaTableToolbarControls index={index} results={results} view={view} /></> :
@@ -32,13 +32,13 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
         results={source.nodes}
         view={view}
       />
-      <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-6 py-5 sm:px-10">
-        {results.length === 0 && viewType !== "table" ? <p className="py-8 text-[var(--tana-text-tertiary)] text-sm">暂无匹配节点</p> :
+      <div className="tana-view-content min-h-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto">
+        {results.length === 0 && viewType !== "table" ? <div className="tana-empty-state text-sm">暂无匹配节点</div> :
           viewType === "table" ? <TanaTableView index={index} projection={projection} results={results} view={view} /> :
           viewType === "calendar" ? <TanaCalendarView index={index} projection={projection} results={results} view={view} /> :
           viewType === "cards" ? <TanaCardsView index={index} projection={projection} results={results} view={view} /> :
           viewType === "list" || viewType === "tabs" || viewType === "side-menu" ? <TanaNavigationView index={index} projection={projection} type={viewType} /> :
-          <div className="mx-auto max-w-3xl space-y-3">
+          <div className="mx-auto max-w-4xl space-y-3">
             {projection.groups.map((group) => (
               <section key={group.key}>
                 {view.viewDefinition?.groupFieldId && <h2 className="px-1 py-1 text-xs font-medium text-[var(--tana-text-tertiary)]">{group.label} · {group.items.length}</h2>}

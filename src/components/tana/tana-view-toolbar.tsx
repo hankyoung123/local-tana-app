@@ -50,9 +50,9 @@ export function TanaViewToolbar({
 
   if (!visible) {
     return (
-      <header className="shrink-0 px-6 pt-3 sm:px-10">
+      <header className="tana-view-toolbar shrink-0">
         <button
-          className="rounded px-2 py-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+          className="tana-view-toolbar-control rounded-lg px-2 py-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
           type="button"
           onClick={() => editor.getTransforms(TanaViewPlugin).view.update(view.id, { toolbarVisible: true })}
         >
@@ -63,9 +63,9 @@ export function TanaViewToolbar({
   }
 
   return (
-    <header className="min-w-0 max-w-full shrink-0 px-6 pt-8 sm:px-10">
-      <div className="min-w-0">
-        <h1 className="flex min-h-7 items-center gap-2 truncate font-medium text-[19px] tracking-[-0.015em]">
+    <header className="tana-view-toolbar min-w-0 max-w-full shrink-0">
+      <div className="tana-view-header min-w-0">
+        <h1 className="flex min-h-7 items-center gap-2 truncate font-medium tracking-[-0.015em]">
           <span className="text-[var(--tana-node-bullet)]">
             <TanaNodeBullet semanticType="view" />
           </span>
@@ -73,7 +73,7 @@ export function TanaViewToolbar({
         </h1>
       </div>
 
-      <div className="mt-3 flex min-w-0 max-w-full flex-wrap items-center gap-1 border-b border-[var(--tana-divider)] pb-2">
+      <div className="tana-view-toolbar-controls mt-3 flex min-w-0 max-w-full flex-wrap items-center gap-1 border-b border-[var(--tana-divider)] pb-2">
         <Select
           value={type}
           onValueChange={(nextType) =>
@@ -82,7 +82,7 @@ export function TanaViewToolbar({
               .view.setType(view.id, nextType as TanaViewDefinition['type'])
           }
         >
-          <SelectTrigger aria-label="选择视图展示方式" className="h-7 w-24 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-[var(--tana-hover)]">
+          <SelectTrigger aria-label="选择视图展示方式" className="tana-view-toolbar-control h-8 w-24 border-0 bg-transparent px-2 text-xs shadow-none">
             <LayoutPanelTopIcon className="size-3.5" />
             <SelectValue />
           </SelectTrigger>
@@ -96,9 +96,9 @@ export function TanaViewToolbar({
         </Select>
         <TanaViewFilterControls index={index} results={results} view={view} />
         {controls && <div className="ml-1 flex min-w-0 max-w-full flex-wrap items-center gap-1">{controls}</div>}
-        <button
-          aria-label="隐藏工具栏"
-          className="ml-auto rounded px-2 py-1 text-xs text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]"
+          <button
+            aria-label="隐藏工具栏"
+            className="tana-view-toolbar-control ml-auto rounded px-2 py-1 text-xs text-[var(--tana-text-tertiary)]"
           type="button"
           onClick={() => editor.getTransforms(TanaViewPlugin).view.update(view.id, { toolbarVisible: false })}
         >

@@ -81,7 +81,7 @@ export function TanaCaptureComposer({
     latestDraft.current = draft;
   }, [draft]);
 
-  React.useLayoutEffect(() => {
+  React.useEffect(() => {
     const end = editor.api.end([0]);
     if (end) editor.tf.select({ anchor: end, focus: end });
     editor.tf.focus();
@@ -171,7 +171,6 @@ export function TanaCaptureComposer({
         <EditorContainer variant="select" className="max-h-48 min-h-16">
           <Editor
             aria-label={ariaLabel}
-            autoFocus
             className="capture-editor min-h-16 px-3 py-2 text-sm"
             disabled={pending}
             variant="none"

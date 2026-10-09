@@ -404,6 +404,33 @@ function zoomPrevious(editor: PlateEditor): boolean {
     : zoomRootAtHistory(editor, nextIndex);
 }
 
+function zoomNext(editor: PlateEditor): boolean {
+  const history = getHistory(editor);
+  const historyIndex = getHistoryIndex(editor);
+
+  if (historyIndex >= history.length - 1) return false;
+
+  if (typeof window !== 'undefined') {
+    const browserState = readBrowserState(window.history.state, getFocusedNodeId(editor));
+
+    if (
+      browserState?.tanaHistoryIndex === historyIndex &&
+      browserState.tanaHistory.length === history.length &&
+      browserState.tanaHistory.every((entry, index) => entry === history[index])
+    ) {
+      window.history.forward();
+      return true;
+    }
+  }
+
+  const nextIndex = historyIndex + 1;
+  const target = history[nextIndex] ?? null;
+
+  if (target === null) return zoomRootAtHistory(editor, nextIndex);
+
+  return zoomTo(editor, target, { historyIndex: nextIndex, record: false, urlMode: 'replace' });
+}
+
 function zoomRootAtHistory(editor: PlateEditor, historyIndex: number): boolean {
   const history = getHistory(editor);
   setNavigationState(editor, null, history, historyIndex, 'replace');
@@ -489,6 +516,7 @@ export const TanaZoomPlugin = createPlatePlugin<
       insertBodyChild: () => insertZoomBodyChild(editor),
       out: () => zoomOut(editor),
       previous: () => zoomPrevious(editor),
+      next: () => zoomNext(editor),
       root: () => zoomRoot(editor),
       to: (nodeId: NodeId) => zoomTo(editor, nodeId),
     },

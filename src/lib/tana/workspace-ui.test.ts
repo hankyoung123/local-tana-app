@@ -20,7 +20,7 @@ describe('workspace UI metadata', () => {
       quickAddDraft: 'draft',
     });
     assert.equal(ui.sidebar?.mode, 'mini');
-    assert.deepEqual(ui.sidebar?.topItems, ['search', 'today']);
+    assert.deepEqual(ui.sidebar?.topItems, ['today']);
     assert.deepEqual(ui.sidebar?.pinnedNodeIds, ['node-a', 'missing']);
     assert.deepEqual(ui.quickAddDraft, { content: [{ text: 'draft' }] });
     assert.equal('children' in ui, false);

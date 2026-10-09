@@ -1,0 +1,129 @@
+/* STILL is the single visual contract. Existing Tana names are aliases. */
+:root {
+  color-scheme: light;
+  --still-desktop: #e6e7e8;
+  --still-shell: #f1f1f2;
+  --still-canvas: #ffffff;
+  --still-surface: #fbfbfc;
+  --still-text: #262629;
+  --still-text-secondary: #4c4c50;
+  --still-muted: #84848a;
+  --still-faint: #a7a7ae;
+  --still-border: #ededee;
+  --still-boundary: #e4e4e6;
+  --still-hover: #e9e9eb;
+  --still-selected: #e6e6e8;
+  --still-accent: #5d6e87;
+  --still-accent-soft: #f3f3f5;
+  --still-error: #b64c4c;
+  --still-error-surface: #fbefef;
+  --still-warning-surface: #f5f0e6;
+  --still-overlay-shadow: 0 12px 40px rgb(29 29 33 / 0.12);
+  --still-window-shadow: 0 20px 65px rgb(29 29 33 / 0.12), 0 4px 17px rgb(29 29 33 / 0.04);
+  --still-window-inset: 13px;
+  --still-sidebar-width: 240px;
+  --still-toolbar-height: 52px;
+  --still-document-width: 740px;
+  --still-window-radius: 17px;
+  --still-work-radius: 13px;
+  --still-control-radius: 8px;
+  --still-tag-radius: 5px;
+  --still-panel-gap: 8px;
+  --still-duration-fast: 140ms;
+  --still-duration: 180ms;
+  --still-duration-panel: 220ms;
+  --still-ease: cubic-bezier(0.2, 0, 0, 1);
+  --still-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  --still-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --radius: var(--still-control-radius);
+  --background: var(--still-desktop);
+  --foreground: var(--still-text);
+  --card: var(--still-canvas);
+  --card-foreground: var(--still-text);
+  --popover: var(--still-canvas);
+  --popover-foreground: var(--still-text);
+  --primary: var(--still-text);
+  --primary-foreground: var(--still-canvas);
+  --secondary: var(--still-hover);
+  --secondary-foreground: var(--still-text-secondary);
+  --muted: var(--still-surface);
+  --muted-foreground: var(--still-muted);
+  --accent: var(--still-hover);
+  --accent-foreground: var(--still-text);
+  --destructive: var(--still-error);
+  --border: var(--still-boundary);
+  --input: var(--still-boundary);
+  --ring: var(--still-accent);
+  --highlight: var(--still-warning-surface);
+  --brand: var(--still-accent);
+  --tana-canvas: var(--still-canvas);
+  --tana-sidebar: var(--still-shell);
+  --tana-surface: var(--still-surface);
+  --tana-surface-raised: var(--still-surface);
+  --tana-surface-overlay: var(--still-canvas);
+  --tana-text: var(--still-text);
+  --tana-text-secondary: var(--still-text-secondary);
+  --tana-text-tertiary: var(--still-muted);
+  --tana-hover: var(--still-hover);
+  --tana-selected: var(--still-selected);
+  --tana-divider: var(--still-border);
+  --tana-accent: var(--still-accent);
+  --tana-accent-soft: var(--still-accent-soft);
+  --tana-link: var(--still-accent);
+  --tana-node-bullet: var(--still-faint);
+  --tana-reference: var(--still-muted);
+  --tana-error-surface: var(--still-error-surface);
+  --tana-warning-surface: var(--still-warning-surface);
+  --tana-shadow: var(--still-overlay-shadow);
+  --tana-font-sans: var(--still-font);
+  --tana-font-mono: var(--still-font-mono);
+}
+
+:root[data-appearance="dark"], :root.dark {
+  color-scheme: dark;
+  --still-desktop: #151517;
+  --still-shell: #232326;
+  --still-canvas: #1c1c1e;
+  --still-surface: #202023;
+  --still-text: #eaeaec;
+  --still-text-secondary: #bfc0c3;
+  --still-muted: #99999e;
+  --still-faint: #77777b;
+  --still-border: #2d2d31;
+  --still-boundary: #3c3c40;
+  --still-hover: #303034;
+  --still-selected: #37373b;
+  --still-accent: #a8b7cc;
+  --still-accent-soft: #292d33;
+  --still-error: #e58b8b;
+  --still-error-surface: #352528;
+  --still-warning-surface: #332e26;
+  --still-overlay-shadow: 0 12px 40px rgb(0 0 0 / 0.28);
+  --still-window-shadow: 0 24px 70px rgb(0 0 0 / 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-appearance="light"]):not(.light) {
+    color-scheme: dark;
+    --still-desktop: #151517;
+    --still-shell: #232326;
+    --still-canvas: #1c1c1e;
+    --still-surface: #202023;
+    --still-text: #eaeaec;
+    --still-text-secondary: #bfc0c3;
+    --still-muted: #99999e;
+    --still-faint: #77777b;
+    --still-border: #2d2d31;
+    --still-boundary: #3c3c40;
+    --still-hover: #303034;
+    --still-selected: #37373b;
+    --still-accent: #a8b7cc;
+    --still-accent-soft: #292d33;
+    --still-error: #e58b8b;
+    --still-error-surface: #352528;
+    --still-warning-surface: #332e26;
+    --still-overlay-shadow: 0 12px 40px rgb(0 0 0 / 0.28);
+    --still-window-shadow: 0 24px 70px rgb(0 0 0 / 0.3);
+  }
+}

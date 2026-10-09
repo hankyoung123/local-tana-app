@@ -12,7 +12,6 @@ import { CursorOverlayKit } from '@/components/editor/plugins/cursor-overlay-kit
 import { DndKit } from '@/components/editor/plugins/dnd-kit';
 import { ExitBreakKit } from '@/components/editor/plugins/exit-break-kit';
 import { FieldKit } from '@/components/editor/plugins/field-kit';
-import { FloatingToolbarKit } from '@/components/editor/plugins/floating-toolbar-kit';
 import { IndentKit } from '@/components/editor/plugins/indent-kit';
 import { LinkKit } from '@/components/editor/plugins/link-kit';
 import { ListKit } from '@/components/editor/plugins/list-kit';
@@ -76,7 +75,6 @@ export const EditorKit = [
 
   // UI
   ...BlockPlaceholderKit,
-  ...FloatingToolbarKit,
 ];
 
 export type MyEditor = TPlateEditor<Value, (typeof EditorKit)[number]>;

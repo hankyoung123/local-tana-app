@@ -383,7 +383,7 @@ function FieldCell({
 
 function FieldWarning({ id, label }: { id: string; label: string }) {
   return label ? (
-    <span className="text-[10px] text-amber-700 dark:text-amber-300" id={id} role="status">
+    <span className="tana-validation-warning rounded px-1 text-[10px]" id={id} role="status">
       需修正：{label}
     </span>
   ) : null;

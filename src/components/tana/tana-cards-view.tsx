@@ -89,7 +89,7 @@ export function TanaCardsView({
               <article
                 draggable={Boolean(groupFieldId)}
                 key={occurrence.id}
-                className="tana-projectionCard min-w-0 overflow-hidden rounded-md border border-[var(--tana-divider)] bg-[var(--tana-canvas)] transition-colors hover:bg-[var(--tana-hover)] focus-within:ring-2 focus-within:ring-[var(--tana-accent)]"
+                className="tana-projectionCard tana-view-card min-w-0 transition-colors hover:bg-[var(--tana-hover)] focus-within:ring-2 focus-within:ring-[var(--tana-accent)]"
                 onDragStart={(event) =>
                   event.dataTransfer.setData('application/x-tana-node-id', occurrence.id)
                 }

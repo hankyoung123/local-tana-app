@@ -72,8 +72,8 @@ export function TanaClipper() {
   }, [pending]);
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-[var(--tana-canvas)] p-4 text-[var(--tana-text)]">
-      <section className="w-full max-w-xl rounded-xl border border-[var(--tana-divider)] bg-[var(--tana-sidebar)] p-4 shadow-2xl">
+    <main className="tana-clipper-window grid min-h-dvh place-items-center p-4 text-[var(--tana-text)]">
+      <section className="tana-clipper-panel w-full max-w-xl p-5">
         <header className="mb-3 flex items-center justify-between" data-tauri-drag-region>
           <h1 className="font-medium">Global Capture</h1>
           <span className="text-[10px] text-[var(--tana-text-tertiary)]">Today</span>

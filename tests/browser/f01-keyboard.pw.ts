@@ -47,7 +47,7 @@ test('Zoom shortcuts navigate into the canonical Node and back', async ({ page }
   );
   await page.locator('[data-slate-editor]').click();
   await page.keyboard.press('ControlOrMeta+,');
-  await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('工作区');
+  await expect(page.getByRole('navigation', { name: '路径导航' })).toContainText('个人知识库');
 });
 
 test('Tab keeps an empty child caret at its text coordinate', async ({ page }) => {

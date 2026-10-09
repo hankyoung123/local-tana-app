@@ -15,6 +15,7 @@
     "global-shortcut:default",
     "core:window:allow-show",
     "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
     "core:window:allow-create"
   ]
 }

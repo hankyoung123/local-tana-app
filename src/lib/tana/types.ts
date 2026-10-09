@@ -31,7 +31,6 @@ export type TanaSidebarMode = "full" | "mini" | "hidden";
 export type TanaSidebarTopItem =
   | "today"
   | "create-new"
-  | "search"
   | "quick-add"
   | "supertags"
   | "recents";

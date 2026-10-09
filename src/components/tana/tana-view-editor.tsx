@@ -242,7 +242,7 @@ export function TanaSearchDefinitionEditor({
       </div>
 
       {diagnostics.length > 0 && (
-        <p className="mb-3 rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800" role="status">
+        <p className="tana-validation-warning mb-3 rounded px-2 py-1.5 text-xs" role="status">
           查询暂不可运行：{diagnostics.map((diagnostic) => diagnostic.code).join('、')}
         </p>
       )}
@@ -298,9 +298,9 @@ function QueryExpressionEditor({
       );
     case "not":
       return (
-        <div className="rounded border border-amber-200 bg-amber-50/40 p-2">
+        <div className="rounded border border-[var(--tana-divider)] bg-[var(--tana-warning-surface)] p-2">
           <QueryNodeHeader label="非（NOT）" onRemove={onRemove} />
-          <div className="mt-2 border-amber-200 border-l pl-2">
+          <div className="mt-2 border-[var(--tana-divider)] border-l pl-2">
             <QueryExpressionEditor
               expression={expression.child}
               index={index}

@@ -19,6 +19,7 @@ import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-present
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -333,7 +334,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
           {validationLabel && (
             <span
               aria-label={`字段值警告：${validationLabel}`}
-              className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+              className="tana-validation-warning shrink-0 rounded px-1 py-0.5 text-[10px]"
               id={`field-validation-${fieldNode.id}`}
               role="status"
               title={validationLabel}
@@ -344,7 +345,7 @@ function FieldRenderer({ element, index }: TanaNodeBlockRendererProps) {
         </span>
       </button>
 
-      <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-[var(--tana-canvas)]/95 p-0.5 opacity-0 shadow-[0_1px_4px_rgb(31_54_43/0.08)] transition-opacity">
+      <div className="tana-fieldActions pointer-events-auto ml-auto flex items-center gap-0.5 rounded-md bg-[var(--tana-canvas)] p-0.5 opacity-0 transition-opacity">
         {fieldDefinitionInTrash && (
           <FieldAction
             label="恢复字段定义"
@@ -407,11 +408,18 @@ function FieldAction({
  * editor while plain and number text continue to use Plate contenteditable.
  */
 function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
+  return typeof element.id === 'string'
+    ? <TanaFieldValueEditor index={index} nodeId={element.id} />
+    : null;
+}
+
+/** Both surfaces use the same canonical Field transforms; scalar outline text stays in Plate. */
+export function TanaFieldValueEditor({ index, nodeId, inline = false }: {
+  index: TanaIndex;
+  nodeId: NodeId;
+  inline?: boolean;
+}) {
   const editor = useEditorRef();
-  const nodeId = typeof element.id === 'string' ? element.id : undefined;
-
-  if (!nodeId) return null;
-
   const fieldNode = Array.from(index.fieldNodesById.values()).find(
     (candidate) => candidate.valueNodeIds.includes(nodeId)
   );
@@ -423,14 +431,14 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
     : index.nodesById.get(fieldNode.fieldId)?.fieldDefinition;
 
   if (!definition) {
-    return <BrokenFieldDefinitionValue fieldId={fieldNode.fieldId} index={index} />;
+    return <BrokenFieldDefinitionValue fieldId={fieldNode.fieldId} index={index} inline={inline} />;
   }
 
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
   const currentFieldValue = fieldNode.valueByNodeId.get(nodeId);
   const validationIssues = fieldNode.validationIssuesByValueNodeId.get(nodeId) ?? [];
   const validationLabel = getFieldValidationLabel(validationIssues);
-  const warningId = `field-value-warning-${nodeId}`;
+  const warningId = `field-value-warning-${inline ? 'property' : 'outline'}-${nodeId}`;
   const setValue = (value: FieldValue) =>
     definition.cardinality === 'list'
       ? fieldTransforms.setValueAt(fieldNode.parentNodeId, fieldNode.fieldId, nodeId, value)
@@ -448,14 +456,25 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   ) {
     const text = index.nodesById.get(nodeId)?.text;
 
-    return text ? null : <UnsetValuePlaceholder />;
+    if (!inline) return text ? null : <UnsetValuePlaceholder />;
+    return (
+      <input
+        aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}属性值`}
+        aria-invalid={validationLabel ? true : undefined}
+        className="tana-property-input"
+        inputMode={definition.type === 'number' ? 'decimal' : undefined}
+        placeholder="未设置"
+        value={text ?? ''}
+        onChange={(event) => fieldTransforms.setRawScalarValue(fieldNode.parentNodeId, fieldNode.fieldId, event.target.value, nodeId)}
+      />
+    );
   }
 
   if (definition.type === 'checkbox') {
     const value = currentFieldValue?.type === 'checkbox' ? currentFieldValue.value : undefined;
 
     return (
-      <ValueControl>
+      <ValueControl inline={inline}>
         <label className="flex h-7 cursor-pointer items-center gap-2 rounded px-1.5 text-[13px] text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]">
           <Checkbox
             aria-label={`${index.nodesById.get(fieldNode.fieldId)?.text || '字段'}字段值`}
@@ -486,14 +505,14 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
     const today = getTanaToday(typeof workspace?.tanaWorkspaceTimeZone === 'string' ? workspace.tanaWorkspaceTimeZone : 'UTC');
 
     return (
-      <ValueControl>
+      <ValueControl inline={inline}>
         <input
           aria-label="日期字段值"
           aria-describedby={validationLabel ? warningId : undefined}
           aria-invalid={validationLabel ? true : undefined}
           className="h-7 rounded border-0 bg-transparent px-1.5 text-[13px] text-[var(--tana-text-secondary)] outline-none hover:bg-[var(--tana-hover)] focus:bg-[var(--tana-canvas)] focus:ring-1 focus:ring-[var(--tana-accent-soft)]"
           data-plate-prevent-deselect
-          placeholder="YYYY-MM-DD / YYYY-Www / YYYY-MM / range"
+          placeholder={inline ? 'YYYY-MM-DD' : 'YYYY-MM-DD / YYYY-Www / YYYY-MM / range'}
           type="text"
           value={value}
           onChange={(event) => {
@@ -530,9 +549,9 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const candidates = getFieldValueCandidates(index, fieldNode.fieldId);
 
   return (
-    <ValueControl>
+    <ValueControl inline={inline}>
       <Select
-        value={currentValue}
+        value={currentValue ?? ''}
         onValueChange={(value) =>
           setValue({
             type: definition.type,
@@ -579,15 +598,17 @@ function ValueRenderer({ element, index }: TanaNodeBlockRendererProps) {
 function BrokenFieldDefinitionValue({
   fieldId,
   index,
+  inline,
 }: {
   fieldId: NodeId;
   index: TanaIndex;
+  inline?: boolean;
 }) {
   const editor = useEditorRef();
   const inTrash = isTanaNodeInTrash(index, fieldId);
 
   return (
-    <ValueControl>
+    <ValueControl inline={inline}>
       <span className="text-[11px] text-[var(--tana-text-tertiary)]" role="status">
         {inTrash ? '字段定义已移至回收站' : '字段定义已删除'}
       </span>
@@ -608,7 +629,7 @@ function BrokenFieldDefinitionValue({
 
 function FieldValueWarning({ id, label }: { id: string; label: string }) {
   return label ? (
-    <span id={id} role="status" className="ml-1 text-[11px] text-amber-700 dark:text-amber-300">
+    <span id={id} role="status" className="tana-validation-warning ml-1 rounded px-1 text-[11px]">
       {label}
     </span>
   ) : null;
@@ -625,6 +646,7 @@ function CreateOptionControl({
 }) {
   const editor = useEditorRef();
   const [name, setName] = React.useState('');
+  const [open, setOpen] = React.useState(false);
 
   const create = () => {
     if (
@@ -633,35 +655,53 @@ function CreateOptionControl({
         .field.createOptionAndAssign(nodeId, fieldId, name, valueNodeId)
     ) {
       setName('');
+      setOpen(false);
     }
   };
 
   return (
-    <span className="ml-1 flex items-center gap-1">
-      <input
-        aria-label="新建选项"
-        className="h-6 w-24 rounded border border-[var(--tana-divider)] bg-transparent px-1 text-xs"
-        data-plate-prevent-deselect
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            create();
-          }
-        }}
-      />
-      <button
-        aria-label="创建并选择新选项"
-        className="rounded px-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)] disabled:opacity-50"
-        data-plate-prevent-deselect
-        disabled={name.trim().length === 0}
-        type="button"
-        onClick={create}
-      >
-        新建
-      </button>
-    </span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          aria-label="添加字段选项"
+          className="tana-shell-control"
+          data-plate-prevent-deselect
+          title="添加字段选项"
+          type="button"
+        >
+          <PlusIcon className="size-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-60 p-3">
+        <label className="mb-2 block text-xs text-muted-foreground" htmlFor={`new-option-${valueNodeId}`}>新建选项</label>
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="新建选项"
+            className="tana-control-field min-w-0 flex-1 px-2"
+            data-plate-prevent-deselect
+            id={`new-option-${valueNodeId}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                create();
+              }
+            }}
+          />
+          <button
+            aria-label="创建并选择新选项"
+            className="shrink-0 rounded px-2 py-1.5 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)] disabled:opacity-50"
+            data-plate-prevent-deselect
+            disabled={name.trim().length === 0}
+            type="button"
+            onClick={create}
+          >
+            创建
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -685,13 +725,13 @@ function ValueClearButton({ onClear }: { onClear: () => void }) {
   );
 }
 
-function ValueControl({ children }: { children: React.ReactNode }) {
+function ValueControl({ children, inline }: { children: React.ReactNode; inline?: boolean }) {
   return (
     <div
-      className="tana-valueControl absolute top-0 right-4 z-10 flex h-7 items-center"
+      className={inline ? "tana-property-value" : "tana-valueControl absolute top-0 right-4 z-10 flex h-7 items-center"}
       contentEditable={false}
       data-plate-prevent-deselect
-      style={{ left: 'var(--tana-field-value-offset)' }}
+      style={inline ? undefined : { left: 'var(--tana-field-value-offset)' }}
     >
       {children}
     </div>

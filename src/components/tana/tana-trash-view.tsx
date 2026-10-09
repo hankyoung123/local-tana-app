@@ -34,11 +34,16 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
   };
 
   return (
-    <section className="flex-1 overflow-auto p-8">
-      <h1 className="mb-4 text-xl font-semibold">废纸篓</h1>
+    <section className="tana-view-surface flex min-w-0 flex-1 flex-col overflow-auto">
+      <header className="tana-view-toolbar shrink-0">
+        <p className="tana-page-eyebrow">系统位置</p>
+        <h1 className="tana-page-title">废纸篓</h1>
+      </header>
+      <div className="tana-page-scroll">
+        <div className="tana-page-column">
       {children.length > 0 && (
         <button
-          className="mb-4 text-destructive"
+          className="tana-destructive-action mb-4 rounded-lg px-3 py-2 text-xs hover:bg-[var(--tana-error-surface)]"
           onClick={() => requestConfirmation({
             title: '清空废纸篓？',
             description: '所有回收站节点将永久删除。可使用编辑器的撤销恢复。',
@@ -49,14 +54,14 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
           清空废纸篓
         </button>
       )}
-      {children.length === 0 && <p>废纸篓为空</p>}
+      {children.length === 0 && <div className="tana-empty-state">废纸篓为空</div>}
       {children.map((id) => {
         const target = index.nodesById.get(id);
         if (!target) return null;
         const internalReferences = getTanaInternalReferences(index, id);
 
         return (
-          <div key={id} className="flex items-center gap-4 border-b py-3">
+          <div key={id} className="tana-view-card mb-2 flex items-center gap-4 p-4">
             <div className="min-w-0 flex-1">
               <TanaNodeRowChrome index={index} target={target} variant="trash" />
               <div className="mt-1 text-xs text-muted-foreground">
@@ -84,7 +89,7 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
               恢复
             </button>
             <button
-              className="text-destructive"
+              className="tana-destructive-action rounded-lg px-2 py-1 text-xs hover:bg-[var(--tana-error-surface)]"
               onClick={() => requestConfirmation({
                 title: '永久删除此节点？',
                 description: '此节点及其子节点将从回收站永久删除。可使用编辑器的撤销恢复。',
@@ -95,7 +100,7 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
               永久删除…
             </button>
             <button
-              className="text-destructive"
+              className="tana-destructive-action rounded-lg px-2 py-1 text-xs hover:bg-[var(--tana-error-surface)]"
               onClick={() => requestConfirmation({
                 title: '删除此节点的块引用？',
                 description: '所有块引用将被删除，节点仍保留在回收站。可使用编辑器的撤销恢复。',
@@ -108,6 +113,8 @@ export function TanaTrashView({ index, node }: { index: TanaIndex; node: TanaNod
           </div>
         );
       })}
+        </div>
+      </div>
       <AlertDialog
         open={pendingAction !== null}
         onOpenChange={(open) => {

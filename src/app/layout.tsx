@@ -1,23 +1,20 @@
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
-
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'Local Tana',
-  description: '基于 Plate 构建的本地优先大纲应用。',
+  title: 'STILL',
+  description: '沉浸式大纲笔记与结构化个人知识库。',
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="zh-CN"
-      className={`${GeistSans.variable} ${GeistMono.variable} dark h-full antialiased`}
+      className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col bg-[var(--tana-canvas)]">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
