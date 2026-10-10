@@ -19,6 +19,15 @@
 - 顶栏按钮与窗口状态：`ev_0972918f3879554fc88ec27920be5b718ad0a4b931a18af2f28630ebe513ad40`。
 - Search Query builder：`ev_77b212011174c2974d2d31b3a44bc786883aeb3e3b75a7e15df46de9d18866d9`。
 
+重启 Codex 后通过已注册的 REA MCP 复核的 Evidence：
+
+- MCP 原生基线（PID `93768`、窗口 `4241`）：`ev_e7604f768095af5c69ab11ee7cec8d15fb861d86208bba0dcbe68fc3326eb5e4`。
+- Search 摘要（`task (base type)` 且 `not done`）：`ev_0df0f7a9344a1e7ca614a120aeb48623f889edf0329eb155a0a985a6182eead6`。
+- Query builder（规范化 AST 与 Run once/Done）：`ev_230ac6443aa9a41efc6dc1b044cc4273fd5397e7e451d222a5546de21e44aa0f`。
+- Search operators 菜单（含 `PARENTS DESCENDANTS`、`GRANDPARENTS DESCENDANTS`、`LT`、`GT`、`CHILD OF`、`OWNED BY` 等）：`ev_f6dd390ed0c42519f50a771e7a2c16d214b5c6b01f3ac4d0fb4cf1bce6a5c65b`。
+
+本轮 MCP 会话的完整证据包已保存在本机临时路径 `/tmp/tana-rea-evidence-2026-10-10.json`；原始包包含本地工作区节点文本，不提交到公开仓库。
+
 ## 证据到产品模型
 
 ```mermaid
