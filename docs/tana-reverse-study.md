@@ -17,6 +17,7 @@
 - 导航第二次切换：`ev_128db086343a2069a82e3b01be245b1395287fceb4dbad3a25669515aa98f682`。
 - 导航恢复展开：`ev_842f38869755b87dcdf915aa25e811bea22a3040a29c649fedb020384ceb499f`。
 - 顶栏按钮与窗口状态：`ev_0972918f3879554fc88ec27920be5b718ad0a4b931a18af2f28630ebe513ad40`。
+- Search Query builder：`ev_77b212011174c2974d2d31b3a44bc786883aeb3e3b75a7e15df46de9d18866d9`。
 
 ## 已观察行为
 
@@ -47,6 +48,10 @@
 ### Search 结果仍然是普通节点
 
 无障碍树中搜索结果行继续暴露文本输入区、复选框、标签按钮和节点按钮；View 工具栏只改变筛选、字段显示、分组和排序入口，不创建第二份编辑文档。当前项目必须继续遵守 Plate 文档是唯一编辑真相、TanaIndex 只读派生的约束。
+
+### Query builder 显式保留 AST 结构
+
+原版 Search options 显示可读的查询摘要：`Search for nodes tagged task (base type) and not done`。打开 Query builder 后，界面保留 `AND` 根节点和 `AND / OR / NOT` 插入操作，并提供 Search operators、System fields、Field values、Tag types、Workspace 等入口；底部同时显示规范化摘要 `(Tagged:task (base type)) AND (NOT is:Done)`，以及 `Run once` 与 `Done`。这支持“保留 AST、重做交互层”的重构方向，而不是把查询降级为单行文本。
 
 ## Golden Scenarios
 

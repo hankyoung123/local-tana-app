@@ -16,4 +16,5 @@
 | 2026-10-10 20:34 +08:00 | Installed and registered `rea-agents@6.3.0` for Codex | `/Users/hankyoung/.codex/config.toml`, doctor registration `aligned` |
 | 2026-10-10 20:43 +08:00 | Bound original Tana Outliner PID `93768`, window `4241` with REA native UI capture | `ev_c276c631791168808a4a310ecbb819a65b98d70a5eeea95acbef67969faa19b4` |
 | 2026-10-10 20:43–20:52 +08:00 | Verified sidebar state cycle with bounded click/wait scenarios | `ev_4352714cc7a36b07df92002488bd8f15b241e9ab90d4aae61ad989dd355852ac`, `ev_128db086343a2069a82e3b01be245b1395287fceb4dbad3a25669515aa98f682`, `ev_842f38869755b87dcdf915aa25e811bea22a3040a29c649fedb020384ceb499f` |
+| 2026-10-10 21:30 +08:00 | Captured Search options and Query builder in the original app | `ev_77b212011174c2974d2d31b3a44bc786883aeb3e3b75a7e15df46de9d18866d9` |
 | 2026-10-10 21:16–21:24 +08:00 | Attempted static JavaScript graph of the shipped desktop bundle | 48 scripts reached parser; Node heap exhausted at 4GB and 8GB, no static coverage claim made |
