@@ -87,9 +87,8 @@ export function TanaSidebar({
   const workspaceUi = normalizeTanaWorkspaceUi(
     workspaceId ? index.nodesById.get(workspaceId)?.workspaceUi : undefined,
   );
-  // `mini` is a legacy persisted value. It renders as the canonical full
-  // navigation surface so old workspaces never lose their navigation.
   const sidebarHidden = workspaceUi.sidebar?.mode === "hidden";
+  const sidebarMode = workspaceUi.sidebar?.mode ?? "full";
   const width = workspaceUi.sidebar?.width ?? TANA_SIDEBAR_DEFAULT_WIDTH;
   const orderedItems = normalizeTanaSidebarTopItems(
     workspaceUi.sidebar?.topItems,
@@ -337,6 +336,7 @@ export function TanaSidebar({
       id="tana-sidebar"
       aria-label="侧栏"
       className="tana-sidebar relative flex h-full shrink-0 flex-col"
+      data-sidebar-mode={sidebarMode}
       data-testid="tana-sidebar"
       ref={sidebarRef}
       style={{ width: resizeWidth ?? width }}

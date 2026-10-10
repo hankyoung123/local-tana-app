@@ -9,7 +9,7 @@
 .tana-workspace-viewport:has([data-desktop]) { padding: 0; }
 .tana-workspace-shell[data-desktop] { border: 0; box-shadow: none; }
 .still-native-titlebar { display: none; }
-.tana-workspace-shell[data-desktop] .still-native-titlebar { display: block; position: absolute; top: 0; left: 0; width: 88px; height: 40px; }
+.tana-workspace-shell[data-desktop] .still-native-titlebar { display: block; position: absolute; top: 0; left: 0; width: 88px; height: 52px; }
 .tana-workspace-shell[data-desktop] .tana-sidebar { padding-top: 40px; }
 .tana-workspace-shell[data-desktop]:not(:has(.tana-sidebar)) .tana-commandbar,
 .tana-workspace-shell[data-desktop][data-focus-mode] .tana-commandbar { padding-left: 88px; }
@@ -22,6 +22,17 @@
 .tana-workspace-shell:not(:has(.tana-sidebar)) .tana-workspace-main { margin-left: var(--still-panel-gap); }
 .tana-content-region { position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
 .tana-sidebar { min-width: 176px; background: transparent; border: 0; padding: 12px; }
+.tana-sidebar[data-sidebar-mode='mini'] { min-width: 64px; width: 64px !important; padding-inline: 8px; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-header { justify-content: center; padding-inline: 0; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-header > button { font-size: 0; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-search { justify-content: center; padding-inline: 0; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-search > :not(svg) { display: none; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-item { justify-content: center; padding-inline: 0; gap: 0; font-size: 0; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-item > :not(svg) { display: none; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-section-title { justify-content: center; padding-inline: 0; font-size: 0; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-section-title > :not(svg) { display: none; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-footer { margin-inline: -8px; padding-inline: 8px; justify-content: center; }
+.tana-sidebar[data-sidebar-mode='mini'] .tana-sidebar-footer-label { display: none; }
 .tana-sidebar-header { height: var(--still-toolbar-height); padding: 0 8px; border: 0; }
 .tana-brand-mark { color: var(--still-canvas); background: var(--still-text); border-radius: 7px; }
 .tana-sidebar-search { display: flex; width: 100%; align-items: center; gap: 9px; height: 34px; margin: 10px 0 14px; padding: 0 10px; border-radius: var(--still-control-radius); color: var(--still-muted); font-size: 12px; }

@@ -41,7 +41,7 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
           viewType === "table" ? <TanaTableView index={index} projection={projection} results={results} view={view} /> :
           viewType === "calendar" ? <TanaCalendarView index={index} projection={projection} results={results} view={view} /> :
           viewType === "cards" ? <TanaCardsView index={index} projection={projection} results={results} view={view} /> :
-          viewType === "list" || viewType === "tabs" || viewType === "side-menu" ? <TanaNavigationView index={index} projection={projection} type={viewType} /> :
+          viewType === "list" || viewType === "tabs" || viewType === "side-menu" ? <TanaNavigationView index={index} projection={projection} type={viewType} view={view} /> :
           <div className="mx-auto max-w-4xl space-y-3">
             {projection.groups.map((group) => (
               <section key={group.key}>

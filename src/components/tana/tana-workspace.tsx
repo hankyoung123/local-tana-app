@@ -48,6 +48,7 @@ import {
   captureDraftHasText,
   normalizeTanaCaptureDraft,
   type TanaCaptureDraft,
+  type TanaSidebarMode,
   type TanaWorkspaceUi,
   type TanaNode,
 } from "@/lib/tana";
@@ -169,7 +170,8 @@ function TanaWorkspaceContent({
   const workspaceUi = normalizeTanaWorkspaceUi(
     workspaceId ? index.nodesById.get(workspaceId)?.workspaceUi : undefined,
   );
-  const navigationExpanded = !focusMode && workspaceUi.sidebar?.mode !== 'hidden' &&
+  const sidebarMode: TanaSidebarMode = workspaceUi.sidebar?.mode ?? 'full';
+  const navigationExpanded = !focusMode && sidebarMode !== 'hidden' &&
     (!narrowWindow || navigationOpen);
 
   const updateWorkspaceUi = React.useCallback(
@@ -304,17 +306,25 @@ function TanaWorkspaceContent({
     editor.tf.focus();
   }, [editor]);
   const toggleNavigation = React.useCallback(() => {
-    setFocusMode(false);
     if (narrowWindow) {
-      if (workspaceUi.sidebar?.mode === 'hidden') {
+      if (focusMode) {
+        setFocusMode(false);
+        editor.tf.focus();
+        return;
+      }
+      if (sidebarMode === 'hidden') {
         updateWorkspaceUi({ ...workspaceUi, sidebar: { ...workspaceUi.sidebar, mode: 'full' } });
       }
-      setNavigationOpen(!navigationExpanded);
+      setNavigationOpen((open) => !open);
     } else {
-      const mode = navigationExpanded ? 'hidden' : 'full';
+      const mode: TanaSidebarMode = sidebarMode === 'full'
+        ? 'mini'
+        : sidebarMode === 'mini'
+          ? 'hidden'
+          : 'full';
       updateWorkspaceUi({ ...workspaceUi, sidebar: { ...workspaceUi.sidebar, mode } });
     }
-  }, [narrowWindow, navigationExpanded, updateWorkspaceUi, workspaceUi]);
+  }, [editor, focusMode, narrowWindow, sidebarMode, updateWorkspaceUi, workspaceUi]);
   const resizeInspector = React.useCallback((delta: number) => {
     setInspectorWidth((width) => Math.min(420, Math.max(280, width + delta)));
   }, []);
@@ -484,6 +494,7 @@ function TanaWorkspaceContent({
             onCommand={runWorkspaceCommand}
             persistenceStatus={persistenceStatus}
             navigationExpanded={navigationExpanded}
+            sidebarMode={sidebarMode}
             focusMode={focusMode}
           />
         }

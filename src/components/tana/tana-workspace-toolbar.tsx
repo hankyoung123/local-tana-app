@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 
 import type { TanaWorkspaceCommandId } from './tana-workspace-commands';
 import type { PersistenceStatus } from './tana-workspace-types';
+import type { TanaSidebarMode } from '@/lib/tana';
 
 export function TanaWorkspaceToolbar({
   breadcrumbs,
@@ -38,6 +39,7 @@ export function TanaWorkspaceToolbar({
   onCommand,
   persistenceStatus,
   navigationExpanded,
+  sidebarMode,
   focusMode,
 }: {
   breadcrumbs: readonly TanaNode[];
@@ -47,21 +49,40 @@ export function TanaWorkspaceToolbar({
   onCommand: (command: TanaWorkspaceCommandId) => void;
   persistenceStatus: PersistenceStatus;
   navigationExpanded: boolean;
+  sidebarMode: TanaSidebarMode;
   focusMode: boolean;
 }) {
   const historyIndex = usePluginOption(TanaZoomPlugin, 'historyIndex') ?? 0;
   const historyLength = usePluginOption(TanaZoomPlugin, 'history')?.length ?? 1;
   const compactPathStart = Math.max(0, breadcrumbs.length - 2);
   const overflowBreadcrumbs = breadcrumbs.slice(0, compactPathStart);
+  const navigationLabel = focusMode
+    ? '退出专注模式'
+    : sidebarMode === 'full'
+      ? '收窄导航'
+      : sidebarMode === 'mini'
+        ? '隐藏导航'
+        : '展开导航';
+  const handleToolbarMouseDown = React.useCallback((event: React.MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, [role="button"], [data-tauri-no-drag]')) return;
+    void import('@tauri-apps/api/core').then(async ({ isTauri }) => {
+      if (!isTauri()) return;
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      await getCurrentWindow().startDragging();
+    });
+  }, []);
 
   return (
-    <Toolbar aria-label="工作区工具栏" className="tana-commandbar" data-tauri-drag-region>
+    <Toolbar aria-label="工作区工具栏" className="tana-commandbar" data-tauri-drag-region onMouseDown={handleToolbarMouseDown}>
       <div className="tana-commandbar-leading">
         <TanaShellControl
-          label={navigationExpanded ? '收起导航' : '展开导航'}
+          label={navigationLabel}
           aria-controls="tana-sidebar"
-          aria-expanded={navigationExpanded}
-          onClick={() => onCommand('toggle-sidebar')}
+          aria-expanded={focusMode ? false : navigationExpanded}
+          aria-pressed={focusMode ? true : undefined}
+          onClick={() => onCommand(focusMode ? 'toggle-focus-mode' : 'toggle-sidebar')}
         >
           <PanelLeftIcon className="size-3.5" />
         </TanaShellControl>
