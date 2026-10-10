@@ -78,6 +78,16 @@ flowchart LR
 
 原版 Search options 显示可读的查询摘要：`Search for nodes tagged task (base type) and not done`。打开 Query builder 后，界面保留 `AND` 根节点和 `AND / OR / NOT` 插入操作，并提供 Search operators、System fields、Field values、Tag types、Workspace 等入口；底部同时显示规范化摘要 `(Tagged:task (base type)) AND (NOT is:Done)`，以及 `Run once` 与 `Done`。这支持“保留 AST、重做交互层”的重构方向，而不是把查询降级为单行文本。
 
+### 本轮补充：命令菜单、View 面板与节点 Options
+
+在 Today 页面对 `Open tasks` 节点进行被动观察后，命令菜单显示 `100 results available`，并把当前节点上下文动作集中在同一个入口：Find nodes、标签增删、Move to、Move and leave reference、View as（Outline/Table/List/Cards/Lanes/Tabs/Calendar/Side menu）、Filter/Sort/Group/Display、Zoom、Open in tab、Pin to sidebar、Copy/Download/Export、Show edit log、字段 Autofill 等。菜单还明确给出 Up/Down、Enter、Escape、Tab 的键盘提示。该入口证明“节点动作”和“视图动作”共享当前 Plate 选中上下文，而不是由每个 renderer 自己维护选中节点。
+
+View 工具栏的四个配置入口分别打开独立面板：Display 按 User-defined fields/System fields 列出字段复选框；Group 将用户字段标记为 `Global`；Sort by 提供字段、方向、Remove sorting、Add sort、Reapply sort、Reset；Filter by 先选 Tags/字段，再在 Tags 子面板中区分 `Any tag`、`No tag` 和具体标签。节点 Options 还把 View as、Appearance、Copy/Duplicate、Publish、Add tag/description/checkbox、Show progress bar、Show edit log、Delete、More commands 集中在一个节点级菜单中；Search/Related content 节点额外提供 `Prefer area: Content bottom/Content right`、`Remove from #Day`、`Edit related content`。
+
+侧栏按钮的原生可访问名称会随状态改变：完整态是 `Show mini sidebar`，迷你态是 `Hide sidebar`，隐藏态是 `Show sidebar`。隐藏态的内容区直接顶到窗口左侧，迷你态保留图标命中区；这与项目的三态 `sidebarMode` 应保持同构。完整功能与交互目录另见 [`docs/tana-feature-interaction-matrix.md`](./tana-feature-interaction-matrix.md)。
+
+顶栏 `Keyboard shortcuts` 面板按 Navigating、Editing、Formatting 分组显示快捷键，包含 `⌘K` 命令行、`⌘M`/`⌃⌘M` 面板切换、`⌘T`/`⌘W` 页签、`⌘\\` 侧栏、Tab/⇧Tab 缩进、`⌘⏎` 完成、`⇧⏎` 插入节点、`>` 创建字段、`@` 引用和 `#` 标签。快捷键表把“节点编辑”和“窗口导航”明确分成两类，后续对齐应分别验证，不能用窗口状态代替 Plate 编辑行为。
+
 ## Golden Scenarios
 
 以下场景用于后续 A+B 重构验收：
