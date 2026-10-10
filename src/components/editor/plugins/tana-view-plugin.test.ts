@@ -9,6 +9,7 @@ import {
   isTanaNodeElement,
   TANA_SUPERTAG_KEY,
 } from '@/lib/tana/constants';
+import type { TanaViewDefinition } from '@/lib/tana/types';
 
 import { TanaViewPlugin } from './tana-view-plugin';
 
@@ -94,19 +95,19 @@ describe('Tana view mutations', () => {
     ]);
 
     assert.equal(view(editor).setType('view', 'table'), true);
-    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'table' });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'table', states: { outline: {} } });
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
       query: { children: [], type: 'and' },
     });
 
     assert.equal(view(editor).setType('view', 'calendar'), true);
-    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'calendar' });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'calendar', states: { outline: {}, table: {} } });
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
       query: { children: [], type: 'and' },
     });
 
     assert.equal(view(editor).setType('view', 'cards'), true);
-    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'cards' });
+    assert.deepEqual(editor.children[0].tanaViewDefinition, { type: 'cards', states: { outline: {}, table: {}, calendar: {} } });
     assert.deepEqual(editor.children[0].tanaSearchDefinition, {
       query: { children: [], type: 'and' },
     });
@@ -141,16 +142,33 @@ describe('Tana view mutations', () => {
     );
     assert.equal(view(editor).update('view', { toolbarVisible: false }), true);
     assert.equal(view(editor).setType('view', 'cards'), true);
+    assert.equal(view(editor).update('view', { groupFieldId: 'status', visibleFieldIds: ['owner'] }), true);
+    assert.equal(view(editor).setType('view', 'table'), true);
+    assert.deepEqual((editor.children[0].tanaViewDefinition as TanaViewDefinition).states?.table, {
+      calendarDateFieldIds: ['due-date'],
+      groupFieldId: 'status',
+      sort: [{ direction: 'desc', fieldId: '$title' }],
+      visibleFieldIds: ['owner', 'status'],
+    });
+    assert.equal(view(editor).setType('view', 'cards'), true);
 
     const reloaded = createEditor(JSON.parse(JSON.stringify(editor.children)) as Value);
 
     assert.deepEqual(reloaded.children[0].tanaViewDefinition, {
-      calendarDateFieldIds: ['due-date'],
-      groupFieldId: 'status',
-      sort: [{ direction: 'desc', fieldId: '$title' }],
+      states: {
+        table: {
+          calendarDateFieldIds: ['due-date'],
+          groupFieldId: 'status',
+          sort: [{ direction: 'desc', fieldId: '$title' }],
+          visibleFieldIds: ['owner', 'status'],
+        },
+        cards: {
+          groupFieldId: 'status',
+          visibleFieldIds: ['owner'],
+        },
+      },
       toolbarVisible: false,
       type: 'cards',
-      visibleFieldIds: ['owner', 'status'],
     });
     assert.deepEqual(reloaded.children[0].tanaSearchDefinition, {
       query: { children: [], type: 'and' },

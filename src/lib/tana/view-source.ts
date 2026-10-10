@@ -1,10 +1,12 @@
 import { getActiveSupertagInstances, isTanaNodeActive } from './index';
-import { runTanaQuery } from './query';
+import { evaluateTanaQuery, type TanaQueryDiagnostic, type TanaQueryRunStatus } from './query';
 import type { TanaIndex, TanaNode } from './types';
 
 export type TanaViewSource = {
+  diagnostics: readonly TanaQueryDiagnostic[];
   kind: 'children' | 'search' | 'supertag-instances';
   nodes: readonly TanaNode[];
+  status: TanaQueryRunStatus | 'ok';
 };
 
 function getNode(index: TanaIndex, nodeId: string): TanaNode | undefined {
@@ -44,24 +46,31 @@ export function resolveTanaCollectionSource(
   view: TanaNode
 ): TanaViewSource {
   if (view.searchDefinition) {
+    const result = evaluateTanaQuery(index, view.searchDefinition.query, {
+      excludeNodeId: view.id,
+      searchHostId: view.id,
+    });
     return {
+      diagnostics: result.diagnostics,
       kind: 'search',
-      nodes: runTanaQuery(index, view.searchDefinition.query, {
-        excludeNodeId: view.id,
-      }),
+      nodes: result.nodes,
+      status: result.status,
     };
   }
 
   if (view.supertagDefinition) {
     return {
+      diagnostics: [],
       kind: 'supertag-instances',
       nodes: getActiveSupertagInstances(index, view.id).filter(
         ({ id }) => id !== view.id
       ),
+      status: 'ok',
     };
   }
 
   return {
+    diagnostics: [],
     kind: 'children',
     nodes: (index.childrenByParent.get(view.id) ?? [])
       .map((nodeId) => getNode(index, nodeId))
@@ -71,5 +80,6 @@ export function resolveTanaCollectionSource(
           isTanaNodeActive(index, node.id) &&
           isTanaViewDisplayableChild(node)
       ),
+    status: 'ok',
   };
 }

@@ -163,6 +163,44 @@ function isPersistedViewFilter(value: unknown): boolean {
   });
 }
 
+function isPersistedViewState(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const state = value as Record<string, unknown>;
+  if (!Object.keys(state).every((key) =>
+    ['calendarDateFieldIds', 'filter', 'groupFieldId', 'pagination', 'sort', 'visibleFieldIds'].includes(key)
+  )) return false;
+
+  const visibleFieldIds = state.visibleFieldIds;
+  const calendarDateFieldIds = state.calendarDateFieldIds;
+  const pagination = state.pagination;
+  const sort = state.sort;
+  return (
+    (visibleFieldIds === undefined || isTanaNodeIdList(visibleFieldIds)) &&
+    (calendarDateFieldIds === undefined || isTanaNodeIdList(calendarDateFieldIds)) &&
+    (state.filter === undefined || isPersistedViewFilter(state.filter)) &&
+    (state.groupFieldId === undefined || (typeof state.groupFieldId === 'string' && state.groupFieldId.length > 0)) &&
+    (pagination === undefined || (
+      !!pagination && typeof pagination === 'object' && !Array.isArray(pagination) &&
+      Object.keys(pagination as object).every((key) => key === 'page' || key === 'pageSize') &&
+      ((pagination as { page?: unknown }).page === undefined ||
+        (Number.isInteger((pagination as { page?: number }).page) && (pagination as { page: number }).page >= 0)) &&
+      ((pagination as { pageSize?: unknown }).pageSize === undefined ||
+        (Number.isInteger((pagination as { pageSize?: number }).pageSize) &&
+          (pagination as { pageSize: number }).pageSize >= 1 &&
+          (pagination as { pageSize: number }).pageSize <= 100))
+    )) &&
+    (sort === undefined || (
+      Array.isArray(sort) && sort.every((criterion) =>
+        !!criterion && typeof criterion === 'object' && !Array.isArray(criterion) &&
+        Object.keys(criterion as object).every((key) => key === 'direction' || key === 'fieldId') &&
+        ((criterion as { direction?: unknown }).direction === 'asc' || (criterion as { direction?: unknown }).direction === 'desc') &&
+        typeof (criterion as { fieldId?: unknown }).fieldId === 'string' &&
+        (criterion as { fieldId: string }).fieldId.length > 0
+      )
+    ))
+  );
+}
+
 function hasValidSemanticData(element: TElement): boolean {
   const semantic = element as TElement & {
     tanaDoneState?: unknown;
@@ -385,6 +423,7 @@ function hasValidSemanticData(element: TElement): boolean {
     const calendarDateFieldIds = definition?.calendarDateFieldIds;
     const sort = definition?.sort;
     const pagination = definition?.pagination;
+    const states = definition?.states;
 
     if (
       !definition ||
@@ -402,6 +441,7 @@ function hasValidSemanticData(element: TElement): boolean {
           'groupFieldId',
           'pagination',
           'sort',
+          'states',
           'toolbarVisible',
           'type',
           'visibleFieldIds',
@@ -430,7 +470,13 @@ function hasValidSemanticData(element: TElement): boolean {
             ((criterion as { direction?: unknown }).direction === 'asc' || (criterion as { direction?: unknown }).direction === 'desc') &&
             typeof (criterion as { fieldId?: unknown }).fieldId === 'string' &&
             (criterion as { fieldId: string }).fieldId.length > 0
-          )))
+          ))) ||
+      (states !== undefined &&
+        (!states || typeof states !== 'object' || Array.isArray(states) ||
+          !Object.keys(states as object).every((key) =>
+            ['calendar', 'cards', 'list', 'outline', 'side-menu', 'table', 'tabs'].includes(key)
+          ) ||
+          !Object.values(states as object).every(isPersistedViewState)))
     ) {
       return false;
     }

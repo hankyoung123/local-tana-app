@@ -34,8 +34,8 @@ test('F06 View chrome changes only presentation while retaining the shared Searc
   await expect(due).toHaveValue('2026-09-18');
   const rowsBeforeAdd = await table.getByRole('row').count();
   await page.getByRole('button', { name: '添加行' }).click();
-  // This is a Search + View. Add creates a canonical sibling and never adds
-  // an ordinary child/result row below the Search owner.
+  // This is a Search + View. Add creates a canonical Daily result and never
+  // adds an ordinary child/result row below the Search owner.
   await expect(table.getByRole('row')).toHaveCount(rowsBeforeAdd);
   await page.getByRole('button', { name: '选择表格字段列' }).click();
   await page.getByRole('menuitemcheckbox', { name: '摘要' }).click();
@@ -50,6 +50,13 @@ test('F06 View chrome changes only presentation while retaining the shared Searc
   await chooseViewType(page, '卡片');
   await expect(page.getByRole('button', { name: '添加卡片' })).toBeVisible();
   await expect(page.locator('input[value="F06 Table title"]')).toBeVisible();
+  await page.getByLabel('选择卡片显示字段').click();
+  const cardSummary = page.getByRole('menuitemcheckbox', { name: '摘要', exact: true });
+  await expect(cardSummary).toBeChecked();
+  await cardSummary.click();
+  await page.getByLabel('选择卡片显示字段').click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '摘要', exact: true })).not.toBeChecked();
+  await page.keyboard.press('Escape');
 
   await chooseViewType(page, '日历');
   await expect(page.getByLabel('日历范围')).toBeVisible();
@@ -75,6 +82,13 @@ test('F06 View chrome changes only presentation while retaining the shared Searc
   await expect(page.getByLabel('排序视图结果')).toBeVisible();
   await page.getByLabel('排序视图结果').click();
   await expect(page.getByLabel('添加排序条件')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await chooseViewType(page, '表格');
+  await expect(page.locator('table').getByRole('columnheader', { name: '摘要' })).toBeVisible();
+  await chooseViewType(page, '卡片');
+  await page.getByLabel('选择卡片显示字段').click();
+  await expect(page.getByRole('menuitemcheckbox', { name: '摘要', exact: true })).not.toBeChecked();
 });
 
 test('F06 filters and multi-sort use the real toolbar controls', async ({ page }) => {

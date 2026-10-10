@@ -1,6 +1,6 @@
 "use client";
 
-import { resolveTanaCollectionSource, resolveTanaViewProjection, type TanaIndex, type TanaNode } from "@/lib/tana";
+import { getTanaViewState, resolveTanaCollectionSource, resolveTanaViewProjection, type TanaIndex, type TanaNode } from "@/lib/tana";
 import { NodeProjection } from "./node-projection";
 import { TanaCalendarToolbarControls, TanaCalendarView } from "./tana-calendar-view";
 import { TanaCardsToolbarControls, TanaCardsView } from "./tana-cards-view";
@@ -18,6 +18,7 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
   const projection = resolveTanaViewProjection(index, view, source.nodes);
   const results = projection.items.map(({ occurrence }) => occurrence);
   const viewType = view.viewDefinition?.type ?? "outline";
+  const state = getTanaViewState(view.viewDefinition);
 
   return (
     <section className="tana-view-surface flex min-w-0 max-w-full flex-1 flex-col overflow-hidden">
@@ -33,7 +34,10 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
         view={view}
       />
       <div className="tana-view-content min-h-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto">
-        {results.length === 0 && viewType !== "table" ? <div className="tana-empty-state text-sm">暂无匹配节点</div> :
+        {source.status === 'too-many-results' ? <div className="tana-validation-warning p-4 text-sm" role="status">结果超过 2500 条，请缩小查询范围后再运行。</div> :
+          source.status === 'broken' ? <div className="tana-validation-warning p-4 text-sm" role="status">搜索条件已失效，请修复查询定义后再运行。</div> :
+          projection.diagnostics.length > 0 ? <div className="tana-validation-warning p-4 text-sm" role="status">视图筛选条件已失效，请检查已删除的字段或超级标签。</div> :
+          results.length === 0 && viewType !== "table" ? <div className="tana-empty-state text-sm">暂无匹配节点</div> :
           viewType === "table" ? <TanaTableView index={index} projection={projection} results={results} view={view} /> :
           viewType === "calendar" ? <TanaCalendarView index={index} projection={projection} results={results} view={view} /> :
           viewType === "cards" ? <TanaCardsView index={index} projection={projection} results={results} view={view} /> :
@@ -41,7 +45,7 @@ export function TanaView({ index, view }: { index: TanaIndex; view: TanaNode }) 
           <div className="mx-auto max-w-4xl space-y-3">
             {projection.groups.map((group) => (
               <section key={group.key}>
-                {view.viewDefinition?.groupFieldId && <h2 className="px-1 py-1 text-xs font-medium text-[var(--tana-text-tertiary)]">{group.label} · {group.items.length}</h2>}
+                {state.groupFieldId && <h2 className="px-1 py-1 text-xs font-medium text-[var(--tana-text-tertiary)]">{group.label} · {group.total}</h2>}
                 {group.items.map(({ occurrence }) => <NodeProjection key={occurrence.id} fieldIds={projection.visibleFieldIds} index={index} targetNodeId={occurrence.id} variant="search-result" />)}
               </section>
             ))}

@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getTanaViewFieldLabel, resolveTanaViewProjection, TANA_SYSTEM_TIME_FIELD_IDS, type TanaIndex, type TanaNode } from '@/lib/tana';
+import { getTanaViewFieldLabel, getTanaViewState, resolveTanaViewProjection, TANA_SYSTEM_TIME_FIELD_IDS, type TanaIndex, type TanaNode } from '@/lib/tana';
 
 /** A shared persisted `visibleFieldIds` editor for projection renderers. */
 export function TanaViewDisplayFieldsControl({
@@ -28,7 +28,7 @@ export function TanaViewDisplayFieldsControl({
 }) {
   const editor = useEditorRef();
   const projection = resolveTanaViewProjection(index, view, results);
-  const configured = view.viewDefinition?.visibleFieldIds;
+  const configured = getTanaViewState(view.viewDefinition).visibleFieldIds;
   const { availableFieldIds, visibleFieldIds } = projection;
   const selectableFieldIds = Array.from(new Set([...availableFieldIds, ...TANA_SYSTEM_TIME_FIELD_IDS]));
 

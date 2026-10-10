@@ -106,6 +106,26 @@ describe('Tana View source resolver', () => {
     assert.deepEqual(source.nodes.map(({ id }) => id), ['task-result']);
   });
 
+  test('surfaces broken Search definitions instead of presenting an empty result set', () => {
+    const broken: Value = [
+      {
+        children: [{ text: 'Broken Search View' }],
+        id: 'broken-search-view',
+        tanaSearchDefinition: {
+          query: createAndQuery([{ kind: 'has-field', fieldId: 'missing-field' }]),
+        },
+        tanaViewDefinition: { type: 'outline' },
+        type: KEYS.p,
+      },
+    ];
+    const index = buildTanaIndex(broken);
+    const source = resolveTanaCollectionSource(index, index.nodesById.get('broken-search-view')!);
+
+    assert.equal(source.status, 'broken');
+    assert.equal(source.diagnostics[0]?.code, 'missing-field');
+    assert.deepEqual(source.nodes, []);
+  });
+
   test('uses derived instances when a Supertag Definition carries View presentation', () => {
     const index = buildTanaIndex(document);
     const source = resolveTanaCollectionSource(index, index.nodesById.get('project-tag')!);

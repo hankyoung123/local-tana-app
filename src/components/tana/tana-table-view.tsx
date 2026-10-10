@@ -31,6 +31,7 @@ import {
 import {
   getFieldValueCandidates,
   getTanaSystemFieldDefinition,
+  getTanaViewState,
   getTanaViewFieldLabel,
   getSupertagTemplateFields,
   isTanaTitleExpressionNameEditable,
@@ -807,7 +808,7 @@ export function TanaTableToolbarControls({
   view: TanaNode;
 }) {
   const editor = useEditorRef();
-  const configuredVisibleFieldIds = view.viewDefinition?.visibleFieldIds;
+  const configuredVisibleFieldIds = getTanaViewState(view.viewDefinition).visibleFieldIds;
   const fieldIds = getTanaTableAvailableFieldIds(
     index,
     results,

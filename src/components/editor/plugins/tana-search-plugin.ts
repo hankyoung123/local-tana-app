@@ -1,4 +1,5 @@
 import { ElementApi, NodeApi } from "platejs";
+import { TogglePlugin } from "@platejs/toggle/react";
 import type { NodeEntry } from "platejs";
 import { createPlatePlugin, type PlateEditor } from "platejs/react";
 
@@ -35,6 +36,11 @@ export type TanaSearchAddResultOutcome = {
   dayNodeId: NodeId;
   matches: boolean;
   nodeId: NodeId;
+};
+
+export type TanaSearchCreateResultOptions = {
+  /** Calendar day requested by a Calendar View add action. */
+  day?: string;
 };
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
@@ -281,6 +287,7 @@ function materializeSearchPredicate(
 function addResult(
   editor: PlateEditor,
   searchNodeId: NodeId,
+  options: TanaSearchCreateResultOptions = {},
 ): TanaSearchAddResultOutcome | undefined {
   const searchEntry = getTanaNodeEntry(editor, searchNodeId);
   const definition = searchEntry?.[0].tanaSearchDefinition;
@@ -298,7 +305,7 @@ function addResult(
     return;
   }
 
-  const selectedDate = getSearchResultDay(query) || getTanaToday(getWorkspaceTimeZone(editor));
+  const selectedDate = options.day || getSearchResultDay(query) || getTanaToday(getWorkspaceTimeZone(editor));
   const parsedDate = parseTanaDateValue(selectedDate);
   const day = parsedDate
     ? `${parsedDate.start.getUTCFullYear()}-${String(parsedDate.start.getUTCMonth() + 1).padStart(2, '0')}-${String(parsedDate.start.getUTCDate()).padStart(2, '0')}`
@@ -308,7 +315,7 @@ function addResult(
   let outcome: TanaSearchAddResultOutcome | undefined;
 
   editor.tf.withNewBatch(() => editor.tf.withoutNormalizing(() => {
-    const dayNodeId = editor.getTransforms(TanaTimePlugin).time.goToDay(day);
+    const dayNodeId = editor.getTransforms(TanaTimePlugin).time.ensureDay(day);
     const dayEntry = dayNodeId ? getTanaNodeEntry(editor, dayNodeId) : undefined;
 
     if (!dayEntry) return;
@@ -333,20 +340,27 @@ function addResult(
 
     if (!nodeId) return;
 
-    // The newly-created Daily child becomes the active Plate surface before
-    // any semantic writer runs, so the existing Done transform keeps its
-    // normal interactability boundary as well as its checkbox adapter.
-    editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
-
-    getMaterializablePredicates(query).forEach((predicate) =>
-      materializeSearchPredicate(editor, nodeId, predicate),
-    );
+    const previousFocusedNodeId = editor.getOption(TanaZoomPlugin, 'focusedNodeId');
+    const previousOpenIds = editor.getOption(TogglePlugin, 'openIds');
+    editor.getApi(TanaZoomPlugin).zoom.reveal(nodeId);
+    editor.setOption(TanaZoomPlugin, 'focusedNodeId', nodeId);
+    try {
+      getMaterializablePredicates(query).forEach((predicate) =>
+        materializeSearchPredicate(editor, nodeId, predicate),
+      );
+    } finally {
+      editor.setOption(TanaZoomPlugin, 'focusedNodeId', previousFocusedNodeId);
+      if (previousOpenIds) editor.setOption(TogglePlugin, 'openIds', previousOpenIds);
+    }
 
     const index = buildTanaIndex(editor.children);
     outcome = {
       day,
       dayNodeId: resolvedDayNodeId,
-      matches: runTanaQuery(index, query, { excludeNodeId: searchNodeId })
+      matches: runTanaQuery(index, query, {
+        excludeNodeId: searchNodeId,
+        searchHostId: searchNodeId,
+      })
         .some((node) => node.id === nodeId),
       nodeId,
     };
@@ -361,7 +375,10 @@ export const TanaSearchPlugin = createPlatePlugin({
 })
   .extendEditorTransforms(({ editor }) => ({
   search: {
-    addResult: (nodeId: NodeId) => addResult(editor, nodeId),
+    addResult: (nodeId: NodeId, options?: TanaSearchCreateResultOptions) =>
+      addResult(editor, nodeId, options),
+    createResult: (nodeId: NodeId, options?: TanaSearchCreateResultOptions) =>
+      addResult(editor, nodeId, options),
     addClause: (nodeId: NodeId, clause: TanaQueryClause) =>
       addClause(editor, nodeId, clause),
     define: (nodeId: NodeId) => define(editor, nodeId),

@@ -4,22 +4,14 @@ import { createPlatePlugin, type PlateEditor } from 'platejs/react';
 
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { hasNodeSemantic } from '@/lib/tana/node-semantic';
-import type { NodeId, TanaBlockElement, TanaViewDefinition } from '@/lib/tana/types';
+import type { NodeId, TanaBlockElement, TanaViewDefinition, TanaViewState } from '@/lib/tana/types';
+import { setTanaViewType, writeTanaViewState } from '@/lib/tana/view-state';
 
 export const TANA_VIEW_PLUGIN_KEY = 'tanaView' as const;
 
-type TanaViewPresentationPatch = Partial<
-  Pick<
-    TanaViewDefinition,
-    | 'calendarDateFieldIds'
-    | 'filter'
-    | 'groupFieldId'
-    | 'pagination'
-    | 'sort'
-    | 'toolbarVisible'
-    | 'visibleFieldIds'
-  >
->;
+type TanaViewPresentationPatch = Partial<TanaViewState> & {
+  toolbarVisible?: boolean;
+};
 
 function getTanaNodeEntry(editor: PlateEditor, nodeId: NodeId) {
   const entry = editor.api.node({ at: [], id: nodeId });
@@ -70,7 +62,7 @@ function remove(editor: PlateEditor, nodeId: NodeId) {
 function writeDefinition(
   editor: PlateEditor,
   nodeId: NodeId,
-  patch: Partial<TanaViewDefinition>
+  patch: TanaViewPresentationPatch
 ) {
   const entry = getTanaNodeEntry(editor, nodeId);
 
@@ -78,13 +70,14 @@ function writeDefinition(
     return false;
   }
 
-  const nextDefinition = { ...entry[0].tanaViewDefinition, ...patch };
+  const current = entry[0].tanaViewDefinition;
+  const { toolbarVisible, ...statePatch } = patch;
+  const nextDefinition = writeTanaViewState(current, current.type, statePatch);
+  const withToolbar = toolbarVisible === undefined
+    ? nextDefinition
+    : { ...nextDefinition, toolbarVisible };
 
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) Reflect.deleteProperty(nextDefinition, key);
-  }
-
-  editor.tf.setNodes({ tanaViewDefinition: nextDefinition }, { at: entry[1] });
+  editor.tf.setNodes({ tanaViewDefinition: withToolbar }, { at: entry[1] });
 
   return true;
 }
@@ -100,7 +93,8 @@ function setType(
     return false;
   }
 
-  return writeDefinition(editor, nodeId, { type });
+  editor.tf.setNodes({ tanaViewDefinition: setTanaViewType(entry[0].tanaViewDefinition, type) }, { at: entry[1] });
+  return true;
 }
 
 function update(

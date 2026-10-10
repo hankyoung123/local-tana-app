@@ -201,16 +201,37 @@ export type TanaViewPagination = {
   pageSize?: number;
 };
 
+export type TanaViewType =
+  | "calendar"
+  | "cards"
+  | "list"
+  | "outline"
+  | "side-menu"
+  | "table"
+  | "tabs";
+
+/** Presentation settings that belong to one concrete View renderer. */
+export type TanaViewState = {
+  calendarDateFieldIds?: readonly NodeId[];
+  filter?: TanaViewFilter;
+  groupFieldId?: NodeId;
+  pagination?: TanaViewPagination;
+  sort?: readonly TanaViewSortCriterion[];
+  visibleFieldIds?: readonly NodeId[];
+};
+
 export type TanaViewDefinition = {
+  /** Legacy flat settings are read for backwards compatibility only. */
   calendarDateFieldIds?: readonly NodeId[];
   filter?: TanaViewFilter;
   groupFieldId?: NodeId;
   pagination?: TanaViewPagination;
   sort?: readonly TanaViewSortCriterion[];
   toolbarVisible?: boolean;
-  type:
-    "calendar" | "cards" | "list" | "outline" | "side-menu" | "table" | "tabs";
+  type: TanaViewType;
   visibleFieldIds?: readonly NodeId[];
+  /** Saved renderer-specific settings. New writes use this map. */
+  states?: Partial<Record<TanaViewType, TanaViewState>>;
 };
 
 /**

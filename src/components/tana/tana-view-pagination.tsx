@@ -3,14 +3,15 @@
 import { useEditorRef } from 'platejs/react';
 
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
-import type { TanaNode, TanaViewProjection } from '@/lib/tana';
+import { getTanaViewState, type TanaNode, type TanaViewProjection } from '@/lib/tana';
 
 /** Persisted page selection controls a derived slice only; it never caches results. */
 export function TanaViewPagination({ projection, view }: { projection: TanaViewProjection; view: TanaNode }) {
   const editor = useEditorRef();
+  const state = getTanaViewState(view.viewDefinition);
   if (projection.pageCount <= 1) return null;
   const update = (page: number) => editor.getTransforms(TanaViewPlugin).view.update(view.id, {
-    pagination: { ...view.viewDefinition?.pagination, page },
+    pagination: { ...state.pagination, page },
   });
   return (
     <nav aria-label="视图分页" className="mt-4 flex items-center justify-end gap-2 text-xs">

@@ -2,6 +2,7 @@ import { ElementApi } from 'platejs';
 import type { PlateEditor } from 'platejs/react';
 
 import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
+import { TanaSearchPlugin } from '@/components/editor/plugins/tana-search-plugin';
 import { buildTanaIndex } from '@/lib/tana/index';
 import { getTanaNodeDescendantPaths } from '@/lib/tana/outliner';
 import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
@@ -14,7 +15,8 @@ import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
 export function createTanaViewNode(
   editor: PlateEditor,
   viewId: NodeId,
-  title = ''
+  title = '',
+  options: { day?: string } = {},
 ): NodeId | undefined {
   const index = buildTanaIndex(editor.children);
   const view = index.nodesById.get(viewId);
@@ -26,10 +28,14 @@ export function createTanaViewNode(
     return editor.getTransforms(TanaSupertagPlugin).supertag.createInstance(viewId);
   }
 
+  if (view.searchDefinition) {
+    return editor.getTransforms(TanaSearchPlugin).search
+      .createResult(viewId, options)?.nodeId;
+  }
+
   const [, path] = entry;
   const node = entry[0] as TanaBlockElement;
-  const isSearch = view.searchDefinition !== undefined;
-  const indent = typeof node.indent === 'number' ? node.indent + (isSearch ? 0 : 1) : isSearch ? 0 : 1;
+  const indent = typeof node.indent === 'number' ? node.indent + 1 : 1;
   const descendants = getTanaNodeDescendantPaths(editor.children, path);
   const insertionPath = [(descendants.at(-1) ?? path)[0] + 1];
   let nodeId: NodeId | undefined;

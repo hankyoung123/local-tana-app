@@ -9,6 +9,7 @@ import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import {
   resolveTanaViewProjection,
+  getTanaViewState,
   type TanaIndex,
   type NodeId,
   type FieldValue,
@@ -60,7 +61,7 @@ export function TanaCardsView({
   const editor = useEditorRef();
   const resolved = projection ?? resolveTanaViewProjection(index, view, results);
   const groupFieldId = view.viewDefinition?.type === 'cards'
-    ? view.viewDefinition.groupFieldId
+    ? getTanaViewState(view.viewDefinition).groupFieldId
     : undefined;
   const grouped = Boolean(groupFieldId);
 
@@ -127,7 +128,7 @@ export function TanaCardsToolbarControls({
 }) {
   const editor = useEditorRef();
   const resolved = resolveTanaViewProjection(index, view, results);
-  const groupFieldId = view.viewDefinition?.groupFieldId;
+  const groupFieldId = getTanaViewState(view.viewDefinition).groupFieldId;
   const { availableFieldIds: fieldIds } = resolved;
 
   return (

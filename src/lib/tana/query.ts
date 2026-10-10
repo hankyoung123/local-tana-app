@@ -40,6 +40,21 @@ export type TanaQueryDiagnostic = {
   predicate?: TanaQueryPredicate;
 };
 
+export type TanaQueryRunStatus = 'ok' | 'broken' | 'too-many-results';
+
+export type TanaQueryEvaluationContext = {
+  /** The persisted Search Node that owns PARENT/GRANDPARENT semantics. */
+  searchHostId?: NodeId;
+};
+
+export type TanaQueryResult = {
+  diagnostics: readonly TanaQueryDiagnostic[];
+  nodes: readonly TanaNode[];
+  status: TanaQueryRunStatus;
+};
+
+export const TANA_QUERY_RESULT_LIMIT = 2500;
+
 export function getFieldDefinition(
   index: TanaIndex,
   fieldId: FieldId,
@@ -402,13 +417,15 @@ export function matchesTanaQueryPredicate(
   index: TanaIndex,
   predicate: TanaQueryPredicate,
   contentNode: TanaNode = contextNode,
+  evaluationContext: TanaQueryEvaluationContext = {},
 ): boolean {
+  const operandContextId = evaluationContext.searchHostId ?? contextNode.id;
   switch (predicate.kind) {
     case 'field-equals':
-      return fieldValuesEqual(predicate, contentNode, index, contextNode.id);
+      return fieldValuesEqual(predicate, contentNode, index, operandContextId);
     case 'field-greater-than':
     case 'field-less-than':
-      return fieldValuesCompare(predicate, contentNode, index, contextNode.id);
+      return fieldValuesCompare(predicate, contentNode, index, operandContextId);
     case 'field-defined':
     case 'has-field':
       return getTanaSystemFieldValue(index, contentNode.id, predicate.fieldId) !== undefined || isFieldDefined(index, contentNode.id, predicate.fieldId);
@@ -424,7 +441,7 @@ export function matchesTanaQueryPredicate(
     case 'date-overlaps': {
       const field = activeFieldDefinition(index, predicate.fieldId);
       if (!field || field.type !== 'date') return false;
-      const expected = resolveDateOperand(index, contextNode.id, predicate.value);
+      const expected = resolveDateOperand(index, operandContextId, predicate.value);
       return expected !== undefined && getDateFieldValues(index, contentNode.id, predicate.fieldId)
         .some((actual) => tanaDateValuesOverlap(actual, expected));
     }
@@ -464,33 +481,50 @@ export function matchesTanaQueryExpression(
   index: TanaIndex,
   expression: TanaQueryExpression,
   contentNode: TanaNode = contextNode,
+  evaluationContext: TanaQueryEvaluationContext = {},
 ): boolean {
   switch (expression.type) {
     case 'predicate':
-      return matchesTanaQueryPredicate(contextNode, index, expression.predicate, contentNode);
+      return matchesTanaQueryPredicate(
+        contextNode,
+        index,
+        expression.predicate,
+        contentNode,
+        evaluationContext,
+      );
     case 'not':
-      return !matchesTanaQueryExpression(contextNode, index, expression.child, contentNode);
+      return !matchesTanaQueryExpression(
+        contextNode,
+        index,
+        expression.child,
+        contentNode,
+        evaluationContext,
+      );
     case 'and':
       return expression.children.every((child) =>
-        matchesTanaQueryExpression(contextNode, index, child, contentNode),
+        matchesTanaQueryExpression(contextNode, index, child, contentNode, evaluationContext),
       );
     case 'or':
       return expression.children.some((child) =>
-        matchesTanaQueryExpression(contextNode, index, child, contentNode),
+        matchesTanaQueryExpression(contextNode, index, child, contentNode, evaluationContext),
       );
   }
 }
 
-/** Runs a Search AST from the derived index; malformed or broken queries fail closed. */
-export function runTanaQuery(
+/** Runs a Search AST with an explicit status instead of silently truncating it. */
+export function evaluateTanaQuery(
   index: TanaIndex,
   expression: unknown,
-  options: { excludeNodeId?: NodeId; limit?: number } = {},
-): TanaNode[] {
+  options: { excludeNodeId?: NodeId; limit?: number; searchHostId?: NodeId } = {},
+): TanaQueryResult {
   const query = migrateLegacyTanaQuery(expression);
-  if (!query || diagnoseTanaQuery(index, query).length > 0) return [];
-  const limit = Math.min(Math.max(options.limit ?? 2500, 0), 2500);
-  if (limit === 0) return [];
+  if (!query) {
+    return { diagnostics: [{ code: 'invalid-ast' }], nodes: [], status: 'broken' };
+  }
+  const diagnostics = diagnoseTanaQuery(index, query);
+  if (diagnostics.length > 0) return { diagnostics, nodes: [], status: 'broken' };
+  const limit = Math.min(Math.max(options.limit ?? TANA_QUERY_RESULT_LIMIT, 0), TANA_QUERY_RESULT_LIMIT);
+  if (limit === 0) return { diagnostics: [], nodes: [], status: 'ok' };
 
   const seen = new Set<NodeId>();
   const results: TanaNode[] = [];
@@ -502,11 +536,24 @@ export function runTanaQuery(
     // Its one canonical target supplies title, Field, Supertag and Done
     // content. The candidate itself is never replaced, so mixed predicates
     // retain both semantics before canonical result de-duplication.
-    if (!matchesTanaQueryExpression(candidate, index, query, contentTarget)) continue;
+    if (!matchesTanaQueryExpression(candidate, index, query, contentTarget, {
+      searchHostId: options.searchHostId,
+    })) continue;
     if (contentTarget.id === options.excludeNodeId || seen.has(contentTarget.id)) continue;
     seen.add(contentTarget.id);
     results.push(contentTarget);
-    if (results.length >= limit) break;
+    if (results.length > TANA_QUERY_RESULT_LIMIT) {
+      return { diagnostics: [], nodes: [], status: 'too-many-results' };
+    }
   }
-  return results;
+  return { diagnostics: [], nodes: results.slice(0, limit), status: 'ok' };
+}
+
+/** Compatibility adapter for callers that only need the derived Node list. */
+export function runTanaQuery(
+  index: TanaIndex,
+  expression: unknown,
+  options: { excludeNodeId?: NodeId; limit?: number; searchHostId?: NodeId } = {},
+): TanaNode[] {
+  return [...evaluateTanaQuery(index, expression, options).nodes];
 }

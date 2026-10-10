@@ -9,6 +9,7 @@ import type {
   TanaViewDefinition,
   TanaViewFilterClause,
 } from './types';
+import { getTanaViewState } from './view-state';
 
 const TITLE_SORT = '$title';
 const DEFAULT_PAGE_SIZE = 100;
@@ -25,6 +26,8 @@ export type TanaViewProjectionGroup = {
   key: string;
   label: string;
   items: readonly TanaViewProjectionItem[];
+  /** Count across the complete filtered collection, before pagination. */
+  total: number;
 };
 
 export type TanaViewProjection = {
@@ -36,7 +39,12 @@ export type TanaViewProjection = {
   pageSize: number;
   total: number;
   visibleFieldIds: readonly NodeId[];
+  diagnostics: readonly TanaViewDiagnostic[];
 };
+
+export type TanaViewDiagnostic =
+  | { code: 'missing-field'; fieldId: NodeId }
+  | { code: 'missing-supertag'; supertagId: NodeId };
 
 function fieldNodes(index: TanaIndex, targetId: NodeId, fieldId: NodeId) {
   return (index.fieldNodesByParent.get(targetId) ?? []).filter(
@@ -63,6 +71,34 @@ function hasUsableField(index: TanaIndex, fieldId: NodeId): boolean {
   return index.nodesById.get(fieldId)?.fieldDefinition !== undefined || isTanaSystemTimeField(fieldId);
 }
 
+export function diagnoseTanaViewFilter(
+  index: TanaIndex,
+  definition: TanaViewDefinition | undefined,
+): readonly TanaViewDiagnostic[] {
+  const diagnostics: TanaViewDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const clause of getTanaViewState(definition).filter?.clauses ?? []) {
+    if ('fieldId' in clause && !hasUsableField(index, clause.fieldId)) {
+      const key = `field:${clause.fieldId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        diagnostics.push({ code: 'missing-field', fieldId: clause.fieldId });
+      }
+    }
+    if (clause.kind === 'has-supertag') {
+      const tag = index.nodesById.get(clause.supertagId);
+      if (!tag?.supertagDefinition) {
+        const key = `tag:${clause.supertagId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          diagnostics.push({ code: 'missing-supertag', supertagId: clause.supertagId });
+        }
+      }
+    }
+  }
+  return diagnostics;
+}
+
 /** Missing field definitions disable the affected filter rather than corrupting a projection. */
 export function matchesTanaViewFilterClause(
   index: TanaIndex,
@@ -74,13 +110,14 @@ export function matchesTanaViewFilterClause(
       return [target.text, resolveTanaNodeTitle(index, target.id)]
         .some((text) => text.toLocaleLowerCase().includes(clause.text.toLocaleLowerCase()));
     case 'has-supertag':
-      return target.supertagIds.includes(clause.supertagId);
+      return !!index.nodesById.get(clause.supertagId)?.supertagDefinition &&
+        target.supertagIds.includes(clause.supertagId);
     case 'field-set':
-      return !hasUsableField(index, clause.fieldId) || hasStoredFieldValue(index, target.id, clause.fieldId);
+      return hasUsableField(index, clause.fieldId) && hasStoredFieldValue(index, target.id, clause.fieldId);
     case 'field-not-set':
-      return !hasUsableField(index, clause.fieldId) || !hasStoredFieldValue(index, target.id, clause.fieldId);
+      return hasUsableField(index, clause.fieldId) && !hasStoredFieldValue(index, target.id, clause.fieldId);
     case 'field-equals':
-      return !hasUsableField(index, clause.fieldId) || fieldValues(index, target.id, clause.fieldId).some((value) => equalFieldValue(value, clause.value));
+      return hasUsableField(index, clause.fieldId) && fieldValues(index, target.id, clause.fieldId).some((value) => equalFieldValue(value, clause.value));
   }
 }
 
@@ -89,7 +126,7 @@ export function matchesTanaViewFilter(
   target: TanaNode,
   definition: TanaViewDefinition | undefined
 ): boolean {
-  const filter = definition?.filter;
+  const filter = getTanaViewState(definition).filter;
   if (!filter || filter.clauses.length === 0) return true;
 
   const match = (clause: TanaViewFilterClause) =>
@@ -126,7 +163,7 @@ export function sortTanaViewProjectionItems(
   items: readonly TanaViewProjectionItem[],
   definition: TanaViewDefinition | undefined
 ): TanaViewProjectionItem[] {
-  const criteria = definition?.sort?.filter(
+  const criteria = getTanaViewState(definition).sort?.filter(
     (criterion) => criterion.fieldId === TITLE_SORT || hasUsableField(index, criterion.fieldId)
   ) ?? [];
 
@@ -179,9 +216,9 @@ function getGroupValue(index: TanaIndex, targetId: NodeId, fieldId: NodeId): Fie
 }
 
 function paginate<T>(items: readonly T[], definition: TanaViewDefinition | undefined) {
-  const pageSize = definition?.pagination?.pageSize ?? DEFAULT_PAGE_SIZE;
+  const pageSize = getTanaViewState(definition).pagination?.pageSize ?? DEFAULT_PAGE_SIZE;
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const configuredPage = definition?.pagination?.page ?? 0;
+  const configuredPage = getTanaViewState(definition).pagination?.page ?? 0;
   const page = Math.min(configuredPage, pageCount - 1);
   return {
     items: items.slice(page * pageSize, page * pageSize + pageSize),
@@ -202,31 +239,25 @@ export function resolveTanaViewProjection(
   source: readonly TanaNode[]
 ): TanaViewProjection {
   const definition = view.viewDefinition;
+  const state = getTanaViewState(definition);
   const allItems = source.flatMap((occurrence) => {
     const target = getTanaProjectionTarget(index, occurrence.id);
     return target ? [{ occurrence, target }] : [];
   });
-  const filtered = allItems.filter(({ target }) => matchesTanaViewFilter(index, target, definition));
+  const diagnostics = diagnoseTanaViewFilter(index, definition);
+  const filtered = diagnostics.length > 0
+    ? []
+    : allItems.filter(({ target }) => matchesTanaViewFilter(index, target, definition));
   const sorted = sortTanaViewProjectionItems(index, filtered, definition);
   const paged = paginate(sorted, definition);
-  const configuredFields = [
-    ...(definition?.visibleFieldIds ?? []),
-    ...(definition?.sort?.flatMap((criterion) => criterion.fieldId === TITLE_SORT ? [] : [criterion.fieldId]) ?? []),
-    ...(definition?.groupFieldId ? [definition.groupFieldId] : []),
-    ...(definition?.calendarDateFieldIds ?? []),
-  ];
-  const availableFieldIds = getTanaViewAvailableFieldIds(index, allItems, configuredFields);
-  const visibleFieldIds = definition?.visibleFieldIds
-    ? availableFieldIds.filter((fieldId) => definition.visibleFieldIds?.includes(fieldId))
-    : availableFieldIds;
   const groupFieldId =
-    (definition?.type === 'outline' || definition?.type === 'cards') &&
-    definition.groupFieldId &&
-    hasUsableField(index, definition.groupFieldId)
-      ? definition.groupFieldId
+    (definition?.type === 'outline' || definition?.type === 'cards' || definition?.type === 'list') &&
+    state.groupFieldId &&
+    hasUsableField(index, state.groupFieldId)
+      ? state.groupFieldId
       : undefined;
   const groupsByKey = new Map<string, { fieldValue?: FieldValue; items: TanaViewProjectionItem[]; label: string }>();
-  for (const item of paged.items) {
+  for (const item of sorted) {
     const fieldValue = groupFieldId ? getGroupValue(index, item.target.id, groupFieldId) : undefined;
     const key = fieldValue ? `${fieldValue.type}:${String(fieldValue.value)}` : '__unset__';
     const label = groupFieldId
@@ -236,15 +267,32 @@ export function resolveTanaViewProjection(
     group.items.push(item);
     groupsByKey.set(key, group);
   }
+  const pageIds = new Set(paged.items.map(({ occurrence }) => occurrence.id));
+  const configuredFields = [
+    ...(state.visibleFieldIds ?? []),
+    ...(state.sort?.flatMap((criterion) => criterion.fieldId === TITLE_SORT ? [] : [criterion.fieldId]) ?? []),
+    ...(state.groupFieldId ? [state.groupFieldId] : []),
+    ...(state.calendarDateFieldIds ?? []),
+  ];
+  const availableFieldIds = getTanaViewAvailableFieldIds(index, allItems, configuredFields);
+  const visibleFieldIds = state.visibleFieldIds
+    ? availableFieldIds.filter((fieldId) => state.visibleFieldIds?.includes(fieldId))
+    : availableFieldIds;
 
   return {
     availableFieldIds,
-    groups: Array.from(groupsByKey, ([key, group]) => ({ key, ...group })),
+    groups: Array.from(groupsByKey, ([key, group]) => ({
+      key,
+      ...group,
+      items: group.items.filter(({ occurrence }) => pageIds.has(occurrence.id)),
+      total: group.items.length,
+    })).filter((group) => group.items.length > 0),
     items: paged.items,
     page: paged.page,
     pageCount: paged.pageCount,
     pageSize: paged.pageSize,
     total: sorted.length,
     visibleFieldIds,
+    diagnostics,
   };
 }

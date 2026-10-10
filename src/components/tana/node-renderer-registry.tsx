@@ -39,7 +39,7 @@ import type {
 import {
   getFieldValueCandidates,
   getTanaProjectionTarget,
-  runTanaQuery,
+  evaluateTanaQuery,
   isTanaNodeInTrash,
   isTanaFieldNodePresentationHidden,
   getSupertagTemplateFields,
@@ -197,8 +197,26 @@ export function getInlineSearchResults(
   if (!expanded || !searchNodeId) return [];
   const search = getTanaProjectionTarget(index, searchNodeId);
   return search?.searchDefinition
-    ? runTanaQuery(index, search.searchDefinition.query, { excludeNodeId: search.id })
+    ? evaluateTanaQuery(index, search.searchDefinition.query, {
+      excludeNodeId: search.id,
+      searchHostId: search.id,
+    }).nodes
     : [];
+}
+
+function getInlineSearchEvaluation(
+  index: TanaIndex,
+  searchNodeId: NodeId | undefined,
+  expanded: boolean,
+) {
+  if (!expanded || !searchNodeId) return { nodes: [], status: 'ok' as const };
+  const search = getTanaProjectionTarget(index, searchNodeId);
+  return search?.searchDefinition
+    ? evaluateTanaQuery(index, search.searchDefinition.query, {
+      excludeNodeId: search.id,
+      searchHostId: search.id,
+    })
+    : { nodes: [], status: 'ok' as const };
 }
 
 function SearchRenderer({ element, index }: TanaNodeBlockRendererProps) {
@@ -206,7 +224,8 @@ function SearchRenderer({ element, index }: TanaNodeBlockRendererProps) {
   const openIds = usePluginOption(TogglePlugin, 'openIds');
   const nodeId = typeof element.id === 'string' ? element.id : undefined;
   const expanded = !!nodeId && openIds?.has(nodeId) === true;
-  const results = getInlineSearchResults(index, nodeId, expanded);
+  const evaluation = getInlineSearchEvaluation(index, nodeId, expanded);
+  const results = evaluation.nodes;
 
   if (!nodeId) return null;
 
@@ -223,7 +242,15 @@ function SearchRenderer({ element, index }: TanaNodeBlockRendererProps) {
       </button>
       {expanded && (
         <div className="ml-4 border-l border-[var(--tana-divider)] pl-2">
-          {results.length === 0 ? (
+          {evaluation.status === 'too-many-results' ? (
+            <p className="py-1 text-xs text-[var(--tana-text-tertiary)]" role="status">
+              结果超过 2500 条，请缩小查询范围
+            </p>
+          ) : evaluation.status === 'broken' ? (
+            <p className="py-1 text-xs text-[var(--tana-text-tertiary)]" role="status">
+              搜索条件已失效，请修复查询
+            </p>
+          ) : results.length === 0 ? (
             <p className="py-1 text-xs text-[var(--tana-text-tertiary)]">暂无匹配节点</p>
           ) : results.map((result) => (
             <NodeProjection

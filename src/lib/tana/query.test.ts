@@ -10,6 +10,7 @@ import {
   describeTanaQueryClause,
   describeTanaQueryExpression,
   diagnoseTanaQuery,
+  evaluateTanaQuery,
   isTanaQueryPredicateValid,
   runTanaQuery,
 } from "./query";
@@ -592,16 +593,44 @@ describe("runTanaQuery", () => {
     );
   });
 
-  test("caps derived Search results at 2500 and excludes the owning Search", () => {
+  test("reports overflow instead of silently returning a partial result set", () => {
     const many = buildTanaIndex(Array.from({ length: 2502 }, (_, number) => ({
       children: [{ text: `Result ${number}` }],
       id: `result-${number}`,
       type: "p",
     })));
-    assert.equal(runTanaQuery(many, createAndQuery()).length, 2500);
-    assert.equal(runTanaQuery(many, createAndQuery(), { excludeNodeId: "result-0" })[0]?.id, "result-1");
+    assert.deepEqual(runTanaQuery(many, createAndQuery()), []);
+    assert.equal(evaluateTanaQuery(many, createAndQuery()).status, 'too-many-results');
+    assert.deepEqual(evaluateTanaQuery(many, createAndQuery(), { excludeNodeId: "result-0" }).nodes, []);
   });
 
+});
+
+test('resolves PARENT and GRANDPARENT relative to the Search Host, not each candidate occurrence', () => {
+  const index = buildTanaIndex([
+    { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: 'p' },
+    { children: [{ text: 'Day' }], id: 'day', tanaTime: { unit: 'day', value: '2026-09-15' }, type: 'p' },
+    { children: [{ text: 'Search' }], id: 'search', indent: 1, tanaSearchDefinition: { query: createAndQuery([
+      { fieldId: 'due', kind: 'field-equals', value: { ancestor: 'parent', kind: 'calendar-context' } },
+    ]) }, type: 'p' },
+    { children: [{ text: 'Task' }], id: 'task', type: 'p' },
+    { children: [{ text: '' }], id: 'task-due', indent: 1, tanaFieldId: 'due', type: 'p' },
+    { children: [{ text: '2026-09-15' }], id: 'task-due-value', indent: 2, tanaFieldValueType: 'date', type: 'p' },
+  ]);
+
+  assert.deepEqual(
+    evaluateTanaQuery(index, index.nodesById.get('search')!.searchDefinition!.query, {
+      excludeNodeId: 'search',
+      searchHostId: 'search',
+    }).nodes.map(({ id }) => id),
+    ['task'],
+  );
+  assert.deepEqual(
+    evaluateTanaQuery(index, index.nodesById.get('search')!.searchDefinition!.query, {
+      excludeNodeId: 'search',
+    }).nodes,
+    [],
+  );
 });
 
 test('runs numeric/date comparisons, completion, semantic, regex and grandparent predicates', () => {

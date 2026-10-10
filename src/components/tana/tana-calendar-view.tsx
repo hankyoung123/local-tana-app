@@ -33,6 +33,7 @@ import {
 } from '@/lib/tana/time';
 import {
   getTanaProjectionTarget,
+  getTanaViewState,
   getTanaViewFieldValueLabel,
   isTanaNodeActive,
   resolveTanaNodeTitle,
@@ -91,7 +92,7 @@ export function createTanaCalendarNode(
 ): NodeId | undefined {
   let nodeId: NodeId | undefined;
   editor.tf.withNewBatch(() => {
-    nodeId = createTanaViewNode(editor, viewId);
+    nodeId = createTanaViewNode(editor, viewId, '', { day });
     if (nodeId) setTanaCalendarDate(editor, nodeId, fieldId, day);
   });
   return nodeId;
@@ -191,7 +192,7 @@ export function moveTanaCalendarCursor(mode: CalendarMode, cursor: TanaDay, delt
 
 function selectCalendarDateFieldIds(index: TanaIndex, view: TanaNode, results: readonly TanaNode[]) {
   const available = getTanaDateFieldIds(index, results);
-  const configured = view.viewDefinition?.calendarDateFieldIds;
+  const configured = getTanaViewState(view.viewDefinition).calendarDateFieldIds;
   return configured
     ? configured.filter((fieldId) => available.includes(fieldId))
     : available;

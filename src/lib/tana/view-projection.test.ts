@@ -111,7 +111,8 @@ describe('shared Tana View projection', () => {
     }, source);
     assert.deepEqual(itemIds(withStatus), ['alpha', 'beta']);
     assert.deepEqual(itemIds(noDue), ['beta']);
-    assert.deepEqual(itemIds(missing), ['alpha', 'beta']);
+    assert.deepEqual(itemIds(missing), []);
+    assert.deepEqual(missing.diagnostics, [{ code: 'missing-field', fieldId: 'missing' }]);
   });
 
   test('treats an empty materialized Value as unset and invalid stored content as set', () => {
@@ -144,6 +145,25 @@ describe('shared Tana View projection', () => {
     assert.equal(projection.total, 101);
     assert.equal(projection.pageCount, 2);
     assert.deepEqual(rows, before);
+  });
+
+  test('groups the complete result set before pagination and keeps full group counts', () => {
+    const rows: Value = [
+      { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'cards', states: { cards: { groupFieldId: 'status', pagination: { pageSize: 1 } } } }, type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'A' }], id: 'a', type: KEYS.p },
+      { children: [{ text: '' }], id: 'a-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Ready' }], id: 'a-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'B' }], id: 'b', type: KEYS.p },
+      { children: [{ text: '' }], id: 'b-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Ready' }], id: 'b-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+    ];
+    const index = buildTanaIndex(rows);
+    const projection = resolveTanaViewProjection(index, index.nodesById.get('view')!, [index.nodesById.get('a')!, index.nodesById.get('b')!]);
+    assert.equal(projection.items.length, 1);
+    assert.equal(projection.groups[0]?.items.length, 1);
+    assert.equal(projection.groups[0]?.total, 2);
+    assert.equal(projection.groups[0]?.label, 'Ready');
   });
 
   test('exposes derived system time fields through the shared field read path', () => {

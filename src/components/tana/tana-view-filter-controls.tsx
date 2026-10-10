@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   getTanaViewAvailableFieldIds,
+  getTanaViewState,
   getTanaSystemFieldDefinition,
   TANA_SYSTEM_TIME_FIELD_IDS,
   getTanaViewFieldLabel,
@@ -62,7 +63,7 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
       const target = index.nodesById.get(occurrence.referenceTargetId ?? occurrence.id);
       return target && target.referenceTargetId === undefined ? [{ occurrence, target }] : [];
     }),
-    view.viewDefinition?.visibleFieldIds
+    getTanaViewState(view.viewDefinition).visibleFieldIds
   );
   const fields = Array.from(new Set([
     ...availableFields,
@@ -76,8 +77,9 @@ export function TanaViewFilterControls({ index, results, view }: { index: TanaIn
   const [fieldId, setFieldId] = React.useState<NodeId | undefined>(fields[0]);
   const [supertagId, setSupertagId] = React.useState<NodeId | undefined>(tags[0]?.id);
   const [value, setValue] = React.useState('');
-  const clauses = view.viewDefinition?.filter?.clauses ?? [];
-  const mode = view.viewDefinition?.filter?.mode ?? 'and';
+  const state = getTanaViewState(view.viewDefinition);
+  const clauses = state.filter?.clauses ?? [];
+  const mode = state.filter?.mode ?? 'and';
   const add = (clause: TanaViewFilterClause) =>
     editor.getTransforms(TanaViewPlugin).view.update(view.id, {
       filter: { clauses: [...clauses, clause], mode },

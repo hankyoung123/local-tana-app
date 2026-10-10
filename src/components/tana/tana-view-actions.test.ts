@@ -23,18 +23,24 @@ function editor(value: Value) {
 }
 
 describe('View collection add actions', () => {
-  test('ordinary View adds a real direct canonical child and Search adds a canonical sibling rather than a result child', () => {
+  test('ordinary View adds a direct child and Search adds a canonical Daily result rather than a result child', () => {
     const ordinary = editor([{ children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'table' }, type: KEYS.p }]);
     const rowId = createTanaViewNode(ordinary, 'view');
     assert.ok(rowId);
     assert.equal(ordinary.children[1]?.indent, 1);
     assert.equal(buildTanaIndex(ordinary.children).parentNodeIds.get(rowId!), 'view');
 
-    const search = editor([{ children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: { children: [], type: 'and' } }, tanaViewDefinition: { type: 'table' }, type: KEYS.p }]);
+    const search = editor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
+      { children: [{ text: 'Search' }], id: 'search', indent: 2, tanaSearchDefinition: { query: { children: [], type: 'and' } }, tanaViewDefinition: { type: 'table' }, type: KEYS.p },
+    ]);
     const resultId = createTanaViewNode(search, 'search');
     assert.ok(resultId);
-    assert.equal(search.children[1]?.indent, 0);
-    assert.equal(buildTanaIndex(search.children).parentNodeIds.get(resultId!), undefined);
+    const searchIndex = buildTanaIndex(search.children);
+    const parentId = searchIndex.parentNodeIds.get(resultId!);
+    assert.ok(parentId);
+    assert.equal(searchIndex.nodesById.get(parentId!)?.time?.unit, 'day');
     assert.equal(search.children.some((node) => node.id === resultId && node.tanaSearchDefinition !== undefined), false);
   });
 
@@ -67,11 +73,13 @@ describe('View collection add actions', () => {
     assert.deepEqual(index.fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
   });
 
-  test('a Search + Calendar View add remains a canonical sibling before its Date Field writer runs', () => {
+  test('a Search + Calendar View add uses the Search Daily result writer before its Date Field writer runs', () => {
     const calendar = editor([
+      { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
+      { children: [{ text: 'Daily' }], id: 'daily', indent: 1, tanaSystemNode: 'daily-notes', type: KEYS.p },
       { children: [{ text: 'Due' }], id: 'due', tanaFieldDefinition: { type: 'date' }, type: KEYS.p },
       {
-        children: [{ text: 'Search calendar' }], id: 'search-calendar', type: KEYS.p,
+        children: [{ text: 'Search calendar' }], id: 'search-calendar', indent: 2, type: KEYS.p,
         tanaSearchDefinition: { query: { children: [], type: 'and' } },
         tanaViewDefinition: { calendarDateFieldIds: ['due'], type: 'calendar' },
       },
@@ -79,8 +87,9 @@ describe('View collection add actions', () => {
 
     const nodeId = createTanaCalendarNode(calendar, 'search-calendar', 'due', '2026-09-18');
     assert.ok(nodeId);
-    assert.equal(buildTanaIndex(calendar.children).parentNodeIds.get(nodeId!), undefined);
-    assert.deepEqual(buildTanaIndex(calendar.children).fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
+    const calendarIndex = buildTanaIndex(calendar.children);
+    assert.equal(calendarIndex.nodesById.get(calendarIndex.parentNodeIds.get(nodeId!)!)?.time?.unit, 'day');
+    assert.deepEqual(calendarIndex.fieldNodesByParent.get(nodeId!)?.[0]?.values, [{ type: 'date', value: '2026-09-18' }]);
     calendar.tf.undo();
     assert.equal(buildTanaIndex(calendar.children).nodesById.has(nodeId!), false);
   });

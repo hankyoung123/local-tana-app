@@ -26,7 +26,7 @@ import {
   getFieldValueCandidates,
   isTanaNodeActive,
   migrateLegacyTanaQuery,
-  runTanaQuery,
+  evaluateTanaQuery,
   resolveTanaCollectionSource,
   type FieldDefinition,
   type FieldValue,
@@ -181,12 +181,17 @@ export function TanaSearchDefinitionEditor({
   const diagnostics = diagnoseTanaQuery(index, query);
 
   const runOnce = () => {
-    const results = runTanaQuery(index, query, { excludeNodeId: nodeId });
+    const result = evaluateTanaQuery(index, query, {
+      excludeNodeId: nodeId,
+      searchHostId: nodeId,
+    });
 
     setRunSummary(
       diagnostics.length > 0
         ? "当前诊断会阻止搜索运行。"
-        : `本次运行得到 ${results.length} 个结果。`,
+        : result.status === 'too-many-results'
+          ? '结果超过 2500 条，请缩小查询范围。'
+          : `本次运行得到 ${result.nodes.length} 个结果。`,
     );
   };
 

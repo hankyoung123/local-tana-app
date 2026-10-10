@@ -23,9 +23,9 @@ import { TanaZoomPlugin } from "@/components/editor/plugins/tana-zoom-plugin";
 import { TanaWorkspacePlugin } from "@/components/editor/plugins/tana-workspace-plugin";
 import {
   getActiveSupertagInstances,
+  evaluateTanaQuery,
   getTanaProjectionTarget,
   isTanaNodeActive,
-  runTanaQuery,
   type NodeId,
   type TanaIndex,
   type TanaSidebarTopItem,
@@ -234,16 +234,17 @@ export function TanaSidebar({
   const pinned = pinnedIds.flatMap((id) => {
     const target = getTanaProjectionTarget(index, id);
     if (!target) return [];
-    const results = target.searchDefinition
-      ? runTanaQuery(index, target.searchDefinition.query, {
+    const evaluation = target.searchDefinition
+      ? evaluateTanaQuery(index, target.searchDefinition.query, {
           excludeNodeId: target.id,
           limit: 12,
+          searchHostId: target.id,
         })
-      : (index.childrenByParent.get(target.id) ?? []).flatMap((childId) => {
+      : { nodes: (index.childrenByParent.get(target.id) ?? []).flatMap((childId) => {
           const child = index.nodesById.get(childId);
           return child && isTanaNodeActive(index, child.id) ? [child] : [];
-        });
-    return [{ target, results }];
+        }), status: 'ok' as const };
+    return [{ target, results: evaluation.nodes, status: evaluation.status }];
   });
   const visible = orderedItems
     .filter((item) => item !== "supertags" || supertags.length > 0)
@@ -510,7 +511,7 @@ export function TanaSidebar({
           .map(renderTopItem)}
         {pinned.length > 0 && <SidebarSection title="固定">
           <div className="space-y-0.5">
-            {pinned.map(({ target, results }) => (
+            {pinned.map(({ target, results, status }) => (
               <div key={target.id}>
                 <div className="flex items-center">
                   <SidebarButton
@@ -547,12 +548,21 @@ export function TanaSidebar({
                         .toggle.toggleIds([target.id], !openIds.has(target.id))
                     }
                   >
-                    {openIds.has(target.id) ? "收起" : "展开"} ({results.length}
-                    )
+                    {openIds.has(target.id) ? "收起" : "展开"} ({status === 'too-many-results' ? '2500+' : results.length})
                   </button>
                 )}
+                {openIds.has(target.id) && status === 'too-many-results' && (
+                  <p className="ml-5 py-1 text-[10px] text-[var(--tana-text-tertiary)]" role="status">
+                    结果超过 2500 条，请缩小查询范围
+                  </p>
+                )}
+                {openIds.has(target.id) && status === 'broken' && (
+                  <p className="ml-5 py-1 text-[10px] text-[var(--tana-text-tertiary)]" role="status">
+                    搜索条件已失效，请修复查询
+                  </p>
+                )}
                 {openIds.has(target.id) &&
-                  target.searchDefinition &&
+                  target.searchDefinition && status === 'ok' &&
                   results.map((result) => (
                     <SidebarButton
                       className="pl-6"

@@ -13,5 +13,6 @@ export * from './tana/workspace-ui';
 export * from './tana/capture';
 export * from './tana/view-source';
 export * from './tana/view-projection';
+export * from './tana/view-state';
 
 export * from './tana/query-ast';
