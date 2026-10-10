@@ -20,3 +20,4 @@
 | 2026-10-10 21:16–21:24 +08:00 | Attempted static JavaScript graph of the shipped desktop bundle | 48 scripts reached parser; Node heap exhausted at 4GB and 8GB, no static coverage claim made |
 | 2026-10-10 22:35 +08:00 | Reconnected Codex and verified the registered REA MCP server | `binary_session`: REA 6.3.0, protocol `2025-06-18`, catalog 139 tools |
 | 2026-10-10 22:36–22:44 +08:00 | Re-captured Search summary, Query builder, and Search operators through `mcp__rea__...` | `ev_0df0f7a9...`, `ev_230ac644...`, `ev_f6dd390e...`; exported the local-only `/tmp/tana-rea-evidence-2026-10-10.json` |
+| 2026-10-10 22:48 +08:00 | Retried `analyze_javascript_application` through the restarted MCP | Provider returned `Transport closed`; no JavaScript graph was accepted as evidence |
