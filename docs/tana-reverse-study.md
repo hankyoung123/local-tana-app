@@ -19,6 +19,22 @@
 - 顶栏按钮与窗口状态：`ev_0972918f3879554fc88ec27920be5b718ad0a4b931a18af2f28630ebe513ad40`。
 - Search Query builder：`ev_77b212011174c2974d2d31b3a44bc786883aeb3e3b75a7e15df46de9d18866d9`。
 
+## 证据到产品模型
+
+```mermaid
+flowchart LR
+  T[Tana Outliner.app\nPID 93768 / Window 4241] --> R[REA native UI capture]
+  R --> N[Navigation state machine\nfull → mini → hidden]
+  R --> V[View projection controls\nDisplay / Group / Sort / Filter]
+  R --> Q[Search AST surface\nAND / OR / NOT + Run once]
+  N --> S[Golden Scenarios]
+  V --> S
+  Q --> S
+  S --> P[Local Tana Search & Views\ncanonical Plate nodes + read-only TanaIndex]
+```
+
+这条链路只把 Evidence 中实际观察到的 UI 行为作为事实；Search host context、broken filter、结果容量和跨 View 写入路径属于待在本项目中用 Golden Scenarios 验证的产品约束，不把静态推断写成原版运行事实。
+
 ## 已观察行为
 
 ### 导航状态是单一三态循环
