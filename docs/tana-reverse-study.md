@@ -106,3 +106,9 @@ View 工具栏的四个配置入口分别打开独立面板：Display 按 User-d
 - 原版当前窗口显示 `WORKING OFFLINE`，本轮没有把私有同步协议、账号数据或网络请求当作已观察事实。
 - REA 的 `analyze-javascript-application` 已对桌面包启动，但该版本的 48 个打包脚本在静态 AST 投影阶段耗尽 Node 堆（分别在 CLI 的 4GB/8GB 上限复现）；重启后通过 MCP provider 重试时返回 `Transport closed`，未生成可用应用图。因此不能把未完成的静态图误写成覆盖结论。原生 UI Evidence 仍然有效。
 - 原版 Electron CDP 端口 `127.0.0.1:8262` 要求 Bearer OAuth；当前会话未取得该授权，所以没有绕过认证读取页面脚本或私有网络数据。
+
+### 静态分析分层复测
+
+后续把 Tana 展开包拆成主进程、preload 两个局部 artifact 后，REA CLI 已成功完成静态图重建：主进程 Evidence `ev_2b5e28f33c74ddf7d1f7bc318bbe652397cd0d605f702612747e9154e9a0e53c`，包含 2 个 BrowserWindow、28 个 IPC operation、18 个字面量 channel 和 27 个 main handler；preload Evidence `ev_ba033c3063fc54b7dedee27e560e003c64f27e3bd28187d64cccc1a2686e9977`，识别出 1 个 contextBridge、20 个暴露成员和 6 个 renderer transmission。基于主进程 Evidence 对 `quick-capture:searchNodes` 做本地 trace 也已完成，Evidence 为 `ev_b832b1a97b1ec0d54ffb80e51ca53617d110c75b9271cafcda70aa72a37d6be3`，得到 224 个节点、908 条边和 79 条 terminal path。
+
+这说明内存与 `Transport closed` 的解决办法是把静态分析切成运行边界，并把完整 Evidence 保存到本地后再做定向 trace；它解决了工具可用性，但不会凭空合并所有 renderer chunk 的跨文件身份。详细命令、统计和限制记录在 [`docs/rea-static-analysis-runbook.md`](./rea-static-analysis-runbook.md)。
