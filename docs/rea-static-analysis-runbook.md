@@ -113,7 +113,7 @@ Tana 当前包实际包含 16 个 `build/assets/*.js` renderer chunk、1 个共�
 | `notification` | `onNotification`, `sendNotificationEvent` | `notification` |
 | `findInPage` | `findInPage`, `focus`, `onFoundInPage` | channel 名由动态表达式计算，REA 保留为 unknown |
 
-逐项 renderer Evidence ID 已记录在本机 `/tmp/tana-chunk-manifest.json`，窗口 preload Evidence ID 在 `/tmp/tana-window-preload-manifest.json`；这些临时文件没有提交，因为它们包含大体量图数据。已对主进程的 `quick-capture:listTags`、`quick-capture:getTagSchema`、`quick-capture:listWorkspaces`、`voice-capture`、`custom-keybindings`、`find-in-page`、`real-time-audio-menu`、`notification` 和 `local-api-settings` 做了定向 trace；每个 seed 均唯一命中，但源图 coverage 仍标记为 partial，不能把静态可达性当成运行时已执行。
+逐项 renderer Evidence ID 已记录在本机 `/tmp/tana-chunk-manifest.json`，窗口 preload Evidence ID 在 `/tmp/tana-window-preload-manifest.json`；这些临时文件没有提交，因为它们包含大体量图数据。主进程图中的 18 个固定 IPC channel 已全部做过定向 trace（包括 Quick Capture、语音、通知、快捷键、Find in Page、Local API、会议、菜单、粘贴和日志通道）；每个 seed 均唯一命中，但源图 coverage 仍标记为 partial，不能把静态可达性当成运行时已执行。
 
 ## 仍然存在的边界
 
