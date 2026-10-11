@@ -145,11 +145,13 @@ export function TanaSearchDefinitionEditor({
   index,
   node,
   nodeId,
+  onDone,
 }: {
   editor: PlateEditor;
   index: TanaIndex;
   node: TanaBlockElement;
   nodeId: NodeId;
+  onDone?: () => void;
 }) {
   const definition = node.tanaSearchDefinition;
   const [runSummary, setRunSummary] = React.useState<string | null>(null);
@@ -229,7 +231,7 @@ export function TanaSearchDefinitionEditor({
             size="sm"
             type="button"
             variant="ghost"
-            onClick={() => editor.tf.focus()}
+            onClick={() => onDone?.() ?? editor.tf.focus()}
           >
             完成
           </Button>
@@ -391,7 +393,9 @@ function QueryGroupEditor({
       <div className="mt-2 space-y-1.5 border-l pl-2">
         {expression.children.map((child, childIndex) => (
           <QueryExpressionEditor
-            key={`${childIndex}:${JSON.stringify(child)}`}
+            // Keep each condition mounted while its value changes so typing
+            // does not reset the predicate form or lose focus.
+            key={childIndex}
             expression={child}
             index={index}
             onChange={(next) => updateChild(childIndex, next)}
@@ -524,7 +528,6 @@ function QueryPredicateRow({
     return (
         <div className="rounded border border-[var(--tana-divider)] bg-[var(--tana-canvas)] p-2">
         <QueryPredicateForm
-          key={JSON.stringify(predicate)}
           index={index}
           initial={predicate}
           onCancel={() => setEditing(false)}

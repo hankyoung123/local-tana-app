@@ -1,4 +1,4 @@
-import { getTanaProjectionTarget } from './index';
+import { getTanaProjectionTarget, isTanaNodeActive } from './index';
 import { getSupertagTemplateFields, getTanaSystemFieldLabel, getTanaSystemFieldValue, isTanaSystemTimeField } from './fields';
 import { resolveTanaNodeTitle } from './title';
 import type {
@@ -33,6 +33,8 @@ export type TanaViewProjectionGroup = {
 export type TanaViewProjection = {
   availableFieldIds: readonly NodeId[];
   groups: readonly TanaViewProjectionGroup[];
+  /** Complete filtered/sorted collection before presentation pagination. */
+  allItems: readonly TanaViewProjectionItem[];
   items: readonly TanaViewProjectionItem[];
   page: number;
   pageCount: number;
@@ -68,7 +70,8 @@ function equalFieldValue(left: FieldValue, right: FieldValue): boolean {
 }
 
 function hasUsableField(index: TanaIndex, fieldId: NodeId): boolean {
-  return index.nodesById.get(fieldId)?.fieldDefinition !== undefined || isTanaSystemTimeField(fieldId);
+  return (isTanaNodeActive(index, fieldId) && index.nodesById.get(fieldId)?.fieldDefinition !== undefined) ||
+    isTanaSystemTimeField(fieldId);
 }
 
 export function diagnoseTanaViewFilter(
@@ -87,7 +90,7 @@ export function diagnoseTanaViewFilter(
     }
     if (clause.kind === 'has-supertag') {
       const tag = index.nodesById.get(clause.supertagId);
-      if (!tag?.supertagDefinition) {
+      if (!tag?.supertagDefinition || !isTanaNodeActive(index, clause.supertagId)) {
         const key = `tag:${clause.supertagId}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -111,6 +114,7 @@ export function matchesTanaViewFilterClause(
         .some((text) => text.toLocaleLowerCase().includes(clause.text.toLocaleLowerCase()));
     case 'has-supertag':
       return !!index.nodesById.get(clause.supertagId)?.supertagDefinition &&
+        isTanaNodeActive(index, clause.supertagId) &&
         target.supertagIds.includes(clause.supertagId);
     case 'field-set':
       return hasUsableField(index, clause.fieldId) && hasStoredFieldValue(index, target.id, clause.fieldId);
@@ -287,6 +291,7 @@ export function resolveTanaViewProjection(
       items: group.items.filter(({ occurrence }) => pageIds.has(occurrence.id)),
       total: group.items.length,
     })).filter((group) => group.items.length > 0),
+    allItems: sorted,
     items: paged.items,
     page: paged.page,
     pageCount: paged.pageCount,

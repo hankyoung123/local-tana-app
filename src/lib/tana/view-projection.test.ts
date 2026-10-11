@@ -142,9 +142,33 @@ describe('shared Tana View projection', () => {
     const projection = resolveTanaViewProjection(index, index.nodesById.get('view')!, Array.from({ length: 101 }, (_, position) => index.nodesById.get(`row-${position}`)!));
 
     assert.equal(projection.items.length, 100);
+    assert.equal(projection.allItems.length, 101);
     assert.equal(projection.total, 101);
     assert.equal(projection.pageCount, 2);
     assert.deepEqual(rows, before);
+  });
+
+  test('fails closed when a configured Field Definition is in Trash', () => {
+    const rows: Value = [
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'task-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'outline' }, type: KEYS.p },
+    ];
+    const index = buildTanaIndex(rows);
+    const view = index.nodesById.get('view')!;
+    const projection = resolveTanaViewProjection(index, {
+      ...view,
+      viewDefinition: {
+        type: 'outline',
+        filter: { mode: 'and', clauses: [{ kind: 'field-set', fieldId: 'status' }] },
+      },
+    }, [index.nodesById.get('task')!]);
+
+    assert.deepEqual(projection.items, []);
+    assert.deepEqual(projection.diagnostics, [{ code: 'missing-field', fieldId: 'status' }]);
   });
 
   test('groups the complete result set before pagination and keeps full group counts', () => {

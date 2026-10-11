@@ -1,6 +1,6 @@
 import type { NodeId, TanaIndex, TanaNode, TanaQueryExpression } from './types';
 
-type SearchRunner = (index: TanaIndex, expression: TanaQueryExpression) => TanaNode[];
+type SearchRunner = (index: TanaIndex, expression: TanaQueryExpression, searchHostId?: NodeId) => TanaNode[];
 
 function isInTrash(index: TanaIndex, nodeId: NodeId): boolean {
   const trashId = index.systemNodeIds.get('trash');
@@ -49,7 +49,7 @@ export function resolveFieldValueCandidates(
         const resolved = target(index, source.id);
         (resolved ? index.childrenByParent.get(resolved.id) ?? [] : []).forEach(add);
       } else if (source.searchDefinition) {
-        try { runSearch(index, source.searchDefinition.query).forEach((node) => add(node.id)); } catch {}
+        runSearch(index, source.searchDefinition.query, source.id).forEach((node) => add(node.id));
       } else add(source.id);
     }
   } else if (definition.type === 'from-supertag' && definition.sourceSupertagId) {

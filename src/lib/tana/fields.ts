@@ -595,7 +595,9 @@ export function getSupertagTemplateFields(
  * sources; none of those sources writes a candidate list into the document.
  */
 export function getFieldValueCandidates(index: TanaIndex, fieldId: NodeId): TanaNode[] {
-  return resolveFieldValueCandidates(index, fieldId, runTanaQuery);
+  return resolveFieldValueCandidates(index, fieldId, (queryIndex, expression, searchHostId) =>
+    runTanaQuery(queryIndex, expression, { searchHostId })
+  );
 }
 
 function formatNodeNames(nodes: readonly TanaNode[]): string {

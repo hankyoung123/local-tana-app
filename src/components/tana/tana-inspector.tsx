@@ -248,6 +248,7 @@ function TanaInspectorPanel({
           index={index}
           node={node.node as TanaBlockElement}
           nodeId={node.id}
+          onDone={onClose}
         />
       )}
 

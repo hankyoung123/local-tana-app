@@ -35,7 +35,6 @@ export function TanaNavigationView({
     const nodeId = createTanaViewNode(editor, view.id);
     if (!nodeId) return;
     setSelectedId(nodeId);
-    editor.getTransforms(TanaZoomPlugin).zoom.to(nodeId);
   };
   const open = () => {
     if (selected?.target.id) editor.getTransforms(TanaZoomPlugin).zoom.to(selected.target.id);
@@ -43,7 +42,7 @@ export function TanaNavigationView({
 
   const navigation = (
     <nav
-      aria-label={type === 'tabs' ? '视图标签' : '视图导航'}
+      aria-label="视图导航"
       className={type === 'tabs'
         ? 'flex min-w-0 flex-1 items-center gap-1 overflow-x-auto border-b border-[var(--tana-divider)] pb-1'
         : 'tana-view-card flex min-w-44 flex-col gap-1 p-2'}
@@ -52,18 +51,35 @@ export function TanaNavigationView({
         const title = resolveTanaNodeTitle(index, target.id) || '未命名节点';
         const active = occurrence.id === selected?.occurrence.id;
         return (
-          <button
-            aria-current={active ? 'page' : undefined}
-            aria-label={`选择 ${title}`}
+          <div
             className={type === 'tabs'
-              ? `shrink-0 rounded-md px-3 py-1.5 text-left text-sm transition-colors ${active ? 'bg-[var(--tana-selected)] text-[var(--tana-text)]' : 'text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]'}`
-              : `flex min-h-8 w-full items-center rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${active ? 'bg-[var(--tana-selected)] text-[var(--tana-text)]' : 'text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]'}`}
+              ? 'flex shrink-0 items-center rounded-md'
+              : 'flex min-h-8 w-full items-center rounded-md'}
             key={occurrence.id}
-            type="button"
-            onClick={() => setSelectedId(occurrence.id)}
           >
-            <span className="min-w-0 flex-1 truncate">{title}</span>
-          </button>
+            <button
+              aria-current={active ? 'page' : undefined}
+              aria-label={`选择 ${title}`}
+              className={type === 'tabs'
+                ? `min-w-0 rounded-l-md px-3 py-1.5 text-left text-sm transition-colors ${active ? 'bg-[var(--tana-selected)] text-[var(--tana-text)]' : 'text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]'}`
+                : `min-w-0 flex-1 rounded-l-md px-2.5 py-1.5 text-left text-sm transition-colors ${active ? 'bg-[var(--tana-selected)] text-[var(--tana-text)]' : 'text-[var(--tana-text-secondary)] hover:bg-[var(--tana-hover)]'}`}
+              type="button"
+              onClick={() => setSelectedId(occurrence.id)}
+            >
+              <span className="block truncate">{title}</span>
+            </button>
+            <button
+              aria-label={`打开 ${title}`}
+              className={type === 'tabs'
+                ? 'grid size-8 shrink-0 place-items-center rounded-r-md text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]'
+                : 'grid size-8 shrink-0 place-items-center rounded-r-md text-[var(--tana-text-tertiary)] hover:bg-[var(--tana-hover)]'}
+              title="打开节点"
+              type="button"
+              onClick={() => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)}
+            >
+              <ArrowUpRightIcon aria-hidden="true" className="size-3.5" />
+            </button>
+          </div>
         );
       })}
       <button

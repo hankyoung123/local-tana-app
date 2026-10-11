@@ -233,13 +233,18 @@ export function TanaCalendarView({
   const workspace = workspaceId ? index.nodesById.get(workspaceId)?.node as { tanaWorkspaceTimeZone?: unknown } | undefined : undefined;
   const today = getTanaToday(typeof workspace?.tanaWorkspaceTimeZone === 'string' ? workspace.tanaWorkspaceTimeZone : 'UTC');
   const resolved = projection ?? resolveTanaViewProjection(index, view, results);
-  const activeDateFieldIds = selectCalendarDateFieldIds(index, view, resolved.items.map(({ occurrence }) => occurrence));
-  const entries = getTanaCalendarEntries(index, resolved.items.map(({ occurrence }) => occurrence), activeDateFieldIds);
+  // Calendar placement must use the complete filtered collection. The shared
+  // projection keeps `items` paginated for list-like renderers, while
+  // `allItems` preserves every matching occurrence for date expansion.
+  const calendarItems = resolved.allItems ?? resolved.items;
+  const calendarResults = calendarItems.map(({ occurrence }) => occurrence);
+  const activeDateFieldIds = selectCalendarDateFieldIds(index, view, calendarResults);
+  const entries = getTanaCalendarEntries(index, calendarResults, activeDateFieldIds);
   const [mode, setMode] = React.useState<CalendarMode>('month');
   const [cursor, setCursor] = React.useState<TanaDay>(entries[0]?.day ?? today);
   const days = calendarDays(mode, cursor, entries);
   const datedIds = new Set(entries.map(({ node }) => node.id));
-  const undated = resolved.items.filter(({ occurrence }) => !datedIds.has(occurrence.id));
+  const undated = calendarItems.filter(({ occurrence }) => !datedIds.has(occurrence.id));
   const writeDate = (nodeId: NodeId, fieldId: NodeId, day: TanaDay) =>
     setTanaCalendarDate(editor, nodeId, fieldId, day);
   const defaultDateFieldId = activeDateFieldIds[0];

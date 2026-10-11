@@ -157,6 +157,7 @@ describe('buildTanaIndex', () => {
   test('derives Internal references from configuration without mixing block or inline References', () => {
     const index = buildTanaIndex([
       { children: [{ text: 'Target Field' }], id: 'target', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
+      { children: [{ text: 'Saved View Field' }], id: 'target2', tanaFieldDefinition: { type: 'plain' }, type: 'p' },
       { children: [{ text: 'Host' }], id: 'host', type: 'p' },
       { children: [{ text: '' }], id: 'occurrence', indent: 1, tanaFieldId: 'target', type: 'p' },
       {
@@ -170,7 +171,16 @@ describe('buildTanaIndex', () => {
       {
         children: [{ text: 'View' }],
         id: 'view',
-        tanaViewDefinition: { type: 'table', groupFieldId: 'target' },
+        tanaViewDefinition: {
+          type: 'table',
+          groupFieldId: 'target',
+          states: {
+            cards: {
+              filter: { mode: 'and', clauses: [{ kind: 'field-set', fieldId: 'target2' }] },
+              visibleFieldIds: ['target2'],
+            },
+          },
+        },
         type: 'p',
       },
       { children: [{ text: 'Block reference' }], id: 'block-reference', tanaReferenceTargetId: 'target', type: 'p' },
@@ -185,6 +195,13 @@ describe('buildTanaIndex', () => {
         { kind: 'supertag', relation: 'extends', sourceNodeId: 'child-tag' },
         { kind: 'view', relation: 'group-field', sourceNodeId: 'view' },
       ]
+    );
+    assert.deepEqual(
+      getTanaInternalReferences(index, 'target2').map(({ kind, relation, sourceNodeId }) => ({ kind, relation, sourceNodeId })),
+      [
+        { kind: 'view', relation: 'visible-field', sourceNodeId: 'view' },
+        { kind: 'view', relation: 'filter:field-set', sourceNodeId: 'view' },
+      ],
     );
   });
 

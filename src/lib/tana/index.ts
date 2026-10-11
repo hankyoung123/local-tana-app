@@ -571,7 +571,9 @@ export function buildTanaIndex(document: Value): TanaIndex {
         ? undefined
         : index.nodesById.get(field.fieldId)?.fieldDefinition;
       const candidateIds = definition && (definition.type === 'options' || definition.type === 'from-supertag')
-        ? new Set(resolveFieldValueCandidates(index, field.fieldId, runTanaQuery).map(({ id }) => id))
+        ? new Set(resolveFieldValueCandidates(index, field.fieldId, (queryIndex, expression, searchHostId) =>
+          runTanaQuery(queryIndex, expression, { searchHostId })
+        ).map(({ id }) => id))
         : undefined;
       const validationIssuesByValueNodeId = new Map(
         field.valueNodeIds.map((valueNodeId) => {
@@ -945,31 +947,37 @@ export function getTanaInternalReferences(
     }
     const view = node.viewDefinition;
     if (view) {
-      addInternalReference(references, seen, node.id, view.groupFieldId, 'view', 'group-field', requestedTargetId);
-      (view.calendarDateFieldIds ?? []).forEach((fieldId) =>
-        addInternalReference(references, seen, node.id, fieldId, 'view', 'calendar-field', requestedTargetId)
-      );
-      (view.visibleFieldIds ?? []).forEach((fieldId) =>
-        addInternalReference(references, seen, node.id, fieldId, 'view', 'visible-field', requestedTargetId)
-      );
-      (view.sort ?? []).forEach((criterion) =>
-        addInternalReference(
-          references,
-          seen,
-          node.id,
-          criterion.fieldId === '$title' ? undefined : criterion.fieldId,
-          'view',
-          'sort-field',
-          requestedTargetId
-        )
-      );
-      (view.filter?.clauses ?? []).forEach((clause) => {
-        if ('fieldId' in clause) {
-          addInternalReference(references, seen, node.id, clause.fieldId, 'view', `filter:${clause.kind}`, requestedTargetId);
-        }
-        if ('supertagId' in clause) {
-          addInternalReference(references, seen, node.id, clause.supertagId, 'view', `filter:${clause.kind}`, requestedTargetId);
-        }
+      // View settings are saved per renderer. Keep legacy flat settings in
+      // the reference graph while also traversing every concrete state so
+      // deleting or renaming a Field cannot leave hidden dangling links.
+      const viewStates = [view, ...Object.values(view.states ?? {})];
+      viewStates.forEach((state) => {
+        addInternalReference(references, seen, node.id, state.groupFieldId, 'view', 'group-field', requestedTargetId);
+        (state.calendarDateFieldIds ?? []).forEach((fieldId) =>
+          addInternalReference(references, seen, node.id, fieldId, 'view', 'calendar-field', requestedTargetId)
+        );
+        (state.visibleFieldIds ?? []).forEach((fieldId) =>
+          addInternalReference(references, seen, node.id, fieldId, 'view', 'visible-field', requestedTargetId)
+        );
+        (state.sort ?? []).forEach((criterion) =>
+          addInternalReference(
+            references,
+            seen,
+            node.id,
+            criterion.fieldId === '$title' ? undefined : criterion.fieldId,
+            'view',
+            'sort-field',
+            requestedTargetId
+          )
+        );
+        (state.filter?.clauses ?? []).forEach((clause) => {
+          if ('fieldId' in clause) {
+            addInternalReference(references, seen, node.id, clause.fieldId, 'view', `filter:${clause.kind}`, requestedTargetId);
+          }
+          if ('supertagId' in clause) {
+            addInternalReference(references, seen, node.id, clause.supertagId, 'view', `filter:${clause.kind}`, requestedTargetId);
+          }
+        });
       });
     }
   }

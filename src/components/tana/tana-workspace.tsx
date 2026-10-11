@@ -24,7 +24,7 @@ import {
   TanaZoomPlugin,
 } from "@/components/editor/plugins/tana-zoom-plugin";
 import { TanaCapturePlugin } from "@/components/editor/plugins/tana-capture-plugin";
-import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { getTanaSelectedRootPaths, TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaShortcutsPlugin } from '@/components/editor/plugins/tana-shortcuts-plugin';
 import { TanaTimePlugin } from "@/components/editor/plugins/tana-time-plugin";
@@ -75,6 +75,8 @@ import { useStillAppearance } from './use-still-appearance';
 import type { PersistenceStatus } from './tana-workspace-types';
 
 export type { PersistenceStatus } from './tana-workspace-types';
+
+const EMPTY_BLOCK_SELECTION_IDS = new Set<string>();
 
 export function SearchResult({
   index,
@@ -211,6 +213,7 @@ function TanaWorkspaceContent({
   }, [editor, quickAddDraft, updateWorkspaceUi, workspaceUi]);
   const focusedNodeId =
     usePluginOption(TanaZoomPlugin, "focusedNodeId") ?? null;
+  const blockSelectedIds = usePluginOption(BlockSelectionPlugin, "selectedIds") ?? EMPTY_BLOCK_SELECTION_IDS;
   const selectedNodeId = useEditorSelector((currentEditor) => {
     const selectedTopLevel = currentEditor.selection
       ? currentEditor.children[currentEditor.selection.anchor.path[0]]
@@ -317,11 +320,9 @@ function TanaWorkspaceContent({
       }
       setNavigationOpen((open) => !open);
     } else {
-      const mode: TanaSidebarMode = sidebarMode === 'full'
-        ? 'mini'
-        : sidebarMode === 'mini'
-          ? 'hidden'
-          : 'full';
+      // The toolbar owns one binary navigation action. Legacy `mini` state is
+      // still rendered, but it no longer adds an extra intermediate toggle.
+      const mode: TanaSidebarMode = sidebarMode === 'hidden' ? 'full' : 'hidden';
       updateWorkspaceUi({ ...workspaceUi, sidebar: { ...workspaceUi.sidebar, mode } });
     }
   }, [editor, focusMode, narrowWindow, sidebarMode, updateWorkspaceUi, workspaceUi]);
@@ -350,7 +351,17 @@ function TanaWorkspaceContent({
     void navigator.clipboard?.writeText(href);
   }, [focusedNodeId]);
 
-  const commandTargetNodeId = selectedNodeId ?? focusedNodeId;
+  const commandTargetNodeIds = React.useMemo(() => {
+    if (blockSelectedIds.size > 0) {
+      return getTanaSelectedRootPaths(editor).flatMap((path) => {
+        const node = editor.api.node(path)?.[0];
+        return node && typeof node.id === 'string' ? [node.id] : [];
+      });
+    }
+    const singleId = selectedNodeId ?? focusedNodeId;
+    return singleId ? [singleId] : [];
+  }, [blockSelectedIds, editor, focusedNodeId, selectedNodeId]);
+  const commandTargetNodeId = commandTargetNodeIds[0];
   const commandHandlers = React.useMemo<TanaWorkspaceCommandHandlers>(() => {
     return {
       'new-node': createNew,
@@ -382,17 +393,23 @@ function TanaWorkspaceContent({
       undo: () => editor.undo(),
       redo: () => editor.redo(),
       duplicate: () => {
-        if (!commandTargetNodeId) return;
-        editor.setOption(BlockSelectionPlugin, 'selectedIds', new Set([commandTargetNodeId]));
+        if (commandTargetNodeIds.length === 0) return;
+        if (blockSelectedIds.size === 0) {
+          editor.setOption(BlockSelectionPlugin, 'selectedIds', new Set([commandTargetNodeIds[0]]));
+        }
         editor.getTransforms(BlockSelectionPlugin).blockSelection.duplicate();
       },
       trash: () => {
-        if (!commandTargetNodeId) return;
-        editor.getTransforms(TanaNodeLifecyclePlugin).node.trash(commandTargetNodeId);
+        if (commandTargetNodeIds.length === 0) return;
+        editor.tf.withNewBatch(() => {
+          commandTargetNodeIds.forEach((nodeId) => editor.getTransforms(TanaNodeLifecyclePlugin).node.trash(nodeId));
+        });
       },
       'toggle-done': () => {
-        if (!commandTargetNodeId) return;
-        editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.toggleDone(commandTargetNodeId);
+        if (commandTargetNodeIds.length === 0) return;
+        editor.tf.withNewBatch(() => {
+          commandTargetNodeIds.forEach((nodeId) => editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.toggleDone(nodeId));
+        });
       },
       'collapse-node': () => editor.getTransforms(TanaShortcutsPlugin).tanaShortcuts.collapseCurrentNode(),
       'expand-node': () => editor.getTransforms(TanaShortcutsPlugin).tanaShortcuts.expandCurrentNode(),
@@ -403,6 +420,8 @@ function TanaWorkspaceContent({
     focusMode,
     inspectNode,
     commandTargetNodeId,
+    commandTargetNodeIds,
+    blockSelectedIds,
     copyLink,
     createNew,
     editor,
@@ -442,6 +461,14 @@ function TanaWorkspaceContent({
 
   React.useEffect(() => {
     const onGlobalKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const element = target instanceof HTMLElement ? target : null;
+      const isPlateEditor = Boolean(element?.closest('[data-slate-editor]'));
+      if (
+        event.isComposing ||
+        event.keyCode === 229 ||
+        (element?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]') && !isPlateEditor)
+      ) return;
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key.toLowerCase();
       if ((key === "s" || key === "k") && !event.shiftKey) {

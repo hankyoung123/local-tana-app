@@ -57,21 +57,31 @@ export function TanaWorkspaceToolbar({
   const compactPathStart = Math.max(0, breadcrumbs.length - 2);
   const overflowBreadcrumbs = breadcrumbs.slice(0, compactPathStart);
   const navigationLabel = focusMode
-    ? '退出专注模式'
-    : sidebarMode === 'full'
-      ? '收窄导航'
-      : sidebarMode === 'mini'
-        ? '隐藏导航'
-        : '展开导航';
+    ? '展开导航'
+    : !navigationExpanded
+      ? '展开导航'
+      : sidebarMode === 'hidden'
+        ? '展开导航'
+        : '收起导航';
+  const startDraggingRef = React.useRef<(() => Promise<void>) | null>(null);
+  React.useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      const { isTauri } = await import('@tauri-apps/api/core');
+      if (!isTauri()) return;
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      if (!disposed) startDraggingRef.current = () => getCurrentWindow().startDragging();
+    })();
+    return () => {
+      disposed = true;
+      startDraggingRef.current = null;
+    };
+  }, []);
   const handleToolbarMouseDown = React.useCallback((event: React.MouseEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest('button, a, input, textarea, select, [role="button"], [data-tauri-no-drag]')) return;
-    void import('@tauri-apps/api/core').then(async ({ isTauri }) => {
-      if (!isTauri()) return;
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().startDragging();
-    });
+    void startDraggingRef.current?.();
   }, []);
 
   return (
