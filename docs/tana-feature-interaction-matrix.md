@@ -1,6 +1,6 @@
 # Tana 功能与交互逆向矩阵
 
-更新时间：2026-10-10（Asia/Shanghai）
+更新时间：2026-10-11（Asia/Shanghai）
 
 这份矩阵把原版 Tana Outliner 的官方 Learn 目录、原生无障碍树观察和本项目实现边界放在一起。`已实测` 只表示在本机离线桌面包中看到了对应入口或状态；`目录已知`来自原版 Learn 页面文字，尚未在当前账号中执行完整交互；`待实现/验收` 是本项目需要继续对齐的行为。
 
@@ -55,5 +55,5 @@
 ## 取证限制
 
 - 原版窗口当前为 `WORKING OFFLINE`；外部同步、账号、AI、发布、集成等行为不作为本地运行事实。
-- REA 的 Electron JavaScript 应用图在 48 个打包脚本的 AST 投影阶段耗尽 Node 堆；MCP provider 重试返回 `Transport closed`，因此本矩阵不声称拥有完整静态调用图。
+- REA 的 Electron JavaScript 应用图在完整 bundle 的语义图/JSON 序列化峰值耗尽 Node 堆；MCP provider 重试返回 `Transport closed`。目前已按主进程、共享 preload、16 个 renderer chunk 和 7 个窗口 preload 分层完成静态 Evidence；ReactDOM vendor 入口单独分类，仍不声称拥有跨所有 chunk 的单一完整调用图。
 - 当前矩阵中的“已实测”来自原生无障碍树和已记录 REA Evidence；Learn 页面“目录已知”只用于覆盖规划。

@@ -90,6 +90,31 @@ renderer 侧应按入口 chunk 单独复制到临时目录运行同一命令。�
 - 需要跨连接继续工作时，保留完整 Evidence 文件，并按 REA 的 evidence bundle/import 规则重新导入；不要只保留摘要。
 - Evidence 中的静态关系只表示 AST 推断，不能证明运行时执行、IPC 注册可达性或默认配置。REA 官方文档明确要求把这些事实与 runtime observation 分开。
 
+## Renderer 与窗口 preload 的逐项切片
+
+Tana 当前包实际包含 16 个 `build/assets/*.js` renderer chunk、1 个共享 preload、7 个窗口专用 preload，以及 `about-window` 依赖的 2 个辅助脚本。15 个非 ReactDOM renderer chunk 已在 4 GB Node 堆上限下分别生成局部 Evidence；每个切片都只保留自己的 artifact digest 和节点身份，不能把它们直接拼成一张跨 chunk 的全局图。两个 `about-window` 脚本也已独立分析，分别识别出一个 BrowserWindow 和 3 个静态 IPC 操作。
+
+| 边界 | 状态 | 关键结果 |
+| --- | --- | --- |
+| 15 个非 `index-CVPPYIAL.js` renderer chunk | 已完成 | 每个 chunk 独立 Evidence；AST 访问量从 173 到 128,678，均无 parse failure。最大的应用入口是 `quickCapture-CS5oeU3J.js`（128,678 AST，28 findings）。 |
+| `index-CVPPYIAL.js` | 已分类 | 原始 188 KB bundle 在 4 GB、8 GB 堆上限下都在语义图/JSON 序列化峰值 OOM；REA 的 `--filter-output` 只改变返回字段，不能降低内部图构建峰值。 |
+| `index-CVPPYIAL.js` 的 Wakaru inspection slice | 已完成 | Wakaru 1.13.0 将其识别为 6 个 scope-hoisted 模块；5 个小模块已成功分析，最大的 `chunk_ty.js` 是 ReactDOM 19.1.0 vendor 模块，未发现 Tana 产品字符串或 IPC。该模块继续生成全量语义图没有产品收益。 |
+| 7 个窗口专用 preload | 已完成 | 全部成功；Quick Capture 暴露 9 个 API、4 个字面量 IPC channel；实时音频菜单暴露 9 个 API；其余窗口的 API/channel 见下表。 |
+
+窗口 preload 的静态边界如下：
+
+| 窗口 | contextBridge API | 字面量 IPC |
+| --- | --- | --- |
+| `quickCapture` | `cancel`, `getTagSchema`, `listTags`, `listWorkspaces`, `onShow`, `resize`, `searchNodes`, `setIgnoreMouseEvents`, `submit` | `quick-capture:searchNodes`, `quick-capture:listTags`, `quick-capture:listWorkspaces`, `quick-capture:getTagSchema` |
+| `realTimeAudioMenu` | `hide`, `onStateChange`, `onVoiceData`, `openMeeting`, `pause`, `resize`, `resume`, `setState`, `stop` | `real-time-audio-menu` |
+| `voiceRecorder` | `onVoiceData`, `stop` | `voice-capture`, `voice-data` |
+| `keyboardBindings` | `onBindingsChanged`, `refreshBindings`, `setBindings` | `custom-keybindings` |
+| `localApiSettings` | `getSettings`, `onSettingsChanged`, `setAgentEnabled` | `local-api-settings` |
+| `notification` | `onNotification`, `sendNotificationEvent` | `notification` |
+| `findInPage` | `findInPage`, `focus`, `onFoundInPage` | channel 名由动态表达式计算，REA 保留为 unknown |
+
+逐项 renderer Evidence ID 已记录在本机 `/tmp/tana-chunk-manifest.json`，窗口 preload Evidence ID 在 `/tmp/tana-window-preload-manifest.json`；这些临时文件没有提交，因为它们包含大体量图数据。已对主进程的 `quick-capture:listTags`、`quick-capture:getTagSchema`、`quick-capture:listWorkspaces`、`voice-capture`、`custom-keybindings`、`find-in-page`、`real-time-audio-menu`、`notification` 和 `local-api-settings` 做了定向 trace；每个 seed 均唯一命中，但源图 coverage 仍标记为 partial，不能把静态可达性当成运行时已执行。
+
 ## 仍然存在的边界
 
-分层方案解决了内存峰值和 MCP 传输稳定性，但它不会自动生成跨所有 renderer chunk 的单一完整图。要得到那张图，需要 REA 增加受控 artifact selection、磁盘 spill/streaming graph 或多 Evidence merge 能力；当前版本没有在本项目中声称这些能力已经存在。对功能逆向来说，主进程/preload 图 + 目标 renderer chunk + 原生 UI/runtime Evidence 已足够支持按功能闭环验证。
+分层方案解决了 MCP 传输稳定性，并把产品相关代码从 React/vendor 噪声中分离出来；它不会自动生成跨所有 renderer chunk 的单一完整图。要得到那张图，需要 REA 增加受控 artifact selection、磁盘 spill/streaming graph 或多 Evidence merge 能力；当前版本没有在本项目中声称这些能力已经存在。对功能逆向来说，主进程/preload 图 + 目标 renderer chunk + 原生 UI/runtime Evidence 已足够支持按功能闭环验证。
