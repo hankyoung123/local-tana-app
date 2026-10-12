@@ -1,6 +1,7 @@
 import type { NodeId, TanaIndex, TanaNode, TanaQueryExpression } from './types';
 
 type SearchRunner = (index: TanaIndex, expression: TanaQueryExpression, searchHostId?: NodeId) => TanaNode[];
+type SupertagRunner = (index: TanaIndex, supertagId: NodeId) => TanaNode[];
 
 function isInTrash(index: TanaIndex, nodeId: NodeId): boolean {
   const trashId = index.systemNodeIds.get('trash');
@@ -28,7 +29,8 @@ function target(index: TanaIndex, nodeId: NodeId): TanaNode | undefined {
 export function resolveFieldValueCandidates(
   index: TanaIndex,
   fieldId: NodeId,
-  runSearch: SearchRunner
+  runSearch: SearchRunner,
+  getSupertagInstances: SupertagRunner
 ): TanaNode[] {
   const definition = index.nodesById.get(fieldId)?.fieldDefinition;
   if (!definition) return [];
@@ -53,7 +55,18 @@ export function resolveFieldValueCandidates(
       } else add(source.id);
     }
   } else if (definition.type === 'from-supertag' && definition.sourceSupertagId) {
-    (index.nodesBySupertag.get(definition.sourceSupertagId) ?? []).forEach(add);
+    const source = index.nodesById.get(definition.sourceSupertagId);
+
+    if (
+      source &&
+      source.systemNode === undefined &&
+      !isInTrash(index, source.id) &&
+      source.semanticTypes.includes('supertag-definition')
+    ) {
+      getSupertagInstances(index, definition.sourceSupertagId).forEach((node) =>
+        add(node.id)
+      );
+    }
   }
   return result;
 }

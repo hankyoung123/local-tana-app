@@ -6,6 +6,8 @@ import { getFieldValueValidationIssues } from './field-value';
 import { resolveFieldValueCandidates } from './field-candidates';
 import {
   getNodeSupertagIds,
+  getActiveSupertagInstances,
+  isSupertagInheritanceUsable,
   getSupertagInheritance,
   isTanaNodeActive,
   isTanaNodeInTrash,
@@ -34,6 +36,14 @@ import { getTanaDayForDate, isTanaDay } from './time';
 export type ResolvedSupertagTemplateField = {
   definition: FieldDefinition;
   fieldId: NodeId;
+  /** The direct template binding that owns optional/pinned/default settings. */
+  templateNodeId: NodeId;
+  /** The Definition Node that supplied this effective binding. */
+  sourceSupertagId: NodeId;
+  /** True when the effective binding comes from an inherited parent tag. */
+  inherited: boolean;
+  /** True when this direct binding replaces a binding inherited from a parent. */
+  overridden: boolean;
   field: TanaNode;
   /** A one-shot initializer belongs to this binding, never to an instance. */
   initializer?: TanaFieldInitializer;
@@ -519,20 +529,28 @@ function getDirectSupertagTemplateFields(
 ): ResolvedSupertagTemplateField[] {
   const supertag = index.nodesById.get(supertagId);
 
-  if (!supertag || !supertag.semanticTypes.includes('supertag-definition')) {
+  if (
+    !supertag ||
+    !isTanaNodeActive(index, supertagId) ||
+    !supertag.semanticTypes.includes('supertag-definition')
+  ) {
     return [];
   }
 
   return (index.childrenByParent.get(supertagId) ?? []).flatMap((childId) => {
     const child = index.nodesById.get(childId);
 
-    if (!child) return [];
+    if (!child || !isTanaNodeActive(index, child.id)) return [];
 
     if (child.semanticTypes.includes('field-definition') && child.fieldDefinition) {
       return [{
         definition: child.fieldDefinition,
         field: child,
         fieldId: child.id,
+        templateNodeId: child.id,
+        sourceSupertagId: supertagId,
+        inherited: false,
+        overridden: false,
         initializer: (child.node as TanaBlockElement).tanaFieldInitializer,
         optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
         pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
@@ -546,6 +564,8 @@ function getDirectSupertagTemplateFields(
     if (
       !template ||
       !field?.fieldDefinition ||
+      !isTanaNodeActive(index, template.id) ||
+      !isTanaNodeActive(index, field.id) ||
       !field.semanticTypes.includes('field-definition')
     ) {
       return [];
@@ -555,6 +575,10 @@ function getDirectSupertagTemplateFields(
       definition: field.fieldDefinition,
       field,
       fieldId: template.fieldId,
+      templateNodeId: child.id,
+      sourceSupertagId: supertagId,
+      inherited: false,
+      overridden: false,
       initializer: (child.node as TanaBlockElement).tanaFieldInitializer,
       optional: (child.node as TanaBlockElement).tanaFieldOptional === true,
       pinned: (child.node as TanaBlockElement).tanaFieldPinned === true,
@@ -572,13 +596,27 @@ export function getSupertagTemplateFields(
   index: TanaIndex,
   supertagId: NodeId
 ): ResolvedSupertagTemplateField[] {
+  if (
+    !isSupertagInheritanceUsable(index, supertagId)
+  ) return [];
+
   const templatesByFieldId = new Map<NodeId, ResolvedSupertagTemplateField>();
   const orderedFieldIds: NodeId[] = [];
 
-  [...getSupertagInheritance(index, supertagId), supertagId].forEach((definitionId) => {
+  [
+    ...getSupertagInheritance(index, supertagId).filter((definitionId) =>
+      isTanaNodeActive(index, definitionId)
+    ),
+    supertagId,
+  ].forEach((definitionId) => {
     getDirectSupertagTemplateFields(index, definitionId).forEach((template) => {
       if (!templatesByFieldId.has(template.fieldId)) orderedFieldIds.push(template.fieldId);
-      templatesByFieldId.set(template.fieldId, template);
+      const previous = templatesByFieldId.get(template.fieldId);
+      templatesByFieldId.set(template.fieldId, {
+        ...template,
+        inherited: definitionId !== supertagId,
+        overridden: definitionId === supertagId && previous?.inherited === true,
+      });
     });
   });
 
@@ -595,8 +633,12 @@ export function getSupertagTemplateFields(
  * sources; none of those sources writes a candidate list into the document.
  */
 export function getFieldValueCandidates(index: TanaIndex, fieldId: NodeId): TanaNode[] {
-  return resolveFieldValueCandidates(index, fieldId, (queryIndex, expression, searchHostId) =>
-    runTanaQuery(queryIndex, expression, { searchHostId })
+  return resolveFieldValueCandidates(
+    index,
+    fieldId,
+    (queryIndex, expression, searchHostId) =>
+      runTanaQuery(queryIndex, expression, { searchHostId }),
+    getActiveSupertagInstances
   );
 }
 

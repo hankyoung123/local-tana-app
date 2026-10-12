@@ -22,6 +22,17 @@ export type TanaTitleExpressionSegment = {
   text: string;
 };
 
+export type TanaTitleExpressionDiagnostic = {
+  code:
+    | 'unbalanced-formatting'
+    | 'empty-expression'
+    | 'missing-field'
+    | 'invalid-limit'
+    | 'unclosed-expression';
+  message: string;
+  token?: string;
+};
+
 const FORMAT_TAG_PATTERN = /<\/?(?:b|i)>/g;
 
 function hasBalancedFormatting(expression: string): boolean {
@@ -155,6 +166,134 @@ export function parseTanaTitleExpression(
   emitLiteral(trailing.slice(trailingCursor));
 
   return tokens;
+}
+
+const SYSTEM_TITLE_ATTRIBUTES = new Set([
+  'cdate',
+  'ctime',
+  'mdate',
+  'mtime',
+  'donetime',
+  'description',
+  'lasteditedby',
+  'editedby',
+  'owner',
+  'datefromcalendarnode',
+  'createdat',
+  'created',
+  'lasteditedat',
+  'modifiedat',
+  'modified',
+]);
+
+function hasExpressionField(
+  index: TanaIndex,
+  nodeId: NodeId,
+  name: string
+): boolean {
+  const path = name.split('.').map((part) => part.trim()).filter(Boolean);
+
+  if (path.length === 0) return false;
+
+  const first = path[0] ?? '';
+  const normalizedFirst = first.toLocaleLowerCase();
+
+  if (normalizedFirst.startsWith('sys:')) {
+    return SYSTEM_TITLE_ATTRIBUTES.has(normalizedFirst.slice(4));
+  }
+
+  if (SYSTEM_TITLE_ATTRIBUTES.has(normalizedFirst)) return true;
+
+  let currentNodeId: NodeId | undefined = nodeId;
+
+  for (const segment of path) {
+    if (!currentNodeId) return false;
+    const field = getFieldNode(index, currentNodeId, segment);
+
+    if (!field) return false;
+
+    if (segment !== path[path.length - 1]) {
+      const nextValue = field.values.find(
+        (value) => value.type === 'options' || value.type === 'from-supertag'
+      );
+
+      if (!nextValue || (nextValue.type !== 'options' && nextValue.type !== 'from-supertag')) {
+        return false;
+      }
+
+      currentNodeId = nextValue.value;
+    }
+  }
+
+  return true;
+}
+
+/** Returns editor-facing diagnostics without changing the canonical document. */
+export function getTanaTitleExpressionDiagnostics(
+  index: TanaIndex | undefined,
+  nodeId: NodeId | undefined,
+  expression: string
+): readonly TanaTitleExpressionDiagnostic[] {
+  const diagnostics: TanaTitleExpressionDiagnostic[] = [];
+
+  if (!hasBalancedFormatting(expression)) {
+    diagnostics.push({
+      code: 'unbalanced-formatting',
+      message: '格式标签未闭合或嵌套顺序不正确。',
+    });
+  }
+
+  for (const match of expression.matchAll(/\$\{([^}]*)\}/g)) {
+    const raw = match[0] ?? '';
+    const descriptor = match[1] ?? '';
+    const [rawName, rawLimit] = descriptor.split('|', 2);
+    const name = rawName.trim().replace(/\?$/, '').trim();
+    const limit = rawLimit?.trim();
+
+    if (!name) {
+      diagnostics.push({
+        code: 'empty-expression',
+        message: '表达式名称不能为空。',
+        token: raw,
+      });
+      continue;
+    }
+
+    if (limit && limit !== '?' && !/^\d+(?:.*)?\??$/.test(limit)) {
+      diagnostics.push({
+        code: 'invalid-limit',
+        message: '截断长度必须以数字开头，例如 12…。',
+        token: raw,
+      });
+    }
+
+    if (index && nodeId && name.toLocaleLowerCase() !== 'name' && !hasExpressionField(index, nodeId, name)) {
+      diagnostics.push({
+        code: 'missing-field',
+        message: `找不到字段或系统属性“${name}”。`,
+        token: raw,
+      });
+    }
+  }
+
+  for (let cursor = 0; ; ) {
+    const start = expression.indexOf('${', cursor);
+    if (start < 0) break;
+
+    const close = expression.indexOf('}', start + 2);
+    if (close < 0) {
+      diagnostics.push({
+        code: 'unclosed-expression',
+        message: '表达式缺少右花括号。',
+        token: expression.slice(start),
+      });
+      break;
+    }
+
+    cursor = close + 1;
+  }
+
+  return diagnostics;
 }
 
 /**
@@ -347,17 +486,35 @@ export function resolveTanaNodeTitleSegments(
   index: TanaIndex,
   nodeId: NodeId
 ): readonly TanaTitleExpressionSegment[] {
-  return resolveTanaNodeTitleSegmentsInternal(index, nodeId, new Set());
+  const node = index.nodesById.get(nodeId);
+
+  return resolveTanaTitleExpression(index, nodeId, node?.titleExpression);
+}
+
+/** Resolves an arbitrary expression against a canonical node for live previews. */
+export function resolveTanaTitleExpression(
+  index: TanaIndex,
+  nodeId: NodeId,
+  expression: string | undefined
+): readonly TanaTitleExpressionSegment[] {
+  if (expression === undefined || expression.length === 0) {
+    return [{ text: index.nodesById.get(nodeId)?.text ?? '' }];
+  }
+
+  return resolveTanaNodeTitleSegmentsInternal(index, nodeId, new Set(), expression);
 }
 
 function resolveTanaNodeTitleSegmentsInternal(
   index: TanaIndex,
   nodeId: NodeId,
-  resolving: ReadonlySet<NodeId>
+  resolving: ReadonlySet<NodeId>,
+  expression?: string
 ): readonly TanaTitleExpressionSegment[] {
   const node = index.nodesById.get(nodeId);
 
-  if (!node || node.titleExpression === undefined || node.titleExpression.length === 0) {
+  const titleExpression = expression ?? node?.titleExpression;
+
+  if (!node || titleExpression === undefined || titleExpression.length === 0) {
     return [{ text: node?.text ?? '' }];
   }
 
@@ -365,7 +522,7 @@ function resolveTanaNodeTitleSegmentsInternal(
 
   const nextResolving = new Set(resolving).add(nodeId);
 
-  return parseTanaTitleExpression(node.titleExpression).flatMap((token) => {
+  return parseTanaTitleExpression(titleExpression).flatMap((token) => {
     const value = token.kind === 'literal'
       ? token.text
       : token.name === 'name'

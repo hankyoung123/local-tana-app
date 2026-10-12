@@ -15,7 +15,7 @@ import type {
   TanaQueryPredicate,
 } from './types';
 import { getTanaSystemFieldDefinition, getTanaSystemFieldLabel, getTanaSystemFieldValue, isFieldDefined, isFieldValueCompatible } from './fields';
-import { getTanaProjectionTarget, isTanaNodeActive } from './index';
+import { getTanaProjectionTarget, hasTanaSupertag, isTanaNodeActive } from './index';
 import { compareTanaDateValues, isTanaTime, offsetCalendarValue, tanaDateValuesOverlap } from './time';
 import { TANA_DATE_OBJECT_KEY } from './constants';
 
@@ -433,7 +433,7 @@ export function matchesTanaQueryPredicate(
       return hasFieldValue(index, contentNode.id, predicate.fieldId);
     case 'has-supertag':
     case 'has-tag':
-      return index.nodesBySupertag.get(predicate.supertagId)?.includes(contentNode.id) ?? false;
+      return hasTanaSupertag(index, contentNode.id, predicate.supertagId);
     case 'done-state':
       return contentNode.doneState === predicate.state;
     case 'date-is':

@@ -5,7 +5,6 @@ import { KEYS, type Value } from 'platejs';
 import { createPlateEditor } from 'platejs/react';
 
 import { EditorKit } from '@/components/editor/editor-kit';
-import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { buildTanaIndex } from '@/lib/tana';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import { initialDocument } from '@/lib/tana/initial-document';
@@ -46,7 +45,7 @@ describe('View collection add actions', () => {
 
   test('a Supertag instances View delegates new rows to the existing canonical instance writer', () => {
     const workspace = editor(structuredClone(initialDocument) as Value);
-    assert.equal(workspace.getTransforms(TanaViewPlugin).view.define('supertag-project'), true);
+    assert.equal(buildTanaIndex(workspace.children).nodesById.get('supertag-project')?.viewDefinition, undefined);
     const instanceId = createTanaViewNode(workspace, 'supertag-project');
     assert.ok(instanceId);
     const index = buildTanaIndex(workspace.children);

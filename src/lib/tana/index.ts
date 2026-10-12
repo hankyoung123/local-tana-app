@@ -27,6 +27,8 @@ import type {
   TanaQueryExpression,
   TanaCalendarDateReference,
   TanaDateObject,
+  TanaDoneState,
+  TanaSupertagCheckboxFieldMapping,
   NodeId,
   ReferenceRelation,
   SupertagDefinition,
@@ -56,37 +58,105 @@ export type TanaReferenceTargetResolution =
   | { status: 'missing' | 'invalid' }
   | { status: 'trashed'; target: TanaNode };
 
+/** Detects a persisted inheritance cycle before consumers derive a partial schema. */
+export function hasSupertagInheritanceCycle(
+  index: Pick<TanaIndex, 'nodesById'>,
+  supertagId: NodeId
+): boolean {
+  const visiting = new Set<NodeId>();
+  const visited = new Set<NodeId>();
+
+  const visit = (id: NodeId): boolean => {
+    if (visiting.has(id)) return true;
+    if (visited.has(id)) return false;
+
+    const node = index.nodesById.get(id);
+    if (!node?.supertagDefinition) return false;
+
+    visiting.add(id);
+    const parents = node.supertagDefinition.extends;
+    const hasCycle = Array.isArray(parents) && parents.some(
+      (parentId) => typeof parentId === 'string' && visit(parentId)
+    );
+    visiting.delete(id);
+    visited.add(id);
+
+    return hasCycle;
+  };
+
+  return visit(supertagId);
+}
+
+function resolveSupertagInheritance(
+  index: Pick<TanaIndex, 'nodesById'>,
+  supertagId: NodeId
+): NodeId[] | undefined {
+  const ordered: NodeId[] = [];
+  const visiting = new Set<NodeId>();
+  const visited = new Set<NodeId>();
+
+  const visit = (id: NodeId, includeSelf: boolean): boolean => {
+    if (visiting.has(id)) return false;
+    if (visited.has(id)) return true;
+
+    const node = index.nodesById.get(id);
+
+    if (!node?.supertagDefinition) return false;
+
+    visiting.add(id);
+    const parents = node.supertagDefinition.extends ?? [];
+
+    if (!Array.isArray(parents) || parents.some((parentId) => typeof parentId !== 'string')) {
+      visiting.delete(id);
+      return false;
+    }
+
+    for (const parentId of parents) {
+      if (!visit(parentId, true)) {
+        visiting.delete(id);
+        return false;
+      }
+    }
+
+    visiting.delete(id);
+    visited.add(id);
+
+    if (includeSelf) ordered.push(id);
+
+    return true;
+  };
+
+  return visit(supertagId, false) ? ordered : undefined;
+}
+
 /** Resolves a definition's ancestors in parent-first order without recursion loops. */
 export function getSupertagInheritance(
   index: Pick<TanaIndex, 'nodesById'>,
   supertagId: NodeId
 ): NodeId[] {
-  const ordered: NodeId[] = [];
-  const visiting = new Set<NodeId>();
-  const visited = new Set<NodeId>();
+  return resolveSupertagInheritance(index, supertagId) ?? [];
+}
 
-  const visit = (id: NodeId, includeSelf: boolean) => {
-    if (visited.has(id) || visiting.has(id)) return;
+export function isSupertagInheritanceUsable(
+  index: Pick<TanaIndex, 'nodesById' | 'parentNodeIds' | 'systemNodeIds'>,
+  supertagId: NodeId
+): boolean {
+  const definition = index.nodesById.get(supertagId);
+  const inheritance = resolveSupertagInheritance(index, supertagId);
 
-    const node = index.nodesById.get(id);
+  if (
+    !definition?.supertagDefinition ||
+    !isTanaNodeActive(index, supertagId) ||
+    hasSupertagInheritanceCycle(index, supertagId) ||
+    !inheritance
+  ) return false;
 
-    if (!node?.supertagDefinition) return;
+  return inheritance.every((ancestorId) => {
+    const ancestor = index.nodesById.get(ancestorId);
 
-    visiting.add(id);
-    const parents = node.supertagDefinition.extends ?? [];
-
-    parents.forEach((parentId) => {
-      if (typeof parentId === 'string') visit(parentId, true);
-    });
-    visiting.delete(id);
-    visited.add(id);
-
-    if (includeSelf) ordered.push(id);
-  };
-
-  visit(supertagId, false);
-
-  return ordered;
+    return !!ancestor?.supertagDefinition &&
+      isTanaNodeActive(index, ancestorId);
+  });
 }
 
 function isElement(node: Descendant): node is TElement {
@@ -333,28 +403,6 @@ export function buildTanaIndex(document: Value): TanaIndex {
     });
   });
 
-  // Title expressions are display-only. Keep the canonical Plate text intact
-  // so Field names, query input, and document transforms never depend on a
-  // generated title.
-  orderedNodes.forEach((node) => {
-    const resolved = nodesById.get(node.id);
-
-    if (!resolved) return;
-    let titleExpression: string | undefined;
-
-    resolved.supertagIds.forEach((supertagId) => {
-      [...getSupertagInheritance({ nodesById }, supertagId), supertagId].forEach(
-        (definitionId) => {
-          const expression = nodesById.get(definitionId)?.supertagDefinition?.titleExpression;
-
-          if (expression !== undefined) titleExpression = expression;
-        }
-      );
-    });
-
-    nodesById.set(node.id, { ...resolved, titleExpression });
-  });
-
   const resolvedNodes = orderedNodes.flatMap((node) => {
     const resolved = nodesById.get(node.id);
 
@@ -390,6 +438,32 @@ export function buildTanaIndex(document: Value): TanaIndex {
       if (!taggedNodes.includes(node.id)) taggedNodes.push(node.id);
       nodesBySupertag.set(supertagId, taggedNodes);
     });
+  });
+
+  // Title expressions are display-only and may only come from active,
+  // semantically valid definitions. Resolve after hierarchy and Trash scope
+  // are known so stale definitions cannot affect a node's displayed title.
+  const activeScope = { nodesById, parentNodeIds, systemNodeIds };
+
+  orderedNodes.forEach((node) => {
+    const resolved = nodesById.get(node.id);
+
+    if (!resolved) return;
+    let titleExpression: string | undefined;
+
+    resolved.supertagIds.forEach((assignedId) => {
+      if (!isSupertagInheritanceUsable(activeScope, assignedId)) return;
+
+      [...getSupertagInheritance(activeScope, assignedId), assignedId].forEach(
+        (definitionId) => {
+          const expression = nodesById.get(definitionId)?.supertagDefinition?.titleExpression;
+
+          if (expression !== undefined) titleExpression = expression;
+        }
+      );
+    });
+
+    nodesById.set(node.id, { ...resolved, titleExpression });
   });
 
   // A trashed definition remains indexed with its Value history, but cannot
@@ -571,9 +645,13 @@ export function buildTanaIndex(document: Value): TanaIndex {
         ? undefined
         : index.nodesById.get(field.fieldId)?.fieldDefinition;
       const candidateIds = definition && (definition.type === 'options' || definition.type === 'from-supertag')
-        ? new Set(resolveFieldValueCandidates(index, field.fieldId, (queryIndex, expression, searchHostId) =>
-          runTanaQuery(queryIndex, expression, { searchHostId })
-        ).map(({ id }) => id))
+        ? new Set(resolveFieldValueCandidates(
+            index,
+            field.fieldId,
+            (queryIndex, expression, searchHostId) =>
+              runTanaQuery(queryIndex, expression, { searchHostId }),
+            getActiveSupertagInstances
+          ).map(({ id }) => id))
         : undefined;
       const validationIssuesByValueNodeId = new Map(
         field.valueNodeIds.map((valueNodeId) => {
@@ -616,6 +694,8 @@ export function getSupertagCandidatesFromIndex(
       (node): node is TanaNode & { supertagDefinition: SupertagDefinition } =>
         isTanaNodeActive(index, node.id) &&
         node.semanticTypes.includes('supertag-definition') &&
+        isSupertagInheritanceUsable(index, node.id) &&
+        node.supertagDefinition?.buildingBlock?.hiddenFromSearch !== true &&
         node.text.length > 0
     )
     .map(({ id, supertagDefinition: definition, text }) => ({
@@ -630,6 +710,31 @@ export function getNodeSupertagIds(
   nodeId: NodeId
 ): NodeId[] {
   return [...(index.nodesById.get(nodeId)?.supertagIds ?? [])];
+}
+
+/** Resolves direct and inherited membership without changing canonical metadata. */
+export function hasTanaSupertag(
+  index: TanaIndex,
+  nodeId: NodeId,
+  supertagId: NodeId
+): boolean {
+  const requested = index.nodesById.get(supertagId);
+  const node = index.nodesById.get(nodeId);
+
+  if (
+    !requested?.supertagDefinition ||
+    !isSupertagInheritanceUsable(index, supertagId) ||
+    !node
+  ) return false;
+
+  return node.supertagIds.some((assignedId) => {
+    const assigned = index.nodesById.get(assignedId);
+
+    return !!assigned?.supertagDefinition &&
+      isSupertagInheritanceUsable(index, assignedId) &&
+      (assignedId === supertagId ||
+        getSupertagInheritance(index, assignedId).includes(supertagId));
+  });
 }
 
 export function getNodeReferenceCandidatesFromIndex(
@@ -652,7 +757,10 @@ export function getNodeReferenceCandidatesFromIndex(
  * Trash is a derived query scope, not persisted Node state. Keep its complete
  * subtree indexed so canonical references and backlinks remain resolvable.
  */
-export function isTanaNodeInTrash(index: TanaIndex, nodeId: NodeId): boolean {
+export function isTanaNodeInTrash(
+  index: Pick<TanaIndex, 'parentNodeIds' | 'systemNodeIds'>,
+  nodeId: NodeId
+): boolean {
   const trashNodeId = index.systemNodeIds.get('trash');
 
   if (!trashNodeId) return false;
@@ -675,12 +783,153 @@ export function isTanaNodeInTrash(index: TanaIndex, nodeId: NodeId): boolean {
  * subtree remain resolvable canonical Nodes, but are never active results or
  * candidates for new user-authored relations.
  */
-export function isTanaNodeActive(index: TanaIndex, nodeId: NodeId): boolean {
+export function isTanaNodeActive(
+  index: Pick<TanaIndex, 'nodesById' | 'parentNodeIds' | 'systemNodeIds'>,
+  nodeId: NodeId
+): boolean {
   const node = index.nodesById.get(nodeId);
 
   return (
     !!node && node.systemNode === undefined && !isTanaNodeInTrash(index, nodeId)
   );
+}
+
+export type TanaSupertagCheckboxConfig = {
+  show: boolean;
+  checked: TanaDoneState;
+  unchecked: readonly TanaDoneState[];
+  checkedFieldMapping?: TanaSupertagCheckboxFieldMapping;
+  uncheckedFieldMapping?: TanaSupertagCheckboxFieldMapping;
+  sourceSupertagId?: NodeId;
+};
+
+function isUsableSupertagCheckboxFieldMapping(
+  index: TanaIndex,
+  mapping: TanaSupertagCheckboxFieldMapping
+): boolean {
+  const fieldNode = index.nodesById.get(mapping.fieldId);
+  const definition = fieldNode?.fieldDefinition;
+
+  if (
+    !fieldNode ||
+    !definition ||
+    !isTanaNodeActive(index, mapping.fieldId) ||
+    !Array.isArray(mapping.values) ||
+    mapping.values.length === 0 ||
+    (definition.cardinality === 'single' && mapping.values.length > 1)
+  ) {
+    return false;
+  }
+
+  const candidateIds =
+    definition.type === 'options' || definition.type === 'from-supertag'
+      ? new Set(
+          resolveFieldValueCandidates(
+            index,
+            mapping.fieldId,
+            (queryIndex, expression, searchHostId) =>
+              runTanaQuery(queryIndex, expression, { searchHostId }),
+            getActiveSupertagInstances
+          ).map(({ id }) => id)
+        )
+      : undefined;
+
+  return mapping.values.every(
+    (value) => getFieldValueValidationIssues(definition, value, candidateIds).length === 0
+  );
+}
+
+/** Counts stored Value Nodes that still point at one option Node.
+ *
+ * The count is derived from the canonical index so deleting an Option can
+ * explain its impact without introducing an auxiliary usage cache. Historical
+ * values remain countable and will surface as `invalid-option` after removal.
+ */
+export function countTanaFieldOptionUsages(
+  index: Pick<TanaIndex, 'fieldNodesById'>,
+  fieldId: NodeId,
+  optionId: NodeId
+): number {
+  let count = 0;
+
+  for (const field of index.fieldNodesById.values()) {
+    if (field.fieldId !== fieldId) continue;
+
+    for (const value of field.values) {
+      if ((value.type === 'options' || value.type === 'from-supertag') && value.value === optionId) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Resolves the completion control configured by the node's direct tags.
+ * Definitions are applied parent-first; later direct tags win, matching the
+ * document order used for semantic membership. This stays derived from the
+ * canonical index and never creates a second completion state.
+ */
+export function resolveTanaSupertagCheckboxConfig(
+  index: TanaIndex,
+  nodeId: NodeId
+): TanaSupertagCheckboxConfig {
+  const result: TanaSupertagCheckboxConfig = {
+    show: false,
+    checked: 'done',
+    unchecked: ['todo'],
+  };
+  const node = index.nodesById.get(nodeId);
+
+  if (!node || !isTanaNodeActive(index, nodeId)) return result;
+
+  for (const directSupertagId of node.supertagIds) {
+    if (!isSupertagInheritanceUsable(index, directSupertagId)) continue;
+
+    const chain = [
+      ...getSupertagInheritance(index, directSupertagId),
+      directSupertagId,
+    ];
+
+    for (const supertagId of chain) {
+      const definition = index.nodesById.get(supertagId)?.supertagDefinition;
+
+      if (!definition) continue;
+
+      let configured = false;
+
+      if (typeof definition.showCheckbox === 'boolean') {
+        result.show = definition.showCheckbox;
+        configured = true;
+      }
+      if (definition.doneStateMapping?.checked) {
+        result.checked = definition.doneStateMapping.checked;
+        configured = true;
+      }
+      if (definition.doneStateMapping?.unchecked?.length) {
+        result.unchecked = definition.doneStateMapping.unchecked;
+        configured = true;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(definition, 'checkboxFieldMapping')) {
+        const fieldMapping = definition.checkboxFieldMapping;
+        result.checkedFieldMapping =
+          fieldMapping?.checked && isUsableSupertagCheckboxFieldMapping(index, fieldMapping.checked)
+            ? fieldMapping.checked
+            : undefined;
+        result.uncheckedFieldMapping =
+          fieldMapping?.unchecked && isUsableSupertagCheckboxFieldMapping(index, fieldMapping.unchecked)
+            ? fieldMapping.unchecked
+            : undefined;
+        configured = true;
+      }
+
+      if (configured) result.sourceSupertagId = supertagId;
+    }
+  }
+
+  return result;
 }
 
 function comparePaths(left: Path, right: Path): number {
@@ -1005,12 +1254,14 @@ export function getActiveSupertagInstances(
   supertagId: NodeId
 ): TanaNode[] {
   const definition = index.nodesById.get(supertagId);
-  if (!definition?.supertagDefinition || !isTanaNodeActive(index, supertagId)) return [];
-  return (index.nodesBySupertag.get(supertagId) ?? []).flatMap((nodeId) => {
-    const node = index.nodesById.get(nodeId);
-
-    return node && isTanaNodeActive(index, node.id) ? [node] : [];
-  });
+  if (!definition?.supertagDefinition || !isSupertagInheritanceUsable(index, supertagId)) return [];
+  return Array.from(index.nodesById.values()).filter(
+    (node) =>
+      isTanaNodeActive(index, node.id) &&
+      node.semanticTypes.length === 1 &&
+      node.semanticTypes[0] === 'content' &&
+      hasTanaSupertag(index, node.id, supertagId)
+  );
 }
 
 /** Performs transient document-order node search without writing any state. */

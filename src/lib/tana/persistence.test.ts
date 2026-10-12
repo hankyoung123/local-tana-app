@@ -127,6 +127,38 @@ describe('Plate document persistence', () => {
     assert.equal(
       isValidTanaDocument(
         withWorkspace([
+          {
+            children: [{ text: 'Active' }],
+            id: 'active',
+            tanaFieldDefinition: {
+              doneStateMapping: { checked: 'done', unchecked: 'todo' },
+              type: 'checkbox',
+            },
+            type: 'p',
+          },
+        ])
+      ),
+      true
+    );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
+          {
+            children: [{ text: 'Invalid mapping' }],
+            id: 'invalid-mapping',
+            tanaFieldDefinition: {
+              doneStateMapping: { checked: 'finished' },
+              type: 'checkbox',
+            } as never,
+            type: 'p',
+          },
+        ])
+      ),
+      false
+    );
+    assert.equal(
+      isValidTanaDocument(
+        withWorkspace([
           { children: [{ text: 'Task' }], id: 'task', type: 'p' },
           {
             children: [{ text: '' }],

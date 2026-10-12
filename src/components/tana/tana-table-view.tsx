@@ -8,7 +8,9 @@ import {
 import { useEditorRef, type PlateEditor } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaViewPlugin } from '@/components/editor/plugins/tana-view-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,6 +38,8 @@ import {
   getSupertagTemplateFields,
   isTanaTitleExpressionNameEditable,
   getTanaProjectionTarget,
+  resolveTanaSupertagCheckboxConfig,
+  buildTanaIndex,
   sortTanaViewProjectionItems,
   isTanaNodeInTrash,
   resolveTanaNodeTitle,
@@ -53,6 +57,7 @@ import {
 
 import { getProjectionEditableTitle, ProjectionTitleInput } from './node-projection';
 import { TanaNodeBullet } from './tana-node-gutter';
+import { CreateSourceInstanceControl } from './create-source-instance-control';
 import { createTanaViewNode } from './tana-view-actions';
 
 const TITLE_SORT = '$title';
@@ -117,10 +122,25 @@ export function setTanaTableFieldValue(
   value: FieldValue
 ): boolean {
   const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
+  const definition = buildTanaIndex(editor.children).nodesById.get(fieldId)?.fieldDefinition;
+  let changed = false;
 
-  if (!fieldTransforms.materialize(nodeId, fieldId)) return false;
+  editor.tf.withNewBatch(() => {
+    if (!fieldTransforms.materialize(nodeId, fieldId)) return;
 
-  return fieldTransforms.setValue(nodeId, fieldId, value);
+    changed = fieldTransforms.setValue(nodeId, fieldId, value);
+    const mappedState = definition?.type === 'checkbox' && value.type === 'checkbox'
+      ? value.value
+        ? definition.doneStateMapping?.checked
+        : definition.doneStateMapping?.unchecked
+      : undefined;
+
+    if (changed && mappedState) {
+      editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.setDoneState(nodeId, mappedState);
+    }
+  });
+
+  return changed;
 }
 
 function getFieldValueLabel(
@@ -357,6 +377,13 @@ function FieldCell({
           </SelectContent>
         </Select>
         {value && <ClearValueButton fieldLabel={fieldLabel} onClear={clearValue} />}
+        {definition.type === 'from-supertag' && definition.sourceSupertagId && (
+          <CreateSourceInstanceControl
+            fieldId={fieldId}
+            nodeId={nodeId}
+            sourceSupertagId={definition.sourceSupertagId}
+          />
+        )}
         <FieldWarning id={warningId} label={warningLabel} />
       </div>
     );
@@ -483,7 +510,16 @@ function ListValueCell({
           checked={value?.type === 'checkbox' ? value.value : false}
           onCheckedChange={(checked) => {
             if (typeof checked === 'boolean') {
-              transforms.setValueAt(nodeId, fieldId, valueNodeId, { type: 'checkbox', value: checked });
+              editor.tf.withNewBatch(() => {
+                const changed = transforms.setValueAt(nodeId, fieldId, valueNodeId, { type: 'checkbox', value: checked });
+                const mappedState = checked
+                  ? definition.doneStateMapping?.checked
+                  : definition.doneStateMapping?.unchecked;
+
+                if (changed && mappedState) {
+                  editor.getTransforms(TanaNodeIdentityPlugin).tanaNodeIdentity.setDoneState(nodeId, mappedState);
+                }
+              });
             }
           }}
         />
@@ -523,6 +559,13 @@ function ListValueCell({
           </SelectContent>
         </Select>
         <ClearValueButton fieldLabel={fieldLabel} onClear={onRemove} />
+        {definition.type === 'from-supertag' && definition.sourceSupertagId && (
+          <CreateSourceInstanceControl
+            fieldId={fieldId}
+            nodeId={nodeId}
+            sourceSupertagId={definition.sourceSupertagId}
+          />
+        )}
         <FieldWarning id={warningId} label={warningLabel} />
       </div>
     );
@@ -647,11 +690,13 @@ function TableRow({
   fieldIds,
   index,
   node,
+  onCreateRow,
   viewId,
 }: {
   fieldIds: readonly NodeId[];
   index: TanaIndex;
   node: TanaNode;
+  onCreateRow?: () => NodeId | undefined;
   viewId: NodeId;
 }) {
   const editor = useEditorRef();
@@ -662,6 +707,8 @@ function TableRow({
   const displayTitle = resolveTanaNodeTitle(index, target.id);
   const displaySegments = resolveTanaNodeTitleSegments(index, target.id);
   const editableTitle = getProjectionEditableTitle(target);
+  const checkboxConfig = resolveTanaSupertagCheckboxConfig(index, target.id);
+  const checkboxChecked = target.doneState === checkboxConfig.checked;
 
   return (
     <tr className="tana-projectionRow border-b border-[var(--tana-divider)] last:border-0 hover:bg-[var(--tana-hover)]">
@@ -676,6 +723,21 @@ function TableRow({
           >
             <TanaNodeBullet compact semanticType={node.semanticType} />
           </button>
+          {checkboxConfig.show && (
+            <Checkbox
+              aria-label={`${displayTitle || '节点'}完成状态`}
+              checked={checkboxChecked}
+              className="size-3.5 shrink-0"
+              onCheckedChange={(checked) => {
+                if (typeof checked !== 'boolean') return;
+
+                editor
+                  .getTransforms(TanaSupertagPlugin)
+                  .supertag.applyCheckboxState(target.id, checked);
+              }}
+              onClick={(event) => event.stopPropagation()}
+            />
+          )}
           <ProjectionTitleInput
             displayTitle={displayTitle}
             displaySegments={node.titleExpression ? displaySegments : undefined}
@@ -685,7 +747,9 @@ function TableRow({
             }
             targetNodeId={target.id}
             title={editableTitle}
-            onEnter={() => createTanaViewNode(editor, viewId)}
+            onEnter={() =>
+              onCreateRow ? onCreateRow() : createTanaViewNode(editor, viewId)
+            }
           />
         </div>
       </td>
@@ -700,11 +764,13 @@ function TableRow({
 
 export function TanaTableView({
   index,
+  onCreateRow,
   projection,
   results,
   view,
 }: {
   index: TanaIndex;
+  onCreateRow?: () => NodeId | undefined;
   projection?: TanaViewProjection;
   results: readonly TanaNode[];
   view: TanaNode;
@@ -776,6 +842,7 @@ export function TanaTableView({
                   fieldIds={visibleFields}
                   index={index}
                   node={node}
+                  onCreateRow={onCreateRow}
                   viewId={view.id}
                 />
               ))
@@ -785,7 +852,9 @@ export function TanaTableView({
                 <button
                   className="rounded px-1 text-xs text-[var(--tana-link)] hover:bg-[var(--tana-hover)]"
                   type="button"
-                  onClick={() => createTanaViewNode(editor, view.id)}
+                  onClick={() =>
+                    onCreateRow ? onCreateRow() : createTanaViewNode(editor, view.id)
+                  }
                 >
                   添加行
                 </button>

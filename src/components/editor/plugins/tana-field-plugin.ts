@@ -6,6 +6,7 @@ import { BlockSelectionPlugin } from '@platejs/selection/react';
 import { isTanaNodeElement } from '@/lib/tana/constants';
 import {
   findFieldDefinitionExactMatch,
+  getSupertagTemplateFields,
   isAdHocField,
   isAdHocFieldInputNode,
   isFieldValueCompatible,
@@ -13,7 +14,7 @@ import {
   isSupertagFieldInputNode,
   getSupertagFieldInputParentId
 } from '@/lib/tana/fields';
-import { buildTanaIndex, getTanaProjectionTarget } from '@/lib/tana/index';
+import { buildTanaIndex, getTanaProjectionTarget, isTanaNodeActive } from '@/lib/tana/index';
 import { getNodeSemanticTypes } from '@/lib/tana/node-semantic';
 import {
   getTanaNodeDescendantPaths,
@@ -362,6 +363,10 @@ function materialize(
   if (!canonicalParentNodeId) return;
 
   parentNodeId = canonicalParentNodeId;
+  const initialIndex = buildTanaIndex(editor.children);
+  const inheritedTemplate = getSupertagTemplateFields(initialIndex, parentNodeId).find(
+    (template) => template.fieldId === fieldId && template.inherited
+  );
   const parentEntry = getTanaNodeEntry(editor, parentNodeId);
   const fieldEntry = getLiveFieldDefinitionEntry(editor, fieldId);
   const definition = fieldEntry?.[0].tanaFieldDefinition;
@@ -390,10 +395,46 @@ function materialize(
   );
 
   const occurrence = editor.api.node(insertionPath);
+  if (!occurrence || !isTanaNodeElement(occurrence) || typeof occurrence[0].id !== 'string') {
+    return;
+  }
 
-  return occurrence && isTanaNodeElement(occurrence) && typeof occurrence[0].id === 'string'
-    ? occurrence[0].id
-    : undefined;
+  const fieldNodeId = occurrence[0].id;
+
+  // A local template override starts with the inherited binding's effective
+  // behavior and defaults. Values remain real child Nodes owned by this new
+  // occurrence; no second schema or metadata map is introduced.
+  if (inheritedTemplate) {
+    const inheritedNode = inheritedTemplate.templateNodeId
+      ? initialIndex.nodesById.get(inheritedTemplate.templateNodeId)?.node
+      : undefined;
+    const inheritedElement = inheritedNode as TanaBlockElement | undefined;
+
+    if (inheritedElement?.tanaFieldOptional === true) {
+      editor.tf.setNodes({ tanaFieldOptional: true }, { at: occurrence[1] });
+    }
+    if (inheritedElement?.tanaFieldPinned === true) {
+      editor.tf.setNodes({ tanaFieldPinned: true }, { at: occurrence[1] });
+    }
+    if (inheritedElement?.tanaFieldInitializer) {
+      editor.tf.setNodes(
+        { tanaFieldInitializer: structuredClone(inheritedElement.tanaFieldInitializer) },
+        { at: occurrence[1] }
+      );
+    }
+
+    const inheritedValues = inheritedTemplate.values;
+    if (inheritedValues.length > 0) {
+      writeValue(editor, parentNodeId, fieldId, structuredClone(inheritedValues[0]));
+      if (definition?.cardinality === 'list') {
+        inheritedValues.slice(1).forEach((value) => {
+          addValue(editor, parentNodeId, fieldId, structuredClone(value));
+        });
+      }
+    }
+  }
+
+  return fieldNodeId;
 }
 
 function writeValue(
@@ -688,6 +729,89 @@ function deleteAdHoc(editor: PlateEditor, nodeId: NodeId, fieldId: NodeId) {
     .reverse()
     .forEach((path) => editor.tf.removeNodes({ at: path }));
   editor.tf.removeNodes({ at: fieldPath });
+
+  return true;
+}
+
+function removeSupertagTemplateOccurrence(
+  editor: PlateEditor,
+  supertagId: NodeId,
+  templateNodeId: NodeId
+) {
+  const index = buildTanaIndex(editor.children);
+  const supertagEntry = getTanaNodeEntry(editor, supertagId);
+  const templateEntry = getTanaNodeEntry(editor, templateNodeId);
+
+  if (
+    !supertagEntry?.[0].tanaSupertagDefinition ||
+    !isTanaNodeActive(index, supertagId) ||
+    !templateEntry
+  ) {
+    return false;
+  }
+
+  const [, supertagPath] = supertagEntry;
+  const [template, templatePath] = templateEntry;
+  const parentPath = getTanaParentPath(editor.children, templatePath);
+
+  if (parentPath?.[0] !== supertagPath[0]) return false;
+
+  if (template.tanaFieldId) {
+    const fieldNode = index.fieldNodesById.get(templateNodeId);
+
+    if (
+      !fieldNode ||
+      fieldNode.parentNodeId !== supertagId ||
+      fieldNode.fieldId !== template.tanaFieldId ||
+      !getLiveFieldDefinitionEntry(editor, fieldNode.fieldId)
+    ) {
+      return false;
+    }
+
+    getTanaNodeDescendantPaths(editor.children, templatePath)
+      .reverse()
+      .forEach((path) => editor.tf.removeNodes({ at: path }));
+    editor.tf.removeNodes({ at: templatePath });
+
+    return true;
+  }
+
+  if (!template.tanaFieldDefinition) return false;
+
+  const schemaId = index.systemNodeIds.get('schema');
+  const schemaEntry = schemaId ? getTanaNodeEntry(editor, schemaId) : undefined;
+
+  if (!schemaEntry) return false;
+
+  const [schema, schemaPath] = schemaEntry;
+  const schemaDescendants = getTanaNodeDescendantPaths(editor.children, schemaPath);
+  const destination = (schemaDescendants.at(-1)?.[0] ?? schemaPath[0]) + 1;
+  const targetIndent = (typeof schema.indent === 'number' ? schema.indent : 0) + 1;
+  const subtreePaths = [templatePath, ...getTanaNodeDescendantPaths(editor.children, templatePath)];
+  const subtreeNodes = subtreePaths.flatMap((path) => {
+    const node = editor.api.node(path)?.[0];
+
+    return node && ElementApi.isElement(node) ? [node as TanaBlockElement] : [];
+  });
+
+  if (subtreeNodes.length !== subtreePaths.length) return false;
+
+  const insertAt = destination - subtreePaths.filter((path) => path[0] < destination).length;
+
+  editor.tf.withoutNormalizing(() => {
+    subtreePaths
+      .slice()
+      .reverse()
+      .forEach((path) => editor.tf.removeNodes({ at: path }));
+    editor.tf.insertNodes(subtreeNodes, { at: [insertAt] });
+    subtreeNodes.forEach((node, offset) => {
+      const oldIndent = typeof node.indent === 'number' ? node.indent : 0;
+
+      editor.tf.setNodes({ indent: targetIndent + oldIndent - (typeof template.indent === 'number' ? template.indent : 0) }, {
+        at: [insertAt + offset]
+      });
+    });
+  });
 
   return true;
 }
@@ -1173,6 +1297,10 @@ export const TanaFieldPlugin = createPlatePlugin({
         withFieldHistoryBatch(editor, () => removeValue(editor, nodeId, fieldId, valueNodeId)),
       removeOption: (fieldId: NodeId, optionId: NodeId) =>
         withFieldHistoryBatch(editor, () => removeOption(editor, fieldId, optionId)),
+      removeSupertagTemplateOccurrence: (supertagId: NodeId, templateNodeId: NodeId) =>
+        withFieldHistoryBatch(editor, () =>
+          removeSupertagTemplateOccurrence(editor, supertagId, templateNodeId)
+        ),
       setValue: (nodeId: NodeId, fieldId: NodeId, value: FieldValue) =>
         withFieldHistoryBatch(editor, () => setValue(editor, nodeId, fieldId, value)),
       setRawScalarValue: (

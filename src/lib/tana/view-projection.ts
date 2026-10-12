@@ -1,4 +1,4 @@
-import { getTanaProjectionTarget, isTanaNodeActive } from './index';
+import { getTanaProjectionTarget, hasTanaSupertag, isTanaNodeActive } from './index';
 import { getSupertagTemplateFields, getTanaSystemFieldLabel, getTanaSystemFieldValue, isTanaSystemTimeField } from './fields';
 import { resolveTanaNodeTitle } from './title';
 import type {
@@ -113,9 +113,7 @@ export function matchesTanaViewFilterClause(
       return [target.text, resolveTanaNodeTitle(index, target.id)]
         .some((text) => text.toLocaleLowerCase().includes(clause.text.toLocaleLowerCase()));
     case 'has-supertag':
-      return !!index.nodesById.get(clause.supertagId)?.supertagDefinition &&
-        isTanaNodeActive(index, clause.supertagId) &&
-        target.supertagIds.includes(clause.supertagId);
+      return hasTanaSupertag(index, target.id, clause.supertagId);
     case 'field-set':
       return hasUsableField(index, clause.fieldId) && hasStoredFieldValue(index, target.id, clause.fieldId);
     case 'field-not-set':

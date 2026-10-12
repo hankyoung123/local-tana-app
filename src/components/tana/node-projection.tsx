@@ -1,12 +1,15 @@
 'use client';
 
 import * as React from 'react';
+import { XIcon } from 'lucide-react';
 import { ElementApi, KEYS, TextApi } from 'platejs';
 import type { Descendant, TElement, TText } from 'platejs';
 import { useEditorRef } from 'platejs/react';
 
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
+import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-plugin';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -27,6 +30,7 @@ import {
   resolveTanaNodeTitle,
   resolveTanaNodeTitleSegments,
   getTanaProjectionTarget,
+  resolveTanaSupertagCheckboxConfig,
   isTanaTitleExpressionNameEditable,
   type NodeId,
   type TanaFieldNode,
@@ -38,6 +42,8 @@ import {
 } from '@/lib/tana';
 
 import { TanaNodeBullet } from './tana-node-gutter';
+import { CreateSourceInstanceControl } from './create-source-instance-control';
+import { TanaSupertagControl } from './tana-supertag-control';
 
 type ProjectionVariant = 'block-reference' | 'search-result';
 
@@ -274,6 +280,8 @@ export function TanaNodeRowChrome({
   const semanticType = variant === 'trash'
     ? target.semanticType
     : isBlockReference ? 'reference' : 'search';
+  const checkboxConfig = resolveTanaSupertagCheckboxConfig(index, target.id);
+  const checkboxChecked = target.doneState === checkboxConfig.checked;
   const navigate = () => editor.getTransforms(TanaZoomPlugin).zoom.to(target.id);
   const edit = onEdit ?? (() => {
     if (!editor.getTransforms(TanaZoomPlugin).zoom.to(target.id)) return;
@@ -302,6 +310,21 @@ export function TanaNodeRowChrome({
       >
         <TanaNodeBullet compact={isBlockReference} semanticType={semanticType} />
       </button>
+      {checkboxConfig.show && variant !== 'trash' && (
+        <Checkbox
+          aria-label={`${displayTitle || '节点'}完成状态`}
+          checked={checkboxChecked}
+          className="size-3.5 shrink-0"
+          onCheckedChange={(checked) => {
+            if (typeof checked !== 'boolean') return;
+
+            editor
+              .getTransforms(TanaSupertagPlugin)
+              .supertag.applyCheckboxState(target.id, checked);
+          }}
+          onClick={(event) => event.stopPropagation()}
+        />
+      )}
       <div className="min-w-0 flex-1">
         {target.systemNode ? (
           <p className={projectionTitleClassName}>{target.titleExpression ? <TitleExpressionProjection segments={displaySegments} /> : displayTitle}</p>
@@ -327,11 +350,53 @@ export function TanaNodeRowChrome({
             {tags.map((tag) => (
               <span
                 key={tag.id}
-                className="text-[10px] leading-4 text-[var(--tana-accent)]"
+                className="group/tag inline-flex items-center text-[10px] leading-4 text-[var(--tana-accent)]"
               >
-                #{tag.text}
+                <button
+                  aria-label={`打开超级标签 ${tag.text}`}
+                  className="rounded-sm px-0.5 hover:bg-[var(--tana-accent-soft)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--tana-accent)]"
+                  disabled={variant === 'trash'}
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    editor.getTransforms(TanaZoomPlugin).zoom.to(tag.id);
+                  }}
+                >
+                  #{tag.text}
+                </button>
+                {variant !== 'trash' && (
+                  <button
+                    aria-label={`移除超级标签 ${tag.text}`}
+                    className="rounded-sm px-0.5 text-[var(--tana-text-tertiary)] opacity-0 hover:bg-[var(--tana-hover)] hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--tana-accent)] group-hover/tag:opacity-100"
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      editor.getTransforms(TanaSupertagPlugin).supertag.remove(target.id, tag.id);
+                    }}
+                  >
+                    <XIcon aria-hidden="true" className="size-3" />
+                  </button>
+                )}
               </span>
             ))}
+            {variant !== 'trash' && (
+              <TanaSupertagControl
+                assignedIds={target.supertagIds}
+                index={index}
+                targetNodeId={target.id}
+              />
+            )}
+          </div>
+        )}
+        {tags.length === 0 && variant !== 'trash' && (
+          <div className="mt-0.5">
+            <TanaSupertagControl
+              assignedIds={target.supertagIds}
+              index={index}
+              targetNodeId={target.id}
+            />
           </div>
         )}
         {fields.length > 0 && (
@@ -455,12 +520,33 @@ function ProjectionFieldValueControl({
     : 'UTC';
   const warning = (field.validationIssuesByValueNodeId.get(valueNodeId) ?? []).length > 0;
   const warningId = `projection-field-warning-${valueNodeId}`;
+  const doneStateMapping = definition.type === 'checkbox' ? definition.doneStateMapping : undefined;
   const clear = () => definition.cardinality === 'list'
     ? transforms.removeValue(targetNodeId, field.fieldId, valueNodeId)
     : transforms.clearValue(targetNodeId, field.fieldId);
-  const set = (next: FieldValue) => definition.cardinality === 'list'
-    ? transforms.setValueAt(targetNodeId, field.fieldId, valueNodeId, next)
-    : transforms.setValue(targetNodeId, field.fieldId, next);
+  const set = (next: FieldValue) => {
+    let changed = false;
+
+    editor.tf.withNewBatch(() => {
+      changed = definition.cardinality === 'list'
+        ? transforms.setValueAt(targetNodeId, field.fieldId, valueNodeId, next)
+        : transforms.setValue(targetNodeId, field.fieldId, next);
+
+      if (changed && next.type === 'checkbox') {
+        const mappedState = next.value
+          ? doneStateMapping?.checked
+          : doneStateMapping?.unchecked;
+
+        if (mappedState) {
+          editor
+            .getTransforms(TanaNodeIdentityPlugin)
+            .tanaNodeIdentity.setDoneState(targetNodeId, mappedState);
+        }
+      }
+    });
+
+    return changed;
+  };
 
   if (definition.type === 'checkbox') {
     return (
@@ -507,6 +593,13 @@ function ProjectionFieldValueControl({
           </SelectContent>
         </Select>
         <button aria-label="清除字段值" className="rounded px-1 hover:bg-[var(--tana-hover)]" type="button" onClick={clear}>清除</button>
+        {definition.type === 'from-supertag' && definition.sourceSupertagId && (
+          <CreateSourceInstanceControl
+            fieldId={field.fieldId}
+            nodeId={targetNodeId}
+            sourceSupertagId={definition.sourceSupertagId}
+          />
+        )}
         <ProjectionFieldWarning id={warningId} warning={warning} />
       </span>
     );

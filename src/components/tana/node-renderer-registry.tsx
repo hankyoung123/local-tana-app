@@ -15,6 +15,7 @@ import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { TanaFieldPlugin } from '@/components/editor/plugins/tana-field-plugin';
 import { TanaNodeLifecyclePlugin } from '@/components/editor/plugins/tana-node-lifecycle-plugin';
+import { TanaNodeIdentityPlugin } from '@/components/editor/plugins/tana-node-identity-plugin';
 import { TanaPresentationPlugin } from '@/components/editor/plugins/tana-presentation-plugin';
 import { TanaReferencePlugin } from '@/components/editor/plugins/tana-reference-plugin';
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
@@ -54,6 +55,7 @@ import {
 } from './tana-presentation';
 import { TanaView } from './tana-view';
 import { TanaSupertagPage } from './tana-supertag-page';
+import { CreateSourceInstanceControl } from './create-source-instance-control';
 import { useTanaZoomPresentation } from './tana-zoom-presentation';
 
 export type TanaNodeBlockRendererProps = {
@@ -511,7 +513,18 @@ export function TanaFieldValueEditor({ index, nodeId, inline = false }: {
             data-plate-prevent-deselect
             onCheckedChange={(checked) => {
               if (typeof checked === 'boolean') {
-                setValue({ type: 'checkbox', value: checked });
+                editor.tf.withNewBatch(() => {
+                  const changed = setValue({ type: 'checkbox', value: checked });
+                  const mappedState = checked
+                    ? definition.doneStateMapping?.checked
+                    : definition.doneStateMapping?.unchecked;
+
+                  if (changed && mappedState) {
+                    editor
+                      .getTransforms(TanaNodeIdentityPlugin)
+                      .tanaNodeIdentity.setDoneState(fieldNode.parentNodeId, mappedState);
+                  }
+                });
               }
             }}
           />
@@ -615,6 +628,13 @@ export function TanaFieldValueEditor({ index, nodeId, inline = false }: {
           fieldId={fieldNode.fieldId}
           nodeId={fieldNode.parentNodeId}
           valueNodeId={nodeId}
+        />
+      )}
+      {definition.type === 'from-supertag' && definition.sourceSupertagId && (
+        <CreateSourceInstanceControl
+          fieldId={fieldNode.fieldId}
+          nodeId={fieldNode.parentNodeId}
+          sourceSupertagId={definition.sourceSupertagId}
         />
       )}
       <FieldValueWarning id={warningId} label={validationLabel} />

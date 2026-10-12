@@ -8,13 +8,19 @@ import {
 } from '@/lib/tana/constants';
 import {
   getSupertagTemplateFields,
+  isFieldValueCompatible,
+  isFieldValueValid,
+  isTanaFieldHostNode,
   resolveTanaFieldInitializer,
 } from '@/lib/tana/fields';
 import {
   buildTanaIndex,
   getTanaProjectionTarget,
+  hasSupertagInheritanceCycle,
   getSupertagInheritance,
+  isSupertagInheritanceUsable,
   isTanaNodeActive,
+  resolveTanaSupertagCheckboxConfig,
 } from '@/lib/tana/index';
 import { getNodeSemanticTypes, hasNodeSemantic } from '@/lib/tana/node-semantic';
 import {
@@ -22,9 +28,16 @@ import {
   getTanaNodeDescendantPaths,
   getTanaParentPath,
 } from '@/lib/tana/outliner';
-import type { NodeId, TanaBlockElement } from '@/lib/tana/types';
+import type {
+  NodeId,
+  SupertagDefinition,
+  TanaBlockElement,
+  TanaDoneState,
+  TanaSupertagCheckboxFieldMapping,
+} from '@/lib/tana/types';
 
 import { TanaFieldPlugin } from './tana-field-plugin';
+import { TanaNodeIdentityPlugin } from './tana-node-identity-plugin';
 import { TanaNodeLifecyclePlugin } from './tana-node-lifecycle-plugin';
 
 export const TANA_SUPERTAG_PLUGIN_KEY = 'tanaSupertag' as const;
@@ -51,8 +64,122 @@ function getDefinitionEntry(editor: PlateEditor, supertagId: NodeId) {
     : undefined;
 }
 
+function getActiveDefinitionEntry(editor: PlateEditor, supertagId: NodeId) {
+  const entry = getDefinitionEntry(editor, supertagId);
+
+  if (!entry) return;
+
+  return isTanaNodeActive(buildTanaIndex(editor.children), supertagId)
+    ? entry
+    : undefined;
+}
+
+function isSupertagDefinitionHost(
+  editor: PlateEditor,
+  entry: NodeEntry<TanaBlockElement>
+) {
+  const semanticTypes = getNodeSemanticTypes(entry[0], {
+    document: editor.children,
+    path: entry[1],
+  });
+
+  return (
+    semanticTypes.length === 1 &&
+    semanticTypes[0] === 'content' &&
+    entry[0].tanaReferenceTargetId === undefined &&
+    entry[0].tanaSystemNode === undefined
+  );
+}
+
+function isDefaultChildOwner(
+  editor: PlateEditor,
+  entry: NodeEntry<TanaBlockElement>
+) {
+  const semanticTypes = getNodeSemanticTypes(entry[0], {
+    document: editor.children,
+    path: entry[1],
+  });
+
+  return (
+    semanticTypes.length === 1 &&
+    (semanticTypes[0] === 'content' || semanticTypes[0] === 'supertag-definition')
+  );
+}
+
+function removeCreatedSubtree(editor: PlateEditor, path: number[]) {
+  return editor
+    .getTransforms(TanaNodeLifecyclePlugin)
+    .node.replaceSubtreesRaw([path], []);
+}
+
 function normalizeName(name: string) {
   return name.trim();
+}
+
+/** Writes the Supertag checkbox's field mapping through the canonical Field writer. */
+function applyCheckboxFieldMapping(
+  editor: PlateEditor,
+  nodeId: NodeId,
+  mapping: TanaSupertagCheckboxFieldMapping | undefined
+) {
+  if (!mapping || mapping.values.length === 0) return false;
+
+  const index = buildTanaIndex(editor.children);
+  const target = getTanaProjectionTarget(index, nodeId);
+  const definition = index.nodesById.get(mapping.fieldId)?.fieldDefinition;
+
+  if (
+    !target ||
+    !definition ||
+    !isTanaFieldHostNode(editor.children, getTanaNodeEntry(editor, target.id)?.[1] ?? []) ||
+    (definition.cardinality === 'single' && mapping.values.length > 1) ||
+    mapping.values.some(
+      (value) => !isFieldValueCompatible(definition, value) || !isFieldValueValid(index, mapping.fieldId, value)
+    )
+  ) {
+    return false;
+  }
+
+  const field = editor.getTransforms(TanaFieldPlugin).field;
+  let changed = false;
+
+  field.materialize(target.id, mapping.fieldId);
+  field.clearValue(target.id, mapping.fieldId);
+
+  mapping.values.forEach((value, indexInMapping) => {
+    if (indexInMapping === 0) {
+      changed = field.setValue(target.id, mapping.fieldId, value) || changed;
+    } else if (definition.cardinality === 'list') {
+      changed = field.addValue(target.id, mapping.fieldId, value) !== undefined || changed;
+    }
+  });
+
+  return changed;
+}
+
+function applyCheckboxState(editor: PlateEditor, nodeId: NodeId, checked: boolean) {
+  const initialIndex = buildTanaIndex(editor.children);
+  const target = getTanaProjectionTarget(initialIndex, nodeId);
+
+  if (!target || !isTanaNodeActive(initialIndex, target.id)) return false;
+
+  const config = resolveTanaSupertagCheckboxConfig(initialIndex, target.id);
+  const fieldMapping = checked ? config.checkedFieldMapping : config.uncheckedFieldMapping;
+  const doneState = checked ? config.checked : config.unchecked[0];
+  let changed = false;
+
+  editor.tf.withNewBatch(() => {
+    changed = applyCheckboxFieldMapping(editor, target.id, fieldMapping) || changed;
+
+    if (doneState) {
+      changed =
+        editor
+          .getTransforms(TanaNodeIdentityPlugin)
+          .tanaNodeIdentity.setDoneState(target.id, doneState as TanaDoneState) || changed;
+    }
+  });
+
+  return changed;
 }
 
 function isSelectionInNode(editor: PlateEditor, nodePath: number[]) {
@@ -108,26 +235,34 @@ function materializeTemplateChildren(
 
   const targetIndent = typeof target.indent === 'number' ? target.indent : 0;
 
-  for (const subtreePaths of getTemplateSubtreePaths(editor, supertagPath)) {
-    const root = editor.api.node(subtreePaths[0])?.[0] as TanaBlockElement | undefined;
+  const subtreeSnapshots = getTemplateSubtreePaths(editor, supertagPath).flatMap(
+    (subtreePaths) => {
+      const nodes = subtreePaths.flatMap((path) => {
+        const source = editor.api.node(path)?.[0];
+
+        return source && ElementApi.isElement(source)
+          ? [structuredClone(source) as TanaBlockElement]
+          : [];
+      });
+
+      return nodes.length === subtreePaths.length ? [nodes] : [];
+    }
+  );
+
+  for (const subtree of subtreeSnapshots) {
+    const root = subtree[0];
     const rootIndent = typeof root?.indent === 'number' ? root.indent : 0;
     const insertionPath = [
       (getTanaNodeDescendantPaths(editor.children, nodePath).at(-1)?.[0] ?? nodePath[0]) +
         1,
     ];
     const idMap = new Map<NodeId, NodeId>();
-    subtreePaths.forEach((path) => {
-      const source = editor.api.node(path)?.[0];
-
-      if (source && ElementApi.isElement(source) && typeof source.id === 'string') {
+    subtree.forEach((source) => {
+      if (typeof source.id === 'string') {
         idMap.set(source.id, nanoid());
       }
     });
-    const clonedNodes = subtreePaths.flatMap((path) => {
-      const source = editor.api.node(path)?.[0];
-
-      if (!source || !ElementApi.isElement(source)) return [];
-
+    const clonedNodes = subtree.map((source) => {
       const clone = structuredClone(source) as TanaBlockElement;
       const sourceIndent = typeof clone.indent === 'number' ? clone.indent : rootIndent;
 
@@ -155,16 +290,14 @@ function materializeTemplateChildren(
         };
       }
 
-      return [
-        {
-          ...clone,
-          id: idMap.get(source.id as NodeId) ?? nanoid(),
-          indent: targetIndent + 1 + (sourceIndent - rootIndent),
-        },
-      ];
+      return {
+        ...clone,
+        id: idMap.get(source.id as NodeId) ?? nanoid(),
+        indent: targetIndent + 1 + (sourceIndent - rootIndent),
+      };
     });
 
-    if (clonedNodes.length === subtreePaths.length) {
+    if (clonedNodes.length === subtree.length) {
       editor.tf.insertNodes(clonedNodes, { at: insertionPath });
     }
   }
@@ -221,11 +354,8 @@ function define(editor: PlateEditor, nodeId: NodeId) {
 
   if (
     !entry ||
-    entry[0].tanaReferenceTargetId !== undefined ||
-    hasNodeSemantic(entry[0], 'supertag-definition', {
-      document: editor.children,
-      path: entry[1],
-    })
+    !isTanaNodeActive(buildTanaIndex(editor.children), nodeId) ||
+    !isSupertagDefinitionHost(editor, entry)
   ) {
     return false;
   }
@@ -245,7 +375,7 @@ function setExtends(
   supertagId: NodeId,
   parentIds: readonly NodeId[]
 ) {
-  const entry = getDefinitionEntry(editor, supertagId);
+  const entry = getActiveDefinitionEntry(editor, supertagId);
 
   if (!entry || !Array.isArray(parentIds)) return false;
 
@@ -253,10 +383,13 @@ function setExtends(
   const index = buildTanaIndex(editor.children);
 
   if (
+    hasSupertagInheritanceCycle(index, supertagId) ||
     uniqueParentIds.some(
       (parentId) =>
         parentId === supertagId ||
-        !getDefinitionEntry(editor, parentId) ||
+        !getActiveDefinitionEntry(editor, parentId) ||
+        !isSupertagInheritanceUsable(index, parentId) ||
+        hasSupertagInheritanceCycle(index, parentId) ||
         getSupertagInheritance(index, parentId).includes(supertagId)
     )
   ) {
@@ -292,9 +425,17 @@ function getDefaultChildSupertagId(editor: PlateEditor, ownerId: NodeId) {
   if (!owner) return;
   const ownDefault = (owner.node as TanaBlockElement).tanaDefaultChildSupertagId;
 
-  if (ownDefault && getDefinitionEntry(editor, ownDefault)) return ownDefault;
+  if (
+    ownDefault &&
+    getActiveDefinitionEntry(editor, ownDefault) &&
+    isSupertagInheritanceUsable(index, ownDefault)
+  ) {
+    return ownDefault;
+  }
 
   for (const supertagId of owner.supertagIds) {
+    if (!isSupertagInheritanceUsable(index, supertagId)) continue;
+
     const definitionIds = [
       supertagId,
       ...getSupertagInheritance(index, supertagId).slice().reverse(),
@@ -304,7 +445,11 @@ function getDefaultChildSupertagId(editor: PlateEditor, ownerId: NodeId) {
       const defaultChildSupertagId =
         index.nodesById.get(definitionId)?.supertagDefinition?.defaultChildSupertagId;
 
-      if (defaultChildSupertagId && getDefinitionEntry(editor, defaultChildSupertagId)) {
+      if (
+        defaultChildSupertagId &&
+        getActiveDefinitionEntry(editor, defaultChildSupertagId) &&
+        isSupertagInheritanceUsable(index, defaultChildSupertagId)
+      ) {
         return defaultChildSupertagId;
       }
     }
@@ -345,9 +490,18 @@ function setDefaultChildSupertag(
   defaultChildSupertagId: NodeId | null
 ) {
   const entry = getTanaNodeEntry(editor, ownerNodeId);
+  const index = buildTanaIndex(editor.children);
 
-  if (!entry || entry[0].tanaSystemNode !== undefined) return false;
-  if (defaultChildSupertagId !== null && !getDefinitionEntry(editor, defaultChildSupertagId)) {
+  if (
+    !entry ||
+    !isTanaNodeActive(index, ownerNodeId) ||
+    !isDefaultChildOwner(editor, entry)
+  ) return false;
+  if (
+    defaultChildSupertagId !== null &&
+    (!getActiveDefinitionEntry(editor, defaultChildSupertagId) ||
+      !isSupertagInheritanceUsable(index, defaultChildSupertagId))
+  ) {
     return false;
   }
 
@@ -384,7 +538,7 @@ function setDefaultChildSupertag(
 }
 
 function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression: string) {
-  const entry = getDefinitionEntry(editor, supertagId);
+  const entry = getActiveDefinitionEntry(editor, supertagId);
 
   if (!entry) return false;
 
@@ -407,6 +561,75 @@ function setTitleExpression(editor: PlateEditor, supertagId: NodeId, expression:
   return true;
 }
 
+function updateDefinitionSettings(
+  editor: PlateEditor,
+  supertagId: NodeId,
+  patch: Partial<SupertagDefinition>
+) {
+  const entry = getActiveDefinitionEntry(editor, supertagId);
+
+  if (!entry || !patch || typeof patch !== 'object') return false;
+
+  // Keep inheritance and default-child writes on their dedicated transforms so
+  // cycle checks and host validation cannot be bypassed by a generic settings
+  // update from a panel or command.
+  const allowedKeys = new Set<keyof SupertagDefinition>([
+    'icon',
+    'banner',
+    'color',
+    'description',
+    'baseType',
+    'showCheckbox',
+    'doneStateMapping',
+    'checkboxFieldMapping',
+    'titleExpression',
+    'ai',
+    'voice',
+    'relatedContent',
+    'shortcuts',
+    'buildingBlock',
+  ]);
+  if (Object.keys(patch).some((key) => !allowedKeys.has(key as keyof SupertagDefinition))) {
+    return false;
+  }
+
+  const current = entry[0].tanaSupertagDefinition ?? {};
+  const next = { ...current, ...patch } as SupertagDefinition;
+
+  const normalize = (value: unknown): unknown => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string') return value.trim() ? value : undefined;
+    if (Array.isArray(value)) {
+      const values = value
+        .map(normalize)
+        .filter((item): item is Exclude<unknown, undefined> => item !== undefined);
+      return values.length > 0 ? values : undefined;
+    }
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      const normalized = Object.fromEntries(
+        Object.entries(record)
+          .map(([key, item]) => [key, normalize(item)] as const)
+          .filter(([, item]) => item !== undefined)
+      );
+      return Object.keys(normalized).length > 0 ? normalized : undefined;
+    }
+    return value;
+  };
+
+  for (const key of Object.keys(patch) as Array<keyof SupertagDefinition>) {
+    const normalized = normalize((next as Record<string, unknown>)[key]);
+
+    if (normalized === undefined) delete (next as Record<string, unknown>)[key];
+    else (next as Record<string, unknown>)[key] = normalized;
+  }
+
+  if (JSON.stringify(current) === JSON.stringify(next)) return false;
+
+  editor.tf.setNodes({ tanaSupertagDefinition: next }, { at: entry[1] });
+  return true;
+}
+
 function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const appliedAt = new Date();
   const initialIndex = buildTanaIndex(editor.children);
@@ -421,7 +644,7 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     !nodeEntry ||
     !definitionEntry ||
     !isTanaNodeActive(initialIndex, canonicalTarget.id) ||
-    !isTanaNodeActive(initialIndex, supertagId)
+    !isSupertagInheritanceUsable(initialIndex, supertagId)
   ) {
     return false;
   }
@@ -477,11 +700,13 @@ function applyInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
     }
   });
   const templateDefinitionIds = [
-    ...getSupertagInheritance(updatedIndex, supertagId),
+    ...getSupertagInheritance(updatedIndex, supertagId).filter((definitionId) =>
+      isTanaNodeActive(updatedIndex, definitionId)
+    ),
     supertagId,
   ];
   templateDefinitionIds.forEach((templateDefinitionId) => {
-    const templateEntry = getDefinitionEntry(editor, templateDefinitionId);
+    const templateEntry = getActiveDefinitionEntry(editor, templateDefinitionId);
 
     if (templateEntry) {
       materializeTemplateChildren(editor, nodePath, templateEntry[1]);
@@ -556,6 +781,7 @@ function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
   const currentSupertagIds = nodeEntry[0].tanaSupertagIds ?? [];
   const nextSupertagIds = currentSupertagIds.filter((id) => id !== supertagId);
   const removedMembership = nextSupertagIds.length !== currentSupertagIds.length;
+  let removedPresentation = false;
 
   editor.tf.withNewBatch(() => {
     if (removedMembership) {
@@ -576,10 +802,11 @@ function remove(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) {
       })
     );
 
+    removedPresentation = entries.length > 0;
     entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
   });
 
-  return removedMembership;
+  return removedMembership || removedPresentation;
 }
 
 function createAndApply(editor: PlateEditor, nodeId: NodeId, name: string): NodeId | undefined {
@@ -603,11 +830,11 @@ function createInstanceInBatch(
   title = ''
 ): NodeId | undefined {
   const index = buildTanaIndex(editor.children);
-  const definition = getDefinitionEntry(editor, supertagId);
+  const definition = getActiveDefinitionEntry(editor, supertagId);
   const homeId = index.systemNodeIds.get('home');
   const homeEntry = homeId ? getTanaNodeEntry(editor, homeId) : undefined;
 
-  if (!definition || !homeEntry || !isTanaNodeActive(index, supertagId)) return;
+  if (!definition || !homeEntry || !isSupertagInheritanceUsable(index, supertagId)) return;
 
   const [home, homePath] = homeEntry;
   const descendants = getTanaNodeDescendantPaths(editor.children, homePath);
@@ -621,9 +848,13 @@ function createInstanceInBatch(
   );
   const entry = editor.api.node(insertionPath);
 
-  if (!entry || !isTanaNodeElement(entry)) return;
+  if (!entry || !isTanaNodeElement(entry)) {
+    removeCreatedSubtree(editor, insertionPath);
+    return;
+  }
   instanceId = typeof entry[0].id === 'string' ? entry[0].id : undefined;
   if (!instanceId || !applyInBatch(editor, instanceId, supertagId)) {
+    removeCreatedSubtree(editor, entry[1]);
     instanceId = undefined;
   }
 
@@ -655,9 +886,17 @@ function createSourceInstanceAndAssign(
   const index = buildTanaIndex(editor.children);
   const canonicalHost = getTanaProjectionTarget(index, nodeId);
   const fieldDefinition = index.nodesById.get(fieldId)?.fieldDefinition;
+  const sourceSupertag = index.nodesById.get(sourceSupertagId);
 
   if (
     !canonicalHost ||
+    !isTanaNodeActive(index, canonicalHost.id) ||
+    !isTanaFieldHostNode(index.document, canonicalHost.path) ||
+    !isTanaNodeActive(index, fieldId) ||
+    !sourceSupertag ||
+    !isTanaNodeActive(index, sourceSupertagId) ||
+    !sourceSupertag.semanticTypes.includes('supertag-definition') ||
+    !isSupertagInheritanceUsable(index, sourceSupertagId) ||
     fieldDefinition?.type !== 'from-supertag' ||
     fieldDefinition.sourceSupertagId !== sourceSupertagId
   ) {
@@ -674,6 +913,9 @@ function createSourceInstanceAndAssign(
     const fieldTransforms = editor.getTransforms(TanaFieldPlugin).field;
 
     if (!fieldTransforms.materialize(canonicalHost.id, fieldId)) {
+      const created = buildTanaIndex(editor.children).nodesById.get(instanceId);
+
+      if (created) removeCreatedSubtree(editor, created.path);
       instanceId = undefined;
       return;
     }
@@ -684,7 +926,12 @@ function createSourceInstanceAndAssign(
       { type: 'from-supertag', value: instanceId }
     );
 
-    if (!assigned) instanceId = undefined;
+    if (!assigned) {
+      const created = buildTanaIndex(editor.children).nodesById.get(instanceId);
+
+      if (created) removeCreatedSubtree(editor, created.path);
+      instanceId = undefined;
+    }
   };
 
   if (editor.api.isMerging()) {
@@ -818,9 +1065,10 @@ function removeInBatch(editor: PlateEditor, nodeId: NodeId, supertagId: NodeId) 
         candidate.key === supertagId,
     })
   );
+  const removedPresentation = entries.length > 0;
   entries.reverse().forEach(([, path]) => editor.tf.removeNodes({ at: path }));
 
-  return removedMembership;
+  return removedMembership || removedPresentation;
 }
 
 function removeMany(editor: PlateEditor, nodeIds: readonly NodeId[], supertagId: NodeId) {
@@ -862,6 +1110,17 @@ export const TanaSupertagPlugin = createPlatePlugin({
       setExtends(editor, supertagId, parentIds),
     setTitleExpression: (supertagId: NodeId, expression: string) =>
       setTitleExpression(editor, supertagId, expression),
+    applyCheckboxFieldMapping: (
+      nodeId: NodeId,
+      mapping: TanaSupertagCheckboxFieldMapping | undefined
+    ) =>
+      editor.tf.withNewBatch(() => applyCheckboxFieldMapping(editor, nodeId, mapping)),
+    applyCheckboxState: (nodeId: NodeId, checked: boolean) =>
+      applyCheckboxState(editor, nodeId, checked),
+    updateDefinitionSettings: (
+      supertagId: NodeId,
+      patch: Partial<SupertagDefinition>
+    ) => updateDefinitionSettings(editor, supertagId, patch),
     convertToSupertag: (nodeId: NodeId) => convertToSupertag(editor, nodeId),
     applyMany: (nodeIds: readonly NodeId[], supertagId: NodeId) =>
       applyMany(editor, nodeIds, supertagId),

@@ -22,7 +22,7 @@ export function createTanaViewNode(
   const view = index.nodesById.get(viewId);
   const entry = editor.api.node({ at: [], id: viewId });
 
-  if (!view || !entry || !ElementApi.isElement(entry[0]) || !view.viewDefinition) return;
+  if (!view || !entry || !ElementApi.isElement(entry[0])) return;
 
   if (view.supertagDefinition) {
     return editor.getTransforms(TanaSupertagPlugin).supertag.createInstance(viewId);
@@ -32,6 +32,8 @@ export function createTanaViewNode(
     return editor.getTransforms(TanaSearchPlugin).search
       .createResult(viewId, options)?.nodeId;
   }
+
+  if (!view.viewDefinition) return;
 
   const [, path] = entry;
   const node = entry[0] as TanaBlockElement;

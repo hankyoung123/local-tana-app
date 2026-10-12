@@ -89,6 +89,152 @@ function isTanaNodeIdList(value: unknown): value is readonly string[] {
   );
 }
 
+function isPersistedSupertagDefinition(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+
+  const definition = value as Record<string, unknown>;
+  const allowed = new Set([
+    'icon',
+    'banner',
+    'color',
+    'description',
+    'baseType',
+    'showCheckbox',
+    'doneStateMapping',
+    'checkboxFieldMapping',
+    'defaultChildSupertagId',
+    'extends',
+    'titleExpression',
+    'ai',
+    'voice',
+    'relatedContent',
+    'shortcuts',
+    'buildingBlock',
+  ]);
+
+  if (Object.keys(definition).some((key) => !allowed.has(key))) return false;
+
+  for (const key of ['icon', 'banner', 'color', 'description', 'baseType', 'titleExpression'] as const) {
+    if (definition[key] !== undefined && typeof definition[key] !== 'string') return false;
+  }
+
+  if (definition.color !== undefined &&
+    (typeof definition.color !== 'string' || definition.color.trim().length === 0)) return false;
+  if (definition.defaultChildSupertagId !== undefined &&
+    (typeof definition.defaultChildSupertagId !== 'string' || definition.defaultChildSupertagId.length === 0)) {
+    return false;
+  }
+  if (definition.extends !== undefined && !isTanaNodeIdList(definition.extends)) return false;
+  if (definition.showCheckbox !== undefined && typeof definition.showCheckbox !== 'boolean') return false;
+  if (definition.doneStateMapping !== undefined) {
+    const mapping = definition.doneStateMapping as Record<string, unknown>;
+    const unchecked = mapping.unchecked;
+    if (
+      !mapping ||
+      typeof mapping !== 'object' ||
+      Array.isArray(mapping) ||
+      !Object.keys(mapping).every((key) => key === 'checked' || key === 'unchecked') ||
+      (mapping.checked !== undefined && mapping.checked !== 'todo' && mapping.checked !== 'done') ||
+      (unchecked !== undefined &&
+        (!Array.isArray(unchecked) ||
+          unchecked.length === 0 ||
+          !unchecked.every((state) => state === 'todo' || state === 'done') ||
+          new Set(unchecked).size !== unchecked.length))
+    ) {
+      return false;
+    }
+  }
+
+  if (definition.checkboxFieldMapping !== undefined) {
+    const fieldMapping = definition.checkboxFieldMapping as Record<string, unknown>;
+    if (
+      !fieldMapping ||
+      typeof fieldMapping !== 'object' ||
+      Array.isArray(fieldMapping) ||
+      !Object.keys(fieldMapping).every((key) => key === 'checked' || key === 'unchecked')
+    ) {
+      return false;
+    }
+
+    for (const edge of ['checked', 'unchecked'] as const) {
+      const mapping = fieldMapping[edge];
+      if (mapping === undefined) continue;
+      if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return false;
+      const record = mapping as Record<string, unknown>;
+      if (
+        Object.keys(record).some((key) => key !== 'fieldId' && key !== 'values') ||
+        typeof record.fieldId !== 'string' ||
+        record.fieldId.length === 0 ||
+        !Array.isArray(record.values) ||
+        record.values.length === 0 ||
+        !record.values.every(isPersistedFieldValue)
+      ) {
+        return false;
+      }
+    }
+  }
+
+  const validateRecord = (
+    value: unknown,
+    validators: Readonly<Record<string, (entry: unknown) => boolean>>
+  ) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const record = value as Record<string, unknown>;
+    return Object.keys(record).every((key) => validators[key] !== undefined) &&
+      Object.entries(record).every(([key, entry]) => validators[key]?.(entry) === true);
+  };
+
+  if (definition.ai !== undefined && !validateRecord(
+    definition.ai,
+    {
+      autofill: (entry) => typeof entry === 'boolean',
+      audioEnabled: (entry) => typeof entry === 'boolean',
+      compactMenu: (entry) => typeof entry === 'boolean',
+      fullMenu: (entry) => typeof entry === 'boolean',
+      eventCommands: (entry) => typeof entry === 'boolean',
+      instructions: (entry) => typeof entry === 'string',
+    }
+  )) return false;
+  if (definition.voice !== undefined && !validateRecord(
+    definition.voice,
+    {
+      enabled: (entry) => typeof entry === 'boolean',
+      greeting: (entry) => typeof entry === 'string',
+      instructions: (entry) => typeof entry === 'string',
+    }
+  )) return false;
+
+  if (definition.relatedContent !== undefined) {
+    const related = definition.relatedContent as Record<string, unknown>;
+    if (!related || typeof related !== 'object' || Array.isArray(related) ||
+      !Object.keys(related).every((key) => key === 'placement' || key === 'searchNodeIds') ||
+      (related.placement !== undefined && related.placement !== 'below' && related.placement !== 'right') ||
+      (related.searchNodeIds !== undefined && !isTanaNodeIdList(related.searchNodeIds))) return false;
+  }
+
+  if (definition.shortcuts !== undefined) {
+    if (!Array.isArray(definition.shortcuts) || !definition.shortcuts.every((shortcut) => {
+      if (!shortcut || typeof shortcut !== 'object' || Array.isArray(shortcut)) return false;
+      const item = shortcut as Record<string, unknown>;
+      return Object.keys(item).every((key) => ['label', 'targetNodeId', 'create'].includes(key)) &&
+        typeof item.label === 'string' && item.label.trim().length > 0 &&
+        (item.targetNodeId === undefined || (typeof item.targetNodeId === 'string' && item.targetNodeId.length > 0)) &&
+        (item.create === undefined || typeof item.create === 'boolean');
+    })) return false;
+  }
+
+  if (definition.buildingBlock !== undefined) {
+    const buildingBlock = definition.buildingBlock as Record<string, unknown>;
+    if (!buildingBlock || typeof buildingBlock !== 'object' || Array.isArray(buildingBlock) ||
+      !Object.keys(buildingBlock).every((key) => ['promoteFor', 'suggestedSupertagIds', 'hiddenFromSearch'].includes(key)) ||
+      (buildingBlock.promoteFor !== undefined && typeof buildingBlock.promoteFor !== 'string') ||
+      (buildingBlock.suggestedSupertagIds !== undefined && !isTanaNodeIdList(buildingBlock.suggestedSupertagIds)) ||
+      (buildingBlock.hiddenFromSearch !== undefined && typeof buildingBlock.hiddenFromSearch !== 'boolean')) return false;
+  }
+
+  return true;
+}
+
 function isWorkspaceUi(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const source = value as Record<string, unknown>;
@@ -374,32 +520,7 @@ function hasValidSemanticData(element: TElement): boolean {
   }
 
   if (semantic.tanaSupertagDefinition !== undefined) {
-    const definition = semantic.tanaSupertagDefinition as {
-      defaultChildSupertagId?: unknown;
-      extends?: unknown;
-      titleExpression?: unknown;
-    };
-
-    if (!definition || typeof definition !== 'object' ||
-      Object.keys(definition).some(
-        (key) =>
-          key !== 'defaultChildSupertagId' &&
-          key !== 'extends' &&
-          key !== 'titleExpression'
-      ) ||
-      (definition.extends !== undefined &&
-        (!Array.isArray(definition.extends) ||
-          !definition.extends.every(
-            (parentId) => typeof parentId === 'string' && parentId.length > 0
-          ) ||
-          new Set(definition.extends).size !== definition.extends.length)) ||
-      (definition.defaultChildSupertagId !== undefined &&
-        (typeof definition.defaultChildSupertagId !== 'string' ||
-          definition.defaultChildSupertagId.length === 0)) ||
-      (definition.titleExpression !== undefined &&
-        typeof definition.titleExpression !== 'string')) {
-      return false;
-    }
+    if (!isPersistedSupertagDefinition(semantic.tanaSupertagDefinition)) return false;
   }
 
   if (semantic.tanaSearchDefinition !== undefined) {
@@ -527,6 +648,18 @@ function isFieldDefinition(value: unknown): value is {
     );
   }
 
+  if (field.type === 'checkbox' && field.doneStateMapping !== undefined) {
+    const mapping = field.doneStateMapping as {
+      checked?: unknown;
+      unchecked?: unknown;
+    };
+
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return false;
+    if (!Object.keys(mapping).every((key) => key === 'checked' || key === 'unchecked')) return false;
+    if (mapping.checked !== undefined && mapping.checked !== 'todo' && mapping.checked !== 'done') return false;
+    if (mapping.unchecked !== undefined && mapping.unchecked !== 'todo' && mapping.unchecked !== 'done') return false;
+  }
+
   if (field.type === 'number') {
     if (!Object.keys(field).every((key) => ['type', 'cardinality', 'required', 'visibility', 'min', 'max'].includes(key))) {
       return false;
@@ -548,7 +681,8 @@ function isFieldDefinition(value: unknown): value is {
         key === 'type' ||
         key === 'cardinality' ||
         key === 'required' ||
-        key === 'visibility'
+        key === 'visibility' ||
+        (field.type === 'checkbox' && key === 'doneStateMapping')
     );
   }
 

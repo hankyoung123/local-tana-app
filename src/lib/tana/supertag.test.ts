@@ -12,7 +12,8 @@ import { TanaSupertagPlugin } from '@/components/editor/plugins/tana-supertag-pl
 import { TanaZoomPlugin } from '@/components/editor/plugins/tana-zoom-plugin';
 
 import { isTanaNodeElement } from './constants';
-import { buildTanaIndex } from './index';
+import { buildTanaIndex, resolveTanaSupertagCheckboxConfig } from './index';
+import { getSupertagTemplateFields } from './fields';
 import { resolveTanaNodeTitle } from './title';
 
 globalThis.requestAnimationFrame ??= () => 0;
@@ -39,6 +40,154 @@ function tags(node: TElement) {
 }
 
 describe('Tana Supertag operations', () => {
+  test('resolves a valid checkbox field mapping and fails closed for an invalid one', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Task' }],
+        id: 'tag',
+        tanaSupertagDefinition: {
+          showCheckbox: true,
+          checkboxFieldMapping: {
+            checked: { fieldId: 'status', values: [{ type: 'options', value: 'done' }] },
+            unchecked: { fieldId: 'status', values: [{ type: 'options', value: 'backlog' }] },
+          },
+        },
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'tag-status-template', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options', cardinality: 'single' }, type: KEYS.p },
+      { children: [{ text: 'Done' }], id: 'done', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Backlog' }], id: 'backlog', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Task 1' }], id: 'task', tanaSupertagIds: ['tag'], type: KEYS.p },
+    ]);
+    const index = buildTanaIndex(editor.children);
+
+    assert.deepEqual(resolveTanaSupertagCheckboxConfig(index, 'task').checkedFieldMapping, {
+      fieldId: 'status',
+      values: [{ type: 'options', value: 'done' }],
+    });
+
+    const broken = createEditor([
+      {
+        children: [{ text: 'Broken' }],
+        id: 'broken-tag',
+        tanaSupertagDefinition: {
+          showCheckbox: true,
+          checkboxFieldMapping: {
+            checked: { fieldId: 'missing', values: [{ type: 'options', value: 'gone' }] },
+          },
+        },
+        type: KEYS.p,
+      },
+      { children: [{ text: 'Broken task' }], id: 'broken-task', tanaSupertagIds: ['broken-tag'], type: KEYS.p },
+    ]);
+
+    assert.equal(resolveTanaSupertagCheckboxConfig(buildTanaIndex(broken.children), 'broken-task').checkedFieldMapping, undefined);
+  });
+
+  test('writes Supertag checkbox mappings through real Field and Value Nodes', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Task' }],
+        id: 'tag',
+        tanaSupertagDefinition: {
+          showCheckbox: true,
+          checkboxFieldMapping: {
+            checked: { fieldId: 'status', values: [{ type: 'options', value: 'done' }] },
+          },
+        },
+        type: KEYS.p,
+      },
+      { children: [{ text: '' }], id: 'tag-status-template', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options', cardinality: 'single' }, type: KEYS.p },
+      { children: [{ text: 'Done' }], id: 'done', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Task 1' }], id: 'task', tanaSupertagIds: ['tag'], type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    assert.equal(supertag.applyCheckboxState('task', true), true);
+    const index = buildTanaIndex(editor.children);
+    const field = index.fieldNodesByParent.get('task')?.find((entry) => entry.fieldId === 'status');
+
+    assert.deepEqual(field?.values, [{ type: 'options', value: 'done' }]);
+  });
+
+  test('resolves inherited and ordered Supertag checkbox settings', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'Parent' }],
+        id: 'parent',
+        tanaSupertagDefinition: {
+          showCheckbox: true,
+          doneStateMapping: { checked: 'done', unchecked: ['todo'] },
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Child' }],
+        id: 'child',
+        tanaSupertagDefinition: {
+          extends: ['parent'],
+          showCheckbox: false,
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Override' }],
+        id: 'override',
+        tanaSupertagDefinition: {
+          showCheckbox: true,
+          doneStateMapping: { checked: 'todo', unchecked: ['done'] },
+        },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagIds: ['child', 'override'],
+        type: KEYS.p,
+      },
+    ]);
+    const index = buildTanaIndex(editor.children);
+
+    assert.deepEqual(resolveTanaSupertagCheckboxConfig(index, 'task'), {
+      show: true,
+      checked: 'todo',
+      unchecked: ['done'],
+      sourceSupertagId: 'override',
+    });
+  });
+
+  test('fails closed for an inactive or cyclic Supertag definition', () => {
+    const editor = createEditor([
+      {
+        children: [{ text: 'A' }],
+        id: 'a',
+        tanaSupertagDefinition: { extends: ['b'], showCheckbox: true },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'B' }],
+        id: 'b',
+        tanaSupertagDefinition: { extends: ['a'], showCheckbox: true },
+        type: KEYS.p,
+      },
+      {
+        children: [{ text: 'Task' }],
+        id: 'task',
+        tanaSupertagIds: ['a'],
+        type: KEYS.p,
+      },
+    ]);
+    const index = buildTanaIndex(editor.children);
+
+    assert.deepEqual(resolveTanaSupertagCheckboxConfig(index, 'task'), {
+      show: false,
+      checked: 'done',
+      unchecked: ['todo'],
+    });
+  });
+
   test('creates a definition under Schema and applies Node-level membership', () => {
     const editor = createEditor([
       { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
@@ -463,6 +612,35 @@ describe('Tana Supertag operations', () => {
     assert.equal(index.nodesById.get('title')?.fieldDefinition?.type, 'plain');
   });
 
+  test('resolves inherited bindings with their source and materializes a local override safely', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Base' }], id: 'base', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'base-status', indent: 1, tanaFieldId: 'status', type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'base-status-value', indent: 2, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', tanaSupertagDefinition: { extends: ['base'] }, type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const field = editor.getTransforms(TanaFieldPlugin).field;
+    let index = buildTanaIndex(editor.children);
+    const inherited = getSupertagTemplateFields(index, 'child')[0];
+
+    assert.ok(inherited);
+    assert.equal(inherited.inherited, true);
+    assert.equal(inherited.sourceSupertagId, 'base');
+    assert.equal(inherited.templateNodeId, 'base-status');
+    assert.ok(field.materialize('child', inherited.fieldId));
+
+    index = buildTanaIndex(editor.children);
+    const overridden = getSupertagTemplateFields(index, 'child')[0];
+
+    assert.ok(overridden);
+    assert.equal(overridden.inherited, false);
+    assert.equal(overridden.overridden, true);
+    assert.equal(index.parentNodeIds.get(overridden.templateNodeId), 'child');
+    assert.equal(overridden.values[0]?.value, 'Active');
+    assert.equal(getSupertagTemplateFields(index, 'base')[0]?.templateNodeId, 'base-status');
+  });
+
   test('rejects self and cyclic SuperTag inheritance writes', () => {
     const editor = createEditor([
       { children: [{ text: 'A' }], id: 'a', tanaSupertagDefinition: {}, type: KEYS.p },
@@ -475,6 +653,18 @@ describe('Tana Supertag operations', () => {
     assert.equal(supertag.setExtends('b', ['a']), false);
     assert.deepEqual(editor.children[0].tanaSupertagDefinition, { extends: ['b'] });
     assert.deepEqual(editor.children[1].tanaSupertagDefinition, {});
+  });
+
+  test('fails closed on a persisted inheritance cycle before Integrity repair runs', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'A' }], id: 'a', tanaSupertagDefinition: { extends: ['b'] }, type: KEYS.p },
+      { children: [{ text: 'A field' }], id: 'a-field', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'B' }], id: 'b', tanaSupertagDefinition: { extends: ['a'] }, type: KEYS.p },
+      { children: [{ text: 'B field' }], id: 'b-field', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+
+    assert.deepEqual(getSupertagTemplateFields(index, 'a'), []);
+    assert.deepEqual(getSupertagTemplateFields(index, 'b'), []);
   });
 
   test('changes inheritance without discarding title or default-child configuration', () => {
@@ -622,6 +812,60 @@ test('clones semantic template children with fresh occurrence identities and pre
   assert.notEqual(search.id, 'template-search');
   assert.equal(index.nodesById.has('project'), true);
 });
+
+  test('snapshots every template subtree before inserting when the target precedes Schema', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: 'First template' }], id: 'template-first', indent: 1, type: KEYS.p },
+      { children: [{ text: 'First child' }], id: 'template-first-child', indent: 2, type: KEYS.p },
+      { children: [{ text: 'Second template' }], id: 'template-second', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Second child' }], id: 'template-second-child', indent: 2, type: KEYS.p },
+    ]);
+
+    assert.equal(editor.getTransforms(TanaSupertagPlugin).supertag.apply('task', 'project'), true);
+
+    const index = buildTanaIndex(editor.children);
+    const first = Array.from(index.nodesById.values()).find(
+      (node) => node.text === 'First template' && node.id !== 'template-first'
+    );
+    const second = Array.from(index.nodesById.values()).find(
+      (node) => node.text === 'Second template' && node.id !== 'template-second'
+    );
+
+    assert.ok(first);
+    assert.ok(second);
+    assert.equal(index.parentNodeIds.get(first.id), 'task');
+    assert.equal(index.parentNodeIds.get(second.id), 'task');
+    assert.equal(
+      Array.from(index.nodesById.values()).filter((node) => node.text === 'First template').length,
+      2
+    );
+    assert.equal(
+      Array.from(index.nodesById.values()).filter((node) => node.text === 'Second template').length,
+      2
+    );
+  });
+
+  test('does not define structural Nodes as Supertags', () => {
+    const editor = createEditor([
+      { children: [{ text: 'System' }], id: 'system', tanaSystemNode: 'settings', type: KEYS.p },
+      { children: [{ text: 'Field' }], id: 'field', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+      { children: [{ text: 'Value' }], id: 'value', tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Search' }], id: 'search', tanaSearchDefinition: { query: { children: [], type: 'and' } }, type: KEYS.p },
+      { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'outline' }, type: KEYS.p },
+      { children: [{ text: 'Content' }], id: 'content', type: KEYS.p },
+    ]);
+    const supertag = editor.getTransforms(TanaSupertagPlugin).supertag;
+
+    assert.equal(supertag.define('system'), false);
+    assert.equal(supertag.define('field'), false);
+    assert.equal(supertag.define('value'), false);
+    assert.equal(supertag.define('search'), false);
+    assert.equal(supertag.define('view'), false);
+    assert.equal(supertag.define('content'), true);
+    assert.equal(buildTanaIndex(editor.children).nodesById.get('content')?.semanticTypes[0], 'supertag-definition');
+  });
 
 test('clones nested Field structure with fresh local identities and direct canonical relations', () => {
   const editor = createEditor([

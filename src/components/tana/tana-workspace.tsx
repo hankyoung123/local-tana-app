@@ -298,6 +298,10 @@ function TanaWorkspaceContent({
   });
   const searchResults = searchTanaNodes(index, search);
   const activeNodeId = focusedNodeId ?? selectedNodeId;
+  const focusedSupertagId = focusedNodeId &&
+    index.nodesById.get(focusedNodeId)?.semanticTypes.includes('supertag-definition')
+    ? focusedNodeId
+    : null;
   const inspectNode = React.useCallback((nodeId: string) => {
     setInspectedNodeId(nodeId);
     setFieldPanelOpen(true);
@@ -375,7 +379,7 @@ function TanaWorkspaceContent({
       'toggle-inspector': () => {
         if (fieldPanelOpen && !focusMode) closeInspector();
         else {
-          setInspectedNodeId(null);
+          setInspectedNodeId(focusedSupertagId);
           setFieldPanelOpen(true);
           setFocusMode(false);
         }
@@ -418,6 +422,7 @@ function TanaWorkspaceContent({
     closeInspector,
     fieldPanelOpen,
     focusMode,
+    focusedSupertagId,
     inspectNode,
     commandTargetNodeId,
     commandTargetNodeIds,
@@ -543,7 +548,7 @@ function TanaWorkspaceContent({
               onResize={resizeInspector}
             />
             <TanaInspector
-              activeNodeId={inspectedNodeId ?? selectedNodeId ?? focusedNodeId}
+              activeNodeId={inspectedNodeId ?? focusedSupertagId ?? selectedNodeId ?? focusedNodeId}
               initialTab={inspectedNodeId ? 'fields' : undefined}
               onClose={closeInspector}
             />

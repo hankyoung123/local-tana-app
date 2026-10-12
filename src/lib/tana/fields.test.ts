@@ -21,11 +21,12 @@ import {
   isFieldValueCompatible,
   isFieldValueValid,
   isSupertagFieldInputNode,
+  getSupertagTemplateFields,
   getFieldValueCandidates,
   prioritizeFieldDefinitionCandidates,
   resolveTanaFieldInitializer,
 } from './fields';
-import { buildTanaIndex } from './index';
+import { buildTanaIndex, countTanaFieldOptionUsages } from './index';
 import { getTanaNodePath, isTanaNodeInteractable } from './outliner';
 
 globalThis.requestAnimationFrame ??= () => 0;
@@ -408,6 +409,26 @@ describe('Field occurrence Nodes', () => {
       occurrence.validationIssuesByValueNodeId.get(occurrence.valueNodeId!),
       ['invalid-option']
     );
+  });
+
+  test('keeps option usage diagnostics derived after an Option is deleted', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Todo' }], id: 'todo', indent: 1, type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', type: KEYS.p },
+    ]);
+
+    field(editor).materialize('task', 'status');
+    assert.equal(field(editor).setValue('task', 'status', { type: 'options', value: 'todo' }), true);
+
+    let index = buildTanaIndex(editor.children);
+    assert.equal(countTanaFieldOptionUsages(index, 'status', 'todo'), 1);
+    assert.equal(field(editor).removeOption('status', 'todo'), true);
+
+    index = buildTanaIndex(editor.children);
+    assert.equal(countTanaFieldOptionUsages(index, 'status', 'todo'), 1);
+    const occurrence = index.fieldNodesByParent.get('task')?.[0];
+    assert.deepEqual(occurrence?.validationIssuesByValueNodeId.get(occurrence.valueNodeId!), ['invalid-option']);
   });
 
   test('derives Options candidates from ordered direct child Nodes', () => {
@@ -1191,6 +1212,69 @@ describe('Field occurrence Nodes', () => {
       .find(({ fieldId }) => fieldId === 'tags')!
       .valueNodeIds.at(-1)!;
     assertOneUndo(() => transforms.removeValue('task-reference', 'tags', removableValueId));
+  });
+
+  test('removes only a direct Supertag template Field occurrence and preserves its shared definition and instances', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Schema' }], id: 'schema', tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project-tag', indent: 1, tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: '' }], id: 'template-summary', indent: 2, tanaFieldId: 'summary', type: KEYS.p },
+      { children: [{ text: 'Template default' }], id: 'template-summary-value', indent: 3, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Task' }], id: 'task', indent: 1, tanaSupertagIds: ['project-tag'], type: KEYS.p },
+      { children: [{ text: '' }], id: 'task-summary', indent: 2, tanaFieldId: 'summary', type: KEYS.p },
+      { children: [{ text: 'Instance value' }], id: 'task-summary-value', indent: 3, tanaFieldValueType: 'plain', type: KEYS.p },
+      { children: [{ text: 'Summary' }], id: 'summary', indent: 1, tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.equal(transforms.removeSupertagTemplateOccurrence('project-tag', 'task-summary'), false);
+    assert.equal(transforms.removeSupertagTemplateOccurrence('project-tag', 'template-summary'), true);
+
+    let index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.has('summary'), true);
+    assert.equal(index.nodesById.has('template-summary'), false);
+    assert.equal(index.nodesById.has('template-summary-value'), false);
+    assert.equal(index.fieldNodesByParent.get('task')?.find(({ fieldId }) => fieldId === 'summary')?.valueNodeId, 'task-summary-value');
+    assert.deepEqual(index.fieldNodesByParent.get('project-tag') ?? [], []);
+
+    editor.tf.undo();
+    index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.has('template-summary'), true);
+    assert.equal(index.nodesById.has('summary'), true);
+
+    editor.tf.redo();
+    index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.has('template-summary'), false);
+    assert.equal(index.nodesById.has('summary'), true);
+    assert.equal(index.nodesById.has('task-summary-value'), true);
+  });
+
+  test('removes a local Supertag Field Definition from the template by returning it to Schema', () => {
+    const editor = createEditor([
+      { children: [{ text: 'Schema' }], id: 'schema', tanaSystemNode: 'schema', type: KEYS.p },
+      { children: [{ text: 'Project' }], id: 'project-tag', indent: 1, tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: 'Status' }], id: 'local-status', indent: 2, tanaFieldDefinition: { type: 'options' }, type: KEYS.p },
+      { children: [{ text: 'Active' }], id: 'local-status-active', indent: 3, type: KEYS.p },
+    ]);
+    const transforms = field(editor);
+
+    assert.equal(transforms.removeSupertagTemplateOccurrence('project-tag', 'local-status'), true);
+
+    let index = buildTanaIndex(editor.children);
+    assert.equal(index.nodesById.get('local-status')?.fieldDefinition?.type, 'options');
+    assert.equal(index.parentNodeIds.get('local-status'), 'schema');
+    assert.equal(index.parentNodeIds.get('local-status-active'), 'local-status');
+    assert.deepEqual(getSupertagTemplateFields(index, 'project-tag'), []);
+
+    editor.tf.undo();
+    index = buildTanaIndex(editor.children);
+    assert.equal(index.parentNodeIds.get('local-status'), 'project-tag');
+    assert.equal(index.parentNodeIds.get('local-status-active'), 'local-status');
+
+    editor.tf.redo();
+    index = buildTanaIndex(editor.children);
+    assert.equal(index.parentNodeIds.get('local-status'), 'schema');
+    assert.equal(index.nodesById.get('local-status')?.fieldDefinition?.type, 'options');
   });
 
   test('edits list cardinality through real sibling Value Nodes without a parent map', () => {

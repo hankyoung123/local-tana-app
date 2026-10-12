@@ -115,6 +115,29 @@ test('normal and Reference projections render formatted title expression segment
   assert.equal(value[1].children[0].text, 'Target');
 });
 
+test('projection tags expose controls for opening and removing canonical Supertags', () => {
+  const value: Value = [
+    { children: [{ text: 'Task' }], id: 'task', tanaSupertagIds: ['tag'], type: KEYS.p },
+    { children: [{ text: 'Project' }], id: 'tag', tanaSupertagDefinition: {}, type: KEYS.p },
+  ];
+  const editor = createPlateEditor({ plugins: EditorKit, value });
+  const html = renderToStaticMarkup(
+    <Plate editor={editor}>
+      <TanaIndexProvider>
+        <TanaNodeRowChrome
+          index={buildTanaIndex(value)}
+          target={buildTanaIndex(value).nodesById.get('task')!}
+          variant="search-result"
+        />
+      </TanaIndexProvider>
+    </Plate>
+  );
+
+  assert.match(html, /aria-label="打开超级标签 Project"/);
+  assert.match(html, /aria-label="移除超级标签 Project"/);
+  assert.match(html, /#Project/);
+});
+
 test('Reference edit projection reads canonical Fields and exposes canonical controls without copying them', () => {
   const value: Value = [
     { children: [{ text: 'Status' }], id: 'status', tanaFieldDefinition: { type: 'plain' }, type: KEYS.p },

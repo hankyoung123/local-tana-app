@@ -3,9 +3,11 @@ import { test } from 'node:test';
 
 import {
   buildTanaIndex,
+  getTanaTitleExpressionDiagnostics,
   isTanaTitleExpressionNameEditable,
   parseTanaTitleExpression,
   resolveTanaNodeTitle,
+  resolveTanaTitleExpression,
   resolveTanaNodeTitleSegments,
 } from './index';
 import type { Value } from 'platejs';
@@ -186,4 +188,27 @@ test('derives Date from calendar node from the current Day ancestor after a move
 
   assert.equal(resolveTanaNodeTitle(buildTanaIndex([tag, firstDay, task, secondDay]), 'calendar-task'), 'Task · 2026-01-01');
   assert.equal(resolveTanaNodeTitle(buildTanaIndex([tag, firstDay, secondDay, task]), 'calendar-task'), 'Task · 2026-01-02');
+});
+
+test('diagnoses title expressions and resolves draft previews without mutating canonical text', () => {
+  const document: Value = [
+    { id: 'status', type: 'p', tanaFieldDefinition: { type: 'plain' }, children: [{ text: 'Status' }] },
+    { id: 'task', type: 'p', children: [{ text: 'Canonical title' }] },
+    { id: 'task-status', type: 'p', indent: 1, tanaFieldId: 'status', children: [{ text: '' }] },
+    { id: 'task-status-value', type: 'p', indent: 2, tanaFieldValueType: 'plain', children: [{ text: 'Doing' }] },
+  ];
+  const index = buildTanaIndex(document);
+  const expression = '<b>${Status|2…}</b> ${Missing} ${Status|oops} ${';
+  const diagnostics = getTanaTitleExpressionDiagnostics(index, 'task', expression);
+
+  assert.deepEqual(diagnostics.map(({ code }) => code), [
+    'missing-field',
+    'invalid-limit',
+    'unclosed-expression',
+  ]);
+  assert.equal(
+    resolveTanaTitleExpression(index, 'task', '${Status} · ${name}').map(({ text }) => text).join(''),
+    'Doing · Canonical title'
+  );
+  assert.equal(resolveTanaNodeTitle(index, 'task'), 'Canonical title');
 });

@@ -71,9 +71,21 @@ type FieldDefinitionBase = {
   visibility?: FieldVisibilityPolicy;
 };
 
+/** Checkbox fields may drive the canonical node Done state when configured. */
+export type TanaCheckboxDoneStateMapping = {
+  checked?: TanaDoneState;
+  unchecked?: TanaDoneState;
+};
+
+/** Maps a Supertag completion toggle to values of a real Field Node. */
+export type TanaSupertagCheckboxFieldMapping = {
+  fieldId: FieldId;
+  values: readonly FieldValue[];
+};
+
 export type FieldDefinition = FieldDefinitionBase &
   (
-    | { type: "checkbox" }
+    | { doneStateMapping?: TanaCheckboxDoneStateMapping; type: "checkbox" }
     | { type: "date" }
     | { type: "email" }
     | {
@@ -248,11 +260,61 @@ export type TanaPresentation = {
  * membership remain derived from the same Plate hierarchy.
  */
 export type SupertagDefinition = {
+  /** Display metadata owned by the Definition Node. */
+  icon?: string;
+  banner?: string;
+  color?: string;
+  description?: string;
+  /** Optional semantic base type shown in the schema editor. */
+  baseType?: string;
+  /** Render and map the node completion control for instances of this tag. */
+  showCheckbox?: boolean;
+  doneStateMapping?: {
+    checked?: TanaDoneState;
+    unchecked?: readonly TanaDoneState[];
+  };
+  /** Optional field-value mapping applied by the instance checkbox. */
+  checkboxFieldMapping?: {
+    checked?: TanaSupertagCheckboxFieldMapping;
+    unchecked?: TanaSupertagCheckboxFieldMapping;
+  };
   /** Applied to every newly created direct child of an instance. */
   defaultChildSupertagId?: NodeId;
   extends?: readonly NodeId[];
   /** Pure display template; it never replaces the canonical Plate title. */
   titleExpression?: string;
+  /** Settings for the optional AI/command affordances on tagged nodes. */
+  ai?: {
+    autofill?: boolean;
+    audioEnabled?: boolean;
+    compactMenu?: boolean;
+    fullMenu?: boolean;
+    eventCommands?: boolean;
+    instructions?: string;
+  };
+  /** Voice assistant copy and behavior are Definition configuration. */
+  voice?: {
+    enabled?: boolean;
+    greeting?: string;
+    instructions?: string;
+  };
+  /** Related content placement is presentation configuration for instances. */
+  relatedContent?: {
+    placement?: "below" | "right";
+    searchNodeIds?: readonly NodeId[];
+  };
+  /** Saved destinations shown from the tag page. */
+  shortcuts?: readonly {
+    label: string;
+    targetNodeId?: NodeId;
+    create?: boolean;
+  }[];
+  /** Whether the tag can be suggested as a building block. */
+  buildingBlock?: {
+    promoteFor?: string;
+    suggestedSupertagIds?: readonly NodeId[];
+    hiddenFromSearch?: boolean;
+  };
 };
 
 export type TanaBlockElement = TElement & {

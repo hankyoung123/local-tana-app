@@ -11,11 +11,14 @@ import {
 import {
   buildTanaIndex,
   getActiveSupertagInstances,
+  hasTanaSupertag,
   getNodeReferenceCandidatesFromIndex,
   getSupertagCandidatesFromIndex,
   isTanaNodeActive,
   searchTanaNodes,
 } from './index';
+import { createAndQuery, runTanaQuery } from './query';
+import { resolveTanaViewProjection } from './view-projection';
 
 const document: Value = [
   { children: [{ text: 'Workspace' }], id: 'workspace', tanaSystemNode: 'workspace', type: KEYS.p },
@@ -100,5 +103,98 @@ describe('Tana active discovery scope', () => {
       searchTanaNodes(index, 'task').map(({ id }) => id),
       ['task']
     );
+  });
+
+  test('does not expose instances from a trashed From-Supertag source', () => {
+    const brokenSourceDocument = document.map((node) =>
+      node.id === 'owner'
+        ? {
+            ...node,
+            tanaFieldDefinition: {
+              sourceSupertagId: 'deleted-tag',
+              type: 'from-supertag' as const,
+            },
+          }
+        : node
+    );
+    const index = buildTanaIndex(brokenSourceDocument);
+
+    assert.deepEqual(getFieldValueCandidates(index, 'owner'), []);
+  });
+
+  test('does not expose building-block hidden Supertags in picker candidates', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Visible' }], id: 'visible', tanaSupertagDefinition: {}, type: KEYS.p },
+      {
+        children: [{ text: 'Hidden' }],
+        id: 'hidden',
+        tanaSupertagDefinition: { buildingBlock: { hiddenFromSearch: true } },
+        type: KEYS.p,
+      },
+    ]);
+
+    assert.deepEqual(getSupertagCandidatesFromIndex(index).map(({ id }) => id), ['visible']);
+  });
+
+  test('keeps inherited membership consistent across Search, View, instances, and Field candidates', () => {
+    const index = buildTanaIndex([
+      { children: [{ text: 'Base' }], id: 'base', tanaSupertagDefinition: {}, type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', tanaSupertagDefinition: { extends: ['base'] }, type: KEYS.p },
+      { children: [{ text: 'Tagged child' }], id: 'instance', tanaSupertagIds: ['child'], type: KEYS.p },
+      { children: [{ text: 'Owner' }], id: 'owner', tanaFieldDefinition: { sourceSupertagId: 'base', type: 'from-supertag' }, type: KEYS.p },
+      { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'table' }, type: KEYS.p },
+    ]);
+    const view = index.nodesById.get('view')!;
+    const viewResult = resolveTanaViewProjection(index, {
+      ...view,
+      viewDefinition: {
+        filter: { clauses: [{ kind: 'has-supertag', supertagId: 'base' }], mode: 'and' },
+        type: 'table',
+      },
+    }, getActiveSupertagInstances(index, 'base'));
+
+    assert.equal(hasTanaSupertag(index, 'instance', 'base'), true);
+    assert.deepEqual(
+      runTanaQuery(index, createAndQuery([{ kind: 'has-supertag', supertagId: 'base' }])).map(({ id }) => id),
+      ['instance']
+    );
+    assert.deepEqual(getActiveSupertagInstances(index, 'base').map(({ id }) => id), ['instance']);
+    assert.deepEqual(viewResult.items.map(({ occurrence }) => occurrence.id), ['instance']);
+    assert.deepEqual(getFieldValueCandidates(index, 'owner').map(({ id }) => id), ['instance']);
+  });
+
+  test('fails closed for missing or trashed ancestors across derived membership and title expressions', () => {
+    const missingParentIndex = buildTanaIndex([
+      { children: [{ text: 'Child' }], id: 'child', tanaSupertagDefinition: { extends: ['missing'] }, type: KEYS.p },
+      { children: [{ text: 'Tagged child' }], id: 'instance', tanaSupertagIds: ['child'], type: KEYS.p },
+    ]);
+    const trashedParentIndex = buildTanaIndex([
+      { children: [{ text: 'Trash' }], id: 'trash', tanaSystemNode: 'trash', type: KEYS.p },
+      { children: [{ text: 'Base' }], id: 'base', indent: 1, tanaSupertagDefinition: { titleExpression: 'Stale ${name}' }, type: KEYS.p },
+      { children: [{ text: 'Child' }], id: 'child', tanaSupertagDefinition: { extends: ['base'] }, type: KEYS.p },
+      { children: [{ text: 'Tagged child' }], id: 'instance', tanaSupertagIds: ['child'], type: KEYS.p },
+      { children: [{ text: 'Owner' }], id: 'owner', tanaFieldDefinition: { sourceSupertagId: 'child', type: 'from-supertag' }, type: KEYS.p },
+      { children: [{ text: 'View' }], id: 'view', tanaViewDefinition: { type: 'table' }, type: KEYS.p },
+    ]);
+    const view = trashedParentIndex.nodesById.get('view')!;
+    const viewResult = resolveTanaViewProjection(trashedParentIndex, {
+      ...view,
+      viewDefinition: {
+        filter: { clauses: [{ kind: 'has-supertag', supertagId: 'child' }], mode: 'and' },
+        type: 'table',
+      },
+    }, [trashedParentIndex.nodesById.get('instance')!]);
+
+    assert.equal(hasTanaSupertag(missingParentIndex, 'instance', 'child'), false);
+    assert.deepEqual(getActiveSupertagInstances(missingParentIndex, 'child'), []);
+    assert.equal(hasTanaSupertag(trashedParentIndex, 'instance', 'child'), false);
+    assert.deepEqual(getActiveSupertagInstances(trashedParentIndex, 'child'), []);
+    assert.deepEqual(
+      runTanaQuery(trashedParentIndex, createAndQuery([{ kind: 'has-supertag', supertagId: 'child' }])),
+      []
+    );
+    assert.deepEqual(viewResult.items, []);
+    assert.deepEqual(getFieldValueCandidates(trashedParentIndex, 'owner'), []);
+    assert.equal(trashedParentIndex.nodesById.get('instance')?.titleExpression, undefined);
   });
 });
